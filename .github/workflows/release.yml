@@ -1,0 +1,82 @@
+# Builds FocusSetup.exe on GitHub's Windows computers and publishes it as a Release.
+# Runs every time you upload changes. It only makes a new Release when the <Version> in
+# FocusApp.csproj is one that hasn't been released yet, so raise the version to ship an update.
+
+name: Build and release Focus
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: ver
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path FocusApp.csproj -Pattern '<Version>(.+)</Version>').Matches[0].Groups[1].Value.Trim()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          gh release view "v$version" --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Version $version is already released. Raise <Version> in FocusApp.csproj to publish an update."
+            "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Building Focus $version"
+            "skip=false" >> $env:GITHUB_OUTPUT
+          }
+          $global:LASTEXITCODE = 0
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.ver.outputs.skip == 'false'
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build the app
+        if: steps.ver.outputs.skip == 'false'
+        shell: pwsh
+        run: dotnet publish FocusApp.csproj -c Release "-p:UpdateRepo=${{ github.repository }}"
+
+      - name: Build the installer
+        if: steps.ver.outputs.skip == 'false'
+        shell: pwsh
+        run: |
+          $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
+                  Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc "/DMyAppVersion=${{ steps.ver.outputs.version }}" FocusSetup.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+
+      - name: Publish the release
+        if: steps.ver.outputs.skip == 'false'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          # Release notes: the "## <version>" section of CHANGELOG.md, if there is one.
+          $notes = ""
+          if (Test-Path CHANGELOG.md) {
+            $inSection = $false
+            foreach ($line in Get-Content CHANGELOG.md) {
+              if ($line -match '^##\s+v?([\d\.]+)') { $inSection = ($Matches[1] -eq $version); continue }
+              if ($inSection) { $notes += $line + "`n" }
+            }
+          }
+          if (-not $notes.Trim()) { $notes = "Focus $version" }
+          Set-Content -Path notes.md -Value $notes.Trim() -Encoding utf8
+          gh release create "v$version" "installer/FocusSetup.exe" --repo "${{ github.repository }}" --title "Focus $version" --notes-file notes.md --latest
