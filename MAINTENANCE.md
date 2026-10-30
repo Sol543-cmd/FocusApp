@@ -107,6 +107,7 @@ To remove it: Settings, Uninstall Focus.
 | calendar-share.json | The next three weeks of meetings, for the phone app       |
 | Daily records\\      | One Markdown file per day (unless an Obsidian folder is chosen) |
 | templates.json      | Task templates                                            |
+| freedom.json        | Your Freedom connection and choices, this PC only (the sign-in is encrypted with your Windows account; your password is never saved) |
 | log.txt             | Error log. Look here first if something goes wrong        |
 
 All files are plain text (JSON). If one gets damaged, Focus keeps a copy named
@@ -195,6 +196,9 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | SessionLook.cs           | The numeral badge: Roman numerals and spaced capitals for focus sessions (floating timer, dashboard) |
 | Fonts\*.ttf             | Cormorant Garamond SemiBold for the numeral badge (SIL Open Font License, OFL.txt) |
 | DatePopup.cs             | The small pop-up calendar on date fields                       |
+| FreedomService.cs        | Freedom (freedom.to): signing in, reading your blocklists and devices, starting a session |
+| MainWindow.Freedom.cs    | The Freedom window, and starting Freedom with each focus session |
+| MainWindow.Timelines.cs  | Practice timelines: your own round times for Words, Alphabet and Concepts |
 | ScriptureLinks.cs        | Finds Scripture references and opens them in Logos (book names and abbreviations are listed here) |
 | Updater.cs               | Checks GitHub Releases and downloads FocusSetup.exe            |
 | MainWindow.Updates.cs    | Check for updates (tray menu), the twice-a-day check, installing an update |
@@ -217,6 +221,10 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 - Internet use: downloading the calendar links you add, and checking your GitHub Releases page
   for updates (Updater.cs; switch off in Settings, Features), over secure https only. An update is
   only taken from github.com, and is checked against GitHub's SHA-256 fingerprint before it runs.
+  If you connect Freedom, Focus also talks to freedom.to (FreedomService.cs): it signs in, reads your
+  blocklists and devices, and starts the Freedom sessions you ask for. Freedom has no official public
+  API; Focus uses the service Freedom's own apps use, so if Freedom changes it, the Freedom window shows
+  an error and Focus's own blocking carries on. Test connection writes Freedom's replies to log.txt.
 - Calendar links: links to plain http or to raw computer addresses are refused. Calendar
   downloads are size-limited and only read as calendar text; nothing from them is ever run.
 - Calendar links are encrypted with your Windows account (Windows DPAPI).
@@ -229,9 +237,11 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 
 ## Internet use
 
-Focus connects to the internet for two things: downloading the calendar links you add in
-Settings, and checking your GitHub Releases page for a newer version. Both use secure https.
-It never uploads anything, never changes your calendar, and has no AI, ads or tracking.
+Focus connects to the internet for three things: downloading the calendar links you add in
+Settings, checking your GitHub Releases page for a newer version, and (only if you connect it)
+your Freedom account at freedom.to. All use secure https. Apart from your Freedom sign-in and the
+Freedom sessions you start, it never sends anything anywhere, never changes your calendar, and has
+no AI, ads or tracking.
 
 If a calendar stops updating (Settings shows "Couldn't update"), the link may have been
 turned off. Publish the calendar again, remove the old one in Settings, and add the new link.

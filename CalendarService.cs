@@ -202,13 +202,13 @@ public static class CalendarService
     // Calendar links are secret (anyone with one can read your calendar), so they're stored
     // encrypted with your Windows account. Another user, or a copy of the file, can't read them.
 
-    private static string Protect(string text)
+    internal static string Protect(string text)
     {
         var data = Encoding.UTF8.GetBytes(text);
         return Convert.ToBase64String(Crypt(data, protect: true));
     }
 
-    private static string Unprotect(string stored)
+    internal static string Unprotect(string stored)
     {
         if (string.IsNullOrEmpty(stored)) return "";
         return Encoding.UTF8.GetString(Crypt(Convert.FromBase64String(stored), protect: false));

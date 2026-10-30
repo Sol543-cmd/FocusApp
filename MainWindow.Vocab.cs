@@ -48,6 +48,15 @@ public partial class MainWindow
 
     private List<DateTime> SlotsFor(int perDay, string practice)
     {
+        // Times set on the practice timeline (today's, then your default) come first.
+        if (CustomPracticeTimes(practice) is List<TimeSpan> custom)
+            return custom.Select(t => DateTime.Today + t).ToList();
+        return EvenSlots(perDay, practice);
+    }
+
+    /// <summary>The rounds spread evenly between a practice's hours (how Focus always placed them).</summary>
+    private List<DateTime> EvenSlots(int perDay, string practice)
+    {
         var (from, to) = HoursFor(practice);
         if (to <= from) to = from + TimeSpan.FromHours(1);
         int n = Math.Clamp(perDay, 0, 12);
@@ -280,6 +289,7 @@ public partial class MainWindow
     /// <summary>Reads the Greek practice settings; returns a problem to show, or null.</summary>
     private string? SaveVocabSettings()
     {
+        var timelineBefore = PracticeScheduleSignatures();
         VocabPerDayBox.Commit();
         VocabWordsBox.Commit();
         if (!TryParseTime(VocabFromBox.Text, out var from) || !TryParseTime(VocabToBox.Text, out var to) || to <= from)
@@ -299,6 +309,7 @@ public partial class MainWindow
         _settings.Features["greek"] = VocabOnCheck.IsChecked == true;
         _settings.Features["alphabet"] = AlphaOnCheck.IsChecked == true;
         if (SavePracticeSettings() is string practiceProblem) return practiceProblem;
+        ForgetTimelinesChangedInSettings(timelineBefore);
         Vocab.RetiredLevel = _settings.VocabRetireAfter; // raising it brings retired words back into practice
         VocabThresholdBox.Commit();
         _settings.VocabRetireThreshold = VocabThresholdBox.Value;

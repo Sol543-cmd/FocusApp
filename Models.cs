@@ -1023,6 +1023,13 @@ public class AppSettings
 
     public bool On(string feature) => Features.TryGetValue(feature, out bool on) ? on : FocusApp.Features.DefaultOn(feature);
 
+    // Practice timelines (1.3.0): your own round times for "words", "alphabet" and "concepts", like "09:00,11:30".
+    // A practice with no entry spreads its rounds evenly between its hours, as before.
+    public Dictionary<string, string> PracticeTimes { get; set; } = new();
+    /// <summary>Times changed for today only (PracticeTodayDate is the day they're for).</summary>
+    public Dictionary<string, string> PracticeTodayTimes { get; set; } = new();
+    public string PracticeTodayDate { get; set; } = "";
+
     // Customization
     public double DisplayScale { get; set; } = 1.0;
     public double TaskFontSize { get; set; } = 15;

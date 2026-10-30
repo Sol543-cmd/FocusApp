@@ -3,6 +3,21 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.3.0
+
+- Freedom: connect your Freedom account in Settings, Focus sessions, Open Freedom (or Freedom… in the
+  tray menu). Focus shows your Freedom blocklists and devices exactly as Freedom has them: lists you add
+  or delete in Freedom appear or disappear in Focus each time it syncs (when the window opens, every
+  30 minutes, and before each session). Tick the ones to use, and turn on Start Freedom with every focus
+  session; Freedom then runs for the length of each focus session. You can also start a Freedom session
+  from the window, sync, or open the Freedom dashboard.
+- Practice timelines: Settings, Greek practice, Practice timelines. Each practice (Words, Alphabet,
+  Concepts) has its rounds on a timeline with today's meetings and lunch shaded. Drag a round to move it
+  (snaps to 15 minutes), double-click to add one, right-click to remove one. Use for today, or Save as
+  default for every day. A round that lands in a meeting still waits until the meeting ends.
+- Practice timelines: an All practice row shows every practice's rounds together, so you can spread
+  them apart or put them back to back.
+
 ## 1.2.1
 
 - Dashboard: the numeral badge and FOCUS SESSION sit centered over the ring timer, with more room
