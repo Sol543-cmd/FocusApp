@@ -889,29 +889,35 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <!-- The current session -->
-                        <!-- Focus sessions: the numeral badge (session number in a serif ring) and FOCUS SESSION or the session's name -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <Border x:Name="DashBadge" MinWidth="30" Height="30" CornerRadius="15" BorderThickness="1.5" BorderBrush="{DynamicResource FocusBrush}"
-                                    Padding="4,0" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
-                                <TextBlock x:Name="DashBadgeText" FontSize="15" Foreground="{DynamicResource Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1"/>
-                            </Border>
-                            <TextBlock x:Name="DashKind" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource FocusBrush}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="DashName" Style="{StaticResource SubHeading}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,12"/>
                         <!-- The timer, with your focus totals beside it -->
                         <Grid HorizontalAlignment="Center">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <!-- Centered over the ring (column 0), not over the ring and totals together -->
+                            <!-- Focus sessions: the numeral badge (session number in a serif ring) and FOCUS SESSION or the session's name -->
+                            <StackPanel x:Name="DashHeader" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,18">
+                                <Border x:Name="DashBadge" MinWidth="30" Height="30" CornerRadius="15" BorderThickness="1.5" BorderBrush="{DynamicResource FocusBrush}"
+                                        Padding="4,0" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock x:Name="DashBadgeText" FontSize="15" Foreground="{DynamicResource Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1"/>
+                                </Border>
+                                <TextBlock x:Name="DashKind" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220" Foreground="{DynamicResource FocusBrush}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="DashName" Grid.Row="1" Style="{StaticResource SubHeading}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,14" MaxWidth="260"/>
+                            <Grid Grid.Row="2">
                                 <local:RingTimer x:Name="DashTimer"/>
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="150">
                                     <TextBlock x:Name="DashMinutes" FontSize="34" FontWeight="Light" FontFamily="{StaticResource HeadingFont}" HorizontalAlignment="Center"/>
                                     <TextBlock x:Name="DashMinutesCaption" Style="{StaticResource Caption}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0,0,0" ToolTip="Focus hours with blocking. Only focus sessions that block at least one app count; paused time and short breaks don't.">
+                            <StackPanel Grid.Column="1" Grid.Row="2" VerticalAlignment="Center" Margin="22,0,0,0" ToolTip="Focus hours with blocking. Only focus sessions that block at least one app count; paused time and short breaks don't.">
                                 <TextBlock x:Name="DashToday" FontSize="20" FontFamily="{StaticResource HeadingFont}"/>
                                 <TextBlock Text="done today" Style="{StaticResource Caption}" Margin="0,0,0,12"/>
                                 <TextBlock x:Name="DashLeft" FontSize="20" FontFamily="{StaticResource HeadingFont}"/>

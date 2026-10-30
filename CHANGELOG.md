@@ -3,6 +3,13 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.2.1
+
+- Dashboard: the numeral badge and FOCUS SESSION sit centered over the ring timer, with more room
+  between them and the ring.
+- Floating timer: a long personal project name in the Personal tab is trimmed to fit, so the caret
+  beside it is always there to change or clear your choice.
+
 ## 1.2.0
 
 - Tasks: Today and Tomorrow buttons on each task (they appear when the cursor is over it; a task already

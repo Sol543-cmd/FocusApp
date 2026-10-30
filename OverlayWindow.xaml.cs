@@ -100,7 +100,10 @@ public partial class OverlayWindow : Window
             button.Opacity = _view == view ? 1 : 0.65;
         }
         // The Personal tab shows its current choice, like "Personal · This week".
-        PersonalViewBtn.Content = PersonalScope == "today" ? "Personal" : $"Personal · {PersonalScopeName()}";
+        // Trimmed to fit, so a long project name never pushes the caret (or the pin) out of reach.
+        string label = PersonalScope == "today" ? "Personal" : $"Personal · {PersonalScopeName()}";
+        PersonalViewBtn.Content = new System.Windows.Controls.TextBlock { Text = label, MaxWidth = 118, TextTrimming = TextTrimming.CharacterEllipsis };
+        PersonalViewBtn.ToolTip = label.Length > 18 ? label : null;
     }
     private double _movedUpBy;
 

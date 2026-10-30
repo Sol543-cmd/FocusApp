@@ -81,6 +81,8 @@ public partial class MainWindow
             // The name is already in the label for focus sessions.
             DashName.Text = focus ? "" : cur.Name;
             DashName.Visibility = DashName.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // Room between the label and the ring (less when a name sits between them).
+            DashHeader.Margin = new Thickness(0, 0, 0, DashName.Visibility == Visibility.Visible ? 2 : 18);
             DashMinutes.Text = Format.MinutesLeft(remaining);
             DashMinutesCaption.Text = _runner.IsPaused ? "Paused" : $"until {(DateTime.Now + remaining):t}";
             DashStartBtn.Visibility = Visibility.Collapsed;
@@ -109,6 +111,7 @@ public partial class MainWindow
             DashKind.FontSize = 13;
             DashBadge.Visibility = Visibility.Collapsed;
             DashName.Visibility = Visibility.Visible;
+            DashHeader.Margin = new Thickness(0, 0, 0, 2);
             DashKind.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Muted");
             DashName.Text = _planDate == DateTime.Today ? "Ready when you are." : "";
             DashMinutes.Text = "";
