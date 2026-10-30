@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Dark: soft charcoal, the same warm red accent, a little brighter. -->
+    <SolidColorBrush x:Key="Sidebar" Color="#191919"/>
+    <SolidColorBrush x:Key="Bg" Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="Panel" Color="#262626"/>
+    <SolidColorBrush x:Key="Panel2" Color="#2E2E2E"/>
+    <SolidColorBrush x:Key="Panel3" Color="#383838"/>
+    <SolidColorBrush x:Key="Line" Color="#333333"/>
+    <SolidColorBrush x:Key="Text" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="Muted" Color="#9C9C9C"/>
+    <SolidColorBrush x:Key="FocusBrush" Color="#E5604F"/>
+    <SolidColorBrush x:Key="BreakBrush" Color="#4CB56E"/>
+    <SolidColorBrush x:Key="MeetingBrush" Color="#5A93F5"/>
+    <SolidColorBrush x:Key="FocusTint" Color="#3A2420"/>
+    <SolidColorBrush x:Key="BreakTint" Color="#1D3324"/>
+    <SolidColorBrush x:Key="MeetingTint" Color="#1E2B40"/>
+    <SolidColorBrush x:Key="NavSelected" Color="#3A2622"/>
+    <SolidColorBrush x:Key="PriorityHigh" Color="#E5604F"/>
+    <SolidColorBrush x:Key="PriorityNormal" Color="#8A8A8A"/>
+    <SolidColorBrush x:Key="PriorityLow" Color="#555555"/>
+    <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="OverlayBg" Color="#F7262626"/>
+    <SolidColorBrush x:Key="Shade" Color="#B31E1E1E"/>
+</ResourceDictionary>
