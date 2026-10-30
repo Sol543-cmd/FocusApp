@@ -55,6 +55,19 @@ public class LessonWindow : Window
     private HashSet<string> _stepsDone = new();
     private Action<Key>? _keys;
 
+    /// <summary>When this window opened (for the end-of-day and midnight resets).</summary>
+    public DateTime OpenedAt { get; } = DateTime.Now;
+
+    /// <summary>True when the window was closed because the practice day ended while nobody was at the computer.</summary>
+    public bool ClosedByEndOfDay { get; private set; }
+
+    /// <summary>The practice day ended while this was left open: closes it, even in required mode (the lesson moves to tomorrow, as when you quit Focus).</summary>
+    public void CloseForToday()
+    {
+        ClosedByEndOfDay = true;
+        Close();
+    }
+
     /// <summary>True when the lesson was left part-way (its place is saved).</summary>
     public bool LeftPartWay => TrackProgress && !_done && _stepsDone.Count > 0;
 
@@ -115,7 +128,7 @@ public class LessonWindow : Window
         BuildSteps();
         Closing += (_, e) =>
         {
-            if (_required && !_done) { e.Cancel = true; return; }
+            if (_required && !_done && !ClosedByEndOfDay) { e.Cancel = true; return; }
         };
         PreviewKeyDown += (_, e) =>
         {

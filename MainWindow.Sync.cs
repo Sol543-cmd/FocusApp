@@ -121,6 +121,7 @@ public partial class MainWindow
             string? editingId = _editingList?.Id;
             BlockLists.Load();
             AdoptSharedPlanDefaults();
+            AdoptSharedPracticeTimes();
             _editingList = editingId != null ? BlockLists.Find(editingId) : null;
             BlockLists_Changed();
 

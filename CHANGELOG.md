@@ -15,6 +15,14 @@ Each version gets a "## x.y.z" heading. The GitHub build uses the section that m
 - Pause all practice on weekends (Greek practice settings, Training settings or the timelines): nothing pops up by
   itself on Saturdays and Sundays and no lesson is required, but you can still start anything yourself. Shared with
   your other computers.
+- No catching up: if you're away while several rounds' times pass, only one round of each practice comes up when
+  you're back; the earlier ones are skipped.
+- Daily reset at 4:30 PM (change it or switch it off in Greek practice or Training settings): practice, lesson and
+  review times before it stop for the day, and anything left on screen while nobody's at the computer (untouched for
+  five minutes) closes; a lesson closed this way moves to tomorrow. Times you put after the reset still come up and
+  last until midnight, when anything left open from them closes the same way.
+- The practice timelines are the same on all your computers: change them on one and the others follow.
+- A round done on one computer counts on the others: that round (and any earlier one that day) won't come up there.
 
 ## 1.7.0
 

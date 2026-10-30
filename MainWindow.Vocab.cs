@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -27,7 +28,9 @@ public partial class MainWindow
         PomoTasksCheck.IsChecked = _settings.PomoShowTasks;
         SetUpPractice();
         MovePracticeOntoTimelines();
+        AdoptSharedPracticeTimes(); // the timelines are the same on all your computers
         PauseWeekendsCheck.IsChecked = _settings.PauseWeekends;
+        ShowPracticeEnd();
         Vocab.Changed += () => Dispatcher.BeginInvoke(new Action(UpdateVocabSummary));
     }
 
@@ -100,7 +103,7 @@ public partial class MainWindow
                 _alphaLaterSlot = slot;
                 _alphaLaterUntil = DateTime.Now.AddMinutes(20);
             }
-            else if (finished) _alphaLaterSlot = -1;
+            else if (finished) { _alphaLaterSlot = -1; if (slot >= 0) PublishPracticeDone("alphabet", slot); }
             UpdateAlphaSummary();
             after?.Invoke(finished);
         },
@@ -159,8 +162,97 @@ public partial class MainWindow
     /// </summary>
     private void CheckVocab()
     {
+        CloseWhatWasLeftOpen();
         if (PracticePausedToday()) return;
         TryTimelineRounds();
+    }
+
+    // ---------- The end of the practice day (4:30 PM unless you change it) ----------
+
+    /// <summary>When the practice day ends, or null if it doesn't.</summary>
+    private TimeSpan? PracticeDayEnd =>
+        _settings.PracticeEndOn && TimeSpan.TryParse(_settings.PracticeEnd, CultureInfo.InvariantCulture, out var t) && t > TimeSpan.Zero ? t : null;
+
+    /// <summary>
+    /// Whether a timeline time still counts (it has come, and its reset hasn't passed). Times before the end of the
+    /// practice day (4:30 PM) reset at that end; times you put after it reset at midnight. <paramref name="window"/>
+    /// is how long a time before the end stays live at most (Greek rounds: 3 hours).
+    /// </summary>
+    private bool SlotLive(DateTime slot, TimeSpan window)
+    {
+        var now = DateTime.Now;
+        if (slot > now || slot.Date != now.Date) return false;
+        if (PracticeDayEnd is TimeSpan end)
+            return slot.TimeOfDay < end ? now.TimeOfDay < end && now - slot < window : true; // after the end: until midnight
+        return now - slot < window;
+    }
+
+    /// <summary>
+    /// The reset: a Greek round, lesson or card review left on screen while nobody is at the computer closes at the
+    /// next reset after it opened (the end of the practice day, or midnight for ones that opened after it), once the
+    /// computer has been untouched for five minutes. A lesson closed this way moves to tomorrow, as when you quit Focus.
+    /// If you're at the computer, you can finish what's open.
+    /// </summary>
+    private void CloseWhatWasLeftOpen()
+    {
+        if (!VocabWindow.IsShowing && _lessonWindow == null) return;
+        if (IdleTime() < TimeSpan.FromMinutes(5)) return;
+        var now = DateTime.Now;
+        DateTime ResetAfter(DateTime opened) =>
+            PracticeDayEnd is TimeSpan end && opened.Date == now.Date && opened.TimeOfDay < end ? now.Date + end : opened.Date.AddDays(1);
+        if (VocabWindow.IsShowing && now >= ResetAfter(VocabWindow.OpenedAt)) { VocabWindow.CloseForToday(); Log.Write("Practice reset: closed a round left open"); }
+        if (_lessonWindow != null && now >= ResetAfter(_lessonWindow.OpenedAt)) { _lessonWindow.CloseForToday(); Log.Write("Practice reset: closed a lesson or review left open (a lesson moves to tomorrow)"); }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo { public uint Size; public uint Time; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LastInputInfo info);
+
+    /// <summary>How long since the last key press or mouse movement on this computer.</summary>
+    private static TimeSpan IdleTime()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        if (!GetLastInputInfo(ref info)) return TimeSpan.Zero;
+        return TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time));
+    }
+
+    /// <summary>Sets the end of the practice day (shared with your other computers).</summary>
+    private void SetPracticeEnd(bool on, TimeSpan? time)
+    {
+        string text = (time ?? PracticeDayEnd ?? new TimeSpan(16, 30, 0)).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+        if (_settings.PracticeEndOn == on && _settings.PracticeEnd == text) return;
+        _settings.PracticeEndOn = on;
+        _settings.PracticeEnd = text;
+        SaveSettingsQuietly();
+        SaveSharedPlanDefaults();
+        ShowPracticeEnd();
+    }
+
+    private void ShowPracticeEnd()
+    {
+        if (PracticeEndCheck == null) return;
+        _showingPracticeEnd = true;
+        PracticeEndCheck.IsChecked = _settings.PracticeEndOn;
+        PracticeEndBox.Text = TimeSpan.TryParse(_settings.PracticeEnd, CultureInfo.InvariantCulture, out var t) ? DateTime.Today.Add(t).ToString("t") : _settings.PracticeEnd;
+        PracticeEndBox.IsEnabled = _settings.PracticeEndOn;
+        _showingPracticeEnd = false;
+    }
+
+    private bool _showingPracticeEnd;
+
+    /// <summary>Reads a time like "4:30 PM" or "16:30".</summary>
+    private static TimeSpan? ReadClockTime(string text) =>
+        DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.NoCurrentDateDefault, out var d) ? d.TimeOfDay
+        : TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out var t) && t < TimeSpan.FromDays(1) ? t : null;
+
+    private void PracticeEnd_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_showingPracticeEnd || PracticeEndCheck == null) return;
+        var time = ReadClockTime(PracticeEndBox.Text);
+        SetPracticeEnd(PracticeEndCheck.IsChecked == true, time);
+        if (time == null) ShowPracticeEnd();
     }
 
     /// <summary>
@@ -238,7 +330,7 @@ public partial class MainWindow
                 _vocabLaterSlot = slot;
                 _vocabLaterUntil = DateTime.Now.AddMinutes(20);
             }
-            else if (finished) _vocabLaterSlot = -1;
+            else if (finished) { _vocabLaterSlot = -1; if (slot >= 0) PublishPracticeDone("words", slot); }
             UpdateVocabSummary();
             after?.Invoke(finished);
         });

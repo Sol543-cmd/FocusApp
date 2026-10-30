@@ -138,6 +138,7 @@ public partial class MainWindow
     /// </summary>
     private bool TryTimelineRounds()
     {
+        MergePracticeDoneFromOtherComputers(); // a round done on another computer counts here too
         if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
         var now = DateTime.Now;
         foreach (var p in Practices)
@@ -148,12 +149,23 @@ public partial class MainWindow
             if (!on || now < laterUntil) continue;
             var slots = SlotsFor(PerDayFor(p), p);
             var done = DoneToday(DoneRecordFor(p));
+            // No catching up: if several of today's times have passed (you were away), only the latest one comes up,
+            // and the earlier ones are skipped.
             int due = -1;
             for (int i = 0; i < slots.Count; i++)
-                if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
-            if (due < 0 && laterSlot >= 0 && !done.Contains(laterSlot)) due = laterSlot;
+                if (!done.Contains(i) && SlotLive(slots[i], TimeSpan.FromHours(3))) due = i;
+            if (due < 0 && laterSlot >= 0 && laterSlot < slots.Count && !done.Contains(laterSlot) && SlotLive(slots[laterSlot], TimeSpan.FromHours(3))) due = laterSlot;
             if (due < 0) continue;
             if (PracticeMustWait()) return true; // waits until the meeting, break or lunch is over
+            var skipped = Enumerable.Range(0, slots.Count).Where(i => i < due && slots[i] <= now && !done.Contains(i)).ToList();
+            if (skipped.Count > 0)
+            {
+                foreach (int i in skipped) done.Add(i);
+                SetDoneRecordFor(p, DoneRecord(done));
+                PublishPracticeDone(p, skipped.Max());
+                SaveSettingsQuietly();
+                Log.Write($"Practice {p}: {skipped.Count} missed round(s) skipped, one round instead");
+            }
             switch (p)
             {
                 case "alphabet": StartAlphaRound(due); break;
@@ -450,7 +462,9 @@ public partial class MainWindow
         {
             Text = "Today's rounds for each practice, with your meetings and lunch shaded. Drag a round to move it (it snaps to 15 minutes), " +
                    "double-click a row to add one, right-click a round to remove it. Each round comes up at its time whether or not a focus session is running (Focus just needs to be open, even in the tray); " +
-                   "one that lands in a meeting, break or lunch waits until it's over. The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
+                   "one that lands in a meeting, break or lunch waits until it's over. If you're away, missed rounds don't pile up: only one of each comes up when you're back. " +
+                   (PracticeDayEnd is TimeSpan reset ? $"Times before {DateTime.Today.Add(reset):t} reset then (Settings, Greek practice); times after it last until midnight. " : "") +
+                   "The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
                    "The All practice row shows every round together, so you can spread them apart or put them back to back.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 24, 6)
         };
@@ -490,6 +504,7 @@ public partial class MainWindow
         {
             foreach (var p in Practices) ReplaceTodaysTimes(p, work[p].Distinct().ToList(), asDefault);
             SaveSettingsQuietly();
+            SaveSharedPracticeTimes(); // your other computers use the same timelines
             // The book lesson's three times and All-books practice times (these are always every day's).
             Course.Config.Times = work["lesson"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.CardReviewTimes = work["cardreview"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();

@@ -22,7 +22,7 @@ public static class Storage
     public static string SharedFolder { get; private set; } = Folder;
 
     private static readonly string[] SharedNames =
-        { "layouts.json", "blocklists.json", "task-bin.json", "resolved-tasks.json", "projects.json", "templates.json", "vocab.json", "alphabet.json", "concepts.json", "personal-tasks.json", "personal-finished.json", "personal-projects.json", "task-removed.json", "personal-removed.json", "plan-defaults.json" };
+        { "layouts.json", "blocklists.json", "task-bin.json", "resolved-tasks.json", "projects.json", "templates.json", "vocab.json", "alphabet.json", "concepts.json", "personal-tasks.json", "personal-finished.json", "personal-projects.json", "task-removed.json", "personal-removed.json", "plan-defaults.json", "practice-times.json" };
 
     // When Focus itself last wrote each file, and the file's timestamp after that write,
     // so sync can tell its own saves apart from changes made on the other computer.
@@ -45,6 +45,7 @@ public static class Storage
         return SharedNames.Contains(name, StringComparer.OrdinalIgnoreCase)
                || name.StartsWith("plans\\", StringComparison.OrdinalIgnoreCase)
                || name.StartsWith("focus-stats-", StringComparison.OrdinalIgnoreCase)
+               || name.StartsWith("practice-done-", StringComparison.OrdinalIgnoreCase)
                || name.StartsWith("session-logs\\", StringComparison.OrdinalIgnoreCase)
                || name.Equals("calendar-share.json", StringComparison.OrdinalIgnoreCase);
     }

@@ -51,7 +51,7 @@ public partial class MainWindow
                 _conceptLaterSlot = slot;
                 _conceptLaterUntil = DateTime.Now.AddMinutes(20);
             }
-            else if (finished) _conceptLaterSlot = -1;
+            else if (finished) { _conceptLaterSlot = -1; if (slot >= 0) PublishPracticeDone("concepts", slot); }
             UpdateConceptSummary();
             after?.Invoke(finished);
         },

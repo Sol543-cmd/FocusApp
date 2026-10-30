@@ -17,6 +17,8 @@ public partial class VocabWindow : Window
 {
     private static readonly List<VocabWindow> Open = new();
     public static bool IsShowing => Open.Count > 0;
+    /// <summary>When the round on screen opened (for the end-of-day and midnight resets).</summary>
+    public static DateTime OpenedAt { get; private set; } = DateTime.MinValue;
 
     // Soft colors that tell matched pairs apart (number badges carry the meaning too).
     private static readonly Color[] PairColors =
@@ -43,6 +45,7 @@ public partial class VocabWindow : Window
                                         IPracticeDeck? deck = null)
     {
         if (IsShowing || words.Count == 0) return;
+        OpenedAt = DateTime.Now;
         var screen = WorkingScreen();
         VocabWindow? w = null;
         try
@@ -77,6 +80,13 @@ public partial class VocabWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    /// <summary>The practice day ended while a round was left open: it closes as if you'd chosen Later.</summary>
+    public static void CloseForToday()
+    {
+        var first = Open.FirstOrDefault();
+        if (first != null) first.Finish(done: false); else CloseAll();
+    }
 
     private static void CloseAll()
     {

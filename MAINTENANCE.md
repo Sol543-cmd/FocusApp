@@ -107,6 +107,8 @@ To remove it: Settings, Uninstall Focus.
 | calendar-share.json | The next three weeks of meetings, for the phone app       |
 | Daily records\\      | One Markdown file per day (unless an Obsidian folder is chosen) |
 | templates.json      | Task templates                                            |
+| practice-times.json | The Greek practice timelines, shared by your computers (synced) |
+| practice-done-PCNAME.json | The latest Greek round each computer finished today, so the others skip it (synced) |
 | plan-defaults.json  | The default block lists and apps for new focus sessions (synced) |
 | training\\          | The book course (synced): course.json, the book and chapter packs per course, and one progress-<computer>.json per device |
 | freedom.json        | Your Freedom connection and choices, this PC only (the sign-in is encrypted with your Windows account; your password is never saved) |
@@ -182,6 +184,7 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | Concepts.cs              | Concepts practice: your own questions and answers |
 | ConceptsWindow.xaml(.cs) | Entering and editing concepts (and pasting a list) |
 | MainWindow.Practice.cs   | Concepts, extra answers, the Greek settings card summaries |
+| MainWindow.PracticeSync.cs | Practice timelines and finished rounds shared between computers |
 | MainWindow.Vocab.cs      | When Greek practice pops up (never in meetings or lunch) |
 | SyncMerge.cs             | Three-way merging for synced lists, so stale computers never undo newer changes |
 | TitleBar.cs              | Makes window title bars match the theme |

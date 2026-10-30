@@ -708,9 +708,13 @@ public partial class MainWindow
             if (Storage.TryLoad<PlanDefaults>("plan-defaults.json", out var shared) && shared.UpdatedUtc != default)
             {
                 bool same = shared.Lists.SequenceEqual(_settings.DefaultPlanLists) && shared.PauseWeekends == _settings.PauseWeekends &&
+                            shared.PracticeEndOn == _settings.PracticeEndOn && shared.PracticeEnd == _settings.PracticeEnd &&
                             shared.Apps.Select(a => a.Key).SequenceEqual(_settings.DefaultPlanApps.Select(a => a.Key));
                 if (same) return;
                 _settings.PauseWeekends = shared.PauseWeekends;
+                _settings.PracticeEndOn = shared.PracticeEndOn;
+                _settings.PracticeEnd = shared.PracticeEnd;
+                ShowPracticeEnd();
                 if (PauseWeekendsCheck != null) PauseWeekendsCheck.IsChecked = shared.PauseWeekends;
                 _settings.DefaultPlanLists = shared.Lists.Where(id => BlockLists.Find(id) != null).Distinct().ToList();
                 _settings.DefaultPlanApps = shared.Apps.Select(a => a.Copy()).ToList();
@@ -731,6 +735,8 @@ public partial class MainWindow
                 Lists = _settings.DefaultPlanLists.ToList(),
                 Apps = _settings.DefaultPlanApps.Select(a => a.Copy()).ToList(),
                 PauseWeekends = _settings.PauseWeekends,
+                PracticeEndOn = _settings.PracticeEndOn,
+                PracticeEnd = _settings.PracticeEnd,
                 UpdatedUtc = DateTime.UtcNow
             });
         }

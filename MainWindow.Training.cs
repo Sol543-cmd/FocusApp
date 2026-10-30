@@ -65,6 +65,8 @@ public partial class MainWindow
         var times = TrainingTimes();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0) return false;
+        // Lesson times before the end of the practice day reset at it; ones after it last until midnight.
+        if (!SlotLive(DateTime.Today + times[slot], TimeSpan.FromDays(1))) return false;
         Course.ReloadEvents(); // another device may have finished today's lesson
         if (Course.DoneToday() || (Course.NextLesson() == null && Course.ExamDue() == null)) return false;
         if (PracticeMustWait()) return true;                                 // waits until the meeting, break or lunch is over
@@ -112,7 +114,7 @@ public partial class MainWindow
         window.Closed += (_, _) =>
         {
             _lessonWindow = null;
-            if (window.LeftPartWay)
+            if (window.LeftPartWay && !window.ClosedByEndOfDay)
             {
                 var times = TrainingTimes();
                 var nextTime = times.FirstOrDefault(t => t > DateTime.Now.TimeOfDay);
@@ -140,7 +142,7 @@ public partial class MainWindow
         var times = Course.Config.AllBooksTimes.Select(t => TimeSpan.TryParse(t, CultureInfo.InvariantCulture, out var v) ? v : (TimeSpan?)null)
                           .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
-        if (slot < 0 || now - times[slot] > TimeSpan.FromHours(2)) return;
+        if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(2))) return;
         string key = Course.Today + "#ab" + slot;
         if (_allBooksPromptKey == key || Course.Events.Any(e => e.Kind == "allBooksDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
         if (PracticeMustWait()) return;
@@ -168,7 +170,7 @@ public partial class MainWindow
         var times = cfg.CardReviewTimes.Select(t => TimeSpan.TryParse(t, CultureInfo.InvariantCulture, out var v) ? v : (TimeSpan?)null)
                        .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
-        if (slot < 0 || now - times[slot] > TimeSpan.FromHours(3)) return;
+        if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(3))) return;
         string key = Course.Today + "#cr" + slot;
         if (_cardReviewKey == key || Course.CardReviewDoneToday()) return;
         if (PracticeMustWait()) return; // waits until the meeting, break or lunch is over
@@ -718,12 +720,24 @@ public partial class MainWindow
 
         // Weekends
         var wk = new StackPanel();
-        wk.Children.Add(TT("Weekends", 15, bold: true));
+        wk.Children.Add(TT("Weekends and the daily reset", 15, bold: true));
         var wkCheck = new CheckBox { Content = "Pause all practice on weekends", IsChecked = _settings.PauseWeekends, Margin = new Thickness(0, 8, 0, 0) };
         wkCheck.Checked += (_, _) => SetPauseWeekends(true);
         wkCheck.Unchecked += (_, _) => SetPauseWeekends(false);
         wk.Children.Add(wkCheck);
         wk.Children.Add(TT("On Saturdays and Sundays no lesson, card review, All-books round or Greek practice pops up by itself, and no lesson is required. You can still start any of them yourself, from this page or the dashboard.", 12, brush: "Muted", top: 4));
+        var resetRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        var resetCheck = new CheckBox { Content = "Reset practice at", IsChecked = _settings.PracticeEndOn, VerticalAlignment = VerticalAlignment.Center };
+        var resetBox = new TextBox { Width = 90, Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(6, 2, 6, 2), IsEnabled = _settings.PracticeEndOn,
+                                     Text = PracticeDayEnd is TimeSpan pe ? DateTime.Today.Add(pe).ToString("t") : "4:30 PM" };
+        void ApplyReset() { SetPracticeEnd(resetCheck.IsChecked == true, ReadClockTime(resetBox.Text)); resetBox.IsEnabled = resetCheck.IsChecked == true; }
+        resetCheck.Checked += (_, _) => ApplyReset();
+        resetCheck.Unchecked += (_, _) => ApplyReset();
+        resetBox.LostFocus += (_, _) => ApplyReset();
+        resetRow.Children.Add(resetCheck);
+        resetRow.Children.Add(resetBox);
+        wk.Children.Add(resetRow);
+        wk.Children.Add(TT("Lesson, review and practice times before the reset stop at it, and anything left on screen while you're away closes (a lesson moves to tomorrow). Times after the reset still come up and last until midnight.", 12, brush: "Muted", top: 4));
         TrainingHost.Children.Add(TCard(wk));
 
         // Evening card review

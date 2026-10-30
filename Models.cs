@@ -1040,8 +1040,13 @@ public class AppSettings
     public Dictionary<string, string> PracticeTimes { get; set; } = new();
     /// <summary>Saturdays and Sundays: no practice, lesson or review pops up by itself (you can still start any of them). Synced.</summary>
     public bool PauseWeekends { get; set; }
+    /// <summary>The practice day ends at this time: nothing pops up by itself after it, and anything left open while you're away closes. Synced.</summary>
+    public bool PracticeEndOn { get; set; } = true;
+    public string PracticeEnd { get; set; } = "16:30";
     /// <summary>1.7.1 moved every practice onto its timeline (the old evenly spread rounds became timeline times once).</summary>
     public bool PracticeOnTimelines { get; set; }
+    /// <summary>When this computer's practice timelines last changed (here or adopted from practice-times.json).</summary>
+    public DateTime PracticeTimesUpdatedUtc { get; set; }
     /// <summary>Times changed for today only (PracticeTodayDate is the day they're for).</summary>
     public Dictionary<string, string> PracticeTodayTimes { get; set; } = new();
     public string PracticeTodayDate { get; set; } = "";
@@ -1124,6 +1129,8 @@ public class PlanDefaults
     public List<BlockedApp> Apps { get; set; } = new();
     /// <summary>Pause all practice on weekends (shared so every computer agrees).</summary>
     public bool PauseWeekends { get; set; }
+    public bool PracticeEndOn { get; set; } = true;
+    public string PracticeEnd { get; set; } = "16:30";
     public DateTime UpdatedUtc { get; set; }
 }
 
