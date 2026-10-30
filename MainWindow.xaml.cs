@@ -116,6 +116,8 @@ public partial class MainWindow : Window
         SetUpVocab();
         SetUpHome();
         SetUpPopupKeys();
+        // Pop-up calendars on the task editor's date fields (DatePopup.cs).
+        try { DatePopup.Attach(TaskDueBox); DatePopup.Attach(TaskSnoozeBox); } catch (Exception ex) { Log.Error("DatePopup", ex); }
         try { SetUpUpdates(); } catch (Exception ex) { Log.Error("SetUpUpdates", ex); } // tray "Check for updates" and the quiet check (MainWindow.Updates.cs)
         Nav_Checked(NavDashboard, new RoutedEventArgs()); // open on the dashboard
         ContentRendered += (_, _) => Dispatcher.BeginInvoke(new Action(ShowWelcomeIfNeeded), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
@@ -981,7 +983,7 @@ public partial class MainWindow : Window
 
         // The floating timer counts down in steps of ten seconds.
         string tens = _settings.OverlaySeconds ? Format.ClockTens(remaining) : Format.MinutesLeft(remaining);
-        _overlay.Update(_runner.IsPaused ? $"{tens} paused" : tens, cur.Name, accent, fractionLeft);
+        _overlay.Update(_runner.IsPaused ? $"{tens} paused" : tens, cur.Name, accent, fractionLeft, cur.IsFocus ? _runner.FocusNumber : 0);
         TrackFocusTime(cur);
         RefreshDashboard();
         UpdateOverlayVisibility();

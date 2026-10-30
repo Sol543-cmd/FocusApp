@@ -102,7 +102,13 @@ public partial class VocabWindow : Window
             LaterButton.ToolTip = "Stop reviewing";
             BuildSizeChoices();
         }
-        SourceInitialized += (_, _) => { FitToScreen(); TilesScroll.MaxHeight = Math.Max(300, Height - 330); };
+        SourceInitialized += (_, _) =>
+        {
+            FitToScreen();
+            // Nearly the whole screen, but the grid stays in a centered column about 1,200 wide so answers sit near their questions.
+            Card.Width = Math.Max(600, Math.Min(1200, Width - 80));
+            TilesScroll.MaxHeight = Math.Max(300, Height - 300);
+        };
         _round = words.ToList();
         foreach (var c in _round) _seen.Add(c.Id); // these are the words this round will record
         Build();
@@ -134,69 +140,120 @@ public partial class VocabWindow : Window
         Redraw();
     }
 
-    private Button MakeTile(string text, bool greek, VocabCard card)
+    private readonly List<Button> _leftTiles = new(), _rightTiles = new();
+
+    private static string Letter(int i) => i < 26 ? ((char)('A' + i)).ToString() : (i + 1).ToString();
+
+    /// <summary>A leading section number like "3.2", "§12" or "[4]" at the start of a question: shown as a small tag.</summary>
+    private static readonly System.Text.RegularExpressions.Regex SectionPrefix =
+        new(@"^\s*(?:\[(?<s>[^\]]{1,12})\]|(?<s>§\s*\d+(?:\.\d+)*)|(?<s>\d+(?:\.\d+)+))[\s.:)\-–]*\s+(?<rest>\S.*)$",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+    /// <summary>One tile: its number or letter on the left, the text (with any section tag), and room on the right for its partner's label.</summary>
+    private Button MakeTile(string text, bool left, VocabCard card, string label)
     {
         bool compact = _round.Count > 6; // bigger rounds get slimmer tiles so all ten fit
-        var b = new Button { HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, compact ? 6 : 10),
-                             Padding = compact ? new Thickness(14, 7, 14, 7) : new Thickness(16, 12, 16, 12),
-                             Cursor = Cursors.Hand, Tag = card, BorderThickness = new Thickness(1.5),
-                             FontSize = greek ? (_deck.LargeLeft ? (compact ? 24 : 28) : (compact ? 18 : 21)) : (compact ? 14 : 15) };
-        var label = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
-        if (greek) label.FontFamily = new FontFamily("Segoe UI, Palatino Linotype, Times New Roman");
-        b.Content = label;
+        var b = new Button { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+                             Margin = new Thickness(0, 0, 0, compact ? 8 : 12),
+                             Padding = compact ? new Thickness(14, 9, 14, 9) : new Thickness(16, 14, 16, 14),
+                             Cursor = Cursors.Hand, Tag = card, BorderThickness = new Thickness(1.5) };
+        // The same text size on both sides (the alphabet's letters stay large).
+        double size = left && _deck.LargeLeft ? (compact ? 24 : 28) : (compact ? 16 : 18);
+
+        var row = new DockPanel { LastChildFill = true };
+        var number = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(13), Margin = new Thickness(0, 0, 12, 0),
+                                  VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1.2) };
+        number.SetResourceReference(Border.BorderBrushProperty, "Muted");
+        var numberText = new TextBlock { Text = label, FontSize = 12.5, FontWeight = FontWeights.SemiBold,
+                                         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        numberText.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        number.Child = numberText;
+        DockPanel.SetDock(number, Dock.Left);
+        row.Children.Add(number);
+
+        // Its partner's label once matched (filled in by Mark).
+        var partner = new Border { MinWidth = 26, Height = 26, CornerRadius = new CornerRadius(13), Margin = new Thickness(12, 0, 0, 0), Padding = new Thickness(6, 0, 6, 0),
+                                   VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Hidden, Tag = "partner" };
+        DockPanel.SetDock(partner, Dock.Right);
+        row.Children.Add(partner);
+
+        var body = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        var match = SectionPrefix.Match(text);
+        if (match.Success)
+        {
+            var tag = new Border { CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 3, 8, 3), VerticalAlignment = VerticalAlignment.Center };
+            tag.SetResourceReference(Border.BackgroundProperty, "Line");
+            var tagText = new TextBlock { Text = match.Groups["s"].Value.Trim(), FontSize = 11.5, FontWeight = FontWeights.SemiBold };
+            tagText.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            tag.Child = tagText;
+            body.Children.Add(tag);
+            text = match.Groups["rest"].Value;
+        }
+        var words = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = size, VerticalAlignment = VerticalAlignment.Center };
+        if (_deck is Concepts) ScriptureLinks.Fill(words, text); else words.Text = text; // references in your concepts open in Logos
+        if (left) words.FontFamily = new FontFamily("Segoe UI, Palatino Linotype, Times New Roman");
+        body.Children.Add(words);
+        row.Children.Add(body);
+        b.Content = row;
+        b.SizeChanged += (_, _) => words.MaxWidth = Math.Max(80, b.ActualWidth - 120); // wrap inside the tile
         b.SetResourceReference(StyleProperty, "Tile");
         b.SetResourceReference(BackgroundProperty, "Panel2");
         b.SetResourceReference(BorderBrushProperty, "Panel2");
-        b.Click += (_, _) => TileClicked(card, greek);
+        b.Click += (_, _) => TileClicked(card, left);
         return b;
     }
 
     private void Redraw()
     {
-        GreekColumn.Children.Clear();
-        EnglishColumn.Children.Clear();
+        PairGrid.Children.Clear();
+        PairGrid.RowDefinitions.Clear();
+        _leftTiles.Clear();
+        _rightTiles.Clear();
         var order = _round.ToList();
-        foreach (var card in order)
+        for (int i = 0; i < order.Count; i++)
         {
-            var tile = MakeTile(card.Greek, true, card);
-            if (_pairs.TryGetValue(card, out _)) Mark(tile, order.IndexOf(card));
+            var card = order[i];
+            var tile = MakeTile(card.Greek, true, card, (i + 1).ToString());
+            if (_pairs.TryGetValue(card, out var chosen)) Mark(tile, i, Letter(_meanings.IndexOf(chosen)));
             else if (ReferenceEquals(card, _pickedGreek))
             {
                 tile.BorderThickness = new Thickness(2.5);
                 tile.SetResourceReference(BorderBrushProperty, "FocusBrush");
                 tile.SetResourceReference(BackgroundProperty, "FocusTint");
-                if (tile.Content is TextBlock picked) picked.FontWeight = FontWeights.SemiBold;
             }
-            GreekColumn.Children.Add(tile);
+            _leftTiles.Add(tile);
         }
-        foreach (var meaning in _meanings)
+        for (int i = 0; i < _meanings.Count; i++)
         {
-            var tile = MakeTile(meaning.English, false, meaning);
+            var meaning = _meanings[i];
+            var tile = MakeTile(meaning.English, false, meaning, Letter(i));
             var owner = _pairs.FirstOrDefault(p => ReferenceEquals(p.Value, meaning)).Key;
-            if (owner != null) Mark(tile, order.IndexOf(owner));
-            EnglishColumn.Children.Add(tile);
+            if (owner != null) Mark(tile, order.IndexOf(owner), (order.IndexOf(owner) + 1).ToString());
+            _rightTiles.Add(tile);
+        }
+        int rows = Math.Max(_leftTiles.Count, _rightTiles.Count);
+        for (int r = 0; r < rows; r++)
+        {
+            PairGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            if (r < _leftTiles.Count) { Grid.SetRow(_leftTiles[r], r); Grid.SetColumn(_leftTiles[r], 0); PairGrid.Children.Add(_leftTiles[r]); }
+            if (r < _rightTiles.Count) { Grid.SetRow(_rightTiles[r], r); Grid.SetColumn(_rightTiles[r], 2); PairGrid.Children.Add(_rightTiles[r]); }
         }
         GoButton.IsEnabled = _pairs.Count == _round.Count && !_checking;
         GoButton.Content = _tries == 0 ? "Go" : "Check again";
     }
 
-    /// <summary>Colors a matched tile and adds a small number so you can see which go together.</summary>
-    private static void Mark(Button tile, int pairIndex)
+    /// <summary>Colors a matched tile and labels it with its partner (a letter on the left, a number on the right).</summary>
+    private static void Mark(Button tile, int pairIndex, string partnerLabel)
     {
-        var color = PairColors[pairIndex % PairColors.Length];
+        var color = PairColors[Math.Max(0, pairIndex) % PairColors.Length];
         tile.BorderBrush = new SolidColorBrush(color);
         tile.Background = new SolidColorBrush(Color.FromArgb(0x22, color.R, color.G, color.B));
-        if (tile.Content is TextBlock text)
+        if (tile.Content is DockPanel row && row.Children.OfType<Border>().FirstOrDefault(x => Equals(x.Tag, "partner")) is Border partner)
         {
-            var row = new DockPanel();
-            var badge = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = new SolidColorBrush(color), Margin = new Thickness(0, 0, 10, 0),
-                                     Child = new TextBlock { Text = (pairIndex + 1).ToString(), Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold,
-                                                             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            DockPanel.SetDock(badge, Dock.Left);
-            tile.Content = null;
-            row.Children.Add(badge);
-            row.Children.Add(text);
-            tile.Content = row;
+            partner.Background = new SolidColorBrush(color);
+            partner.Child = new TextBlock { Text = "→ " + partnerLabel, Foreground = Brushes.White, FontSize = 12.5, FontWeight = FontWeights.SemiBold,
+                                            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            partner.Visibility = Visibility.Visible;
         }
     }
 
@@ -235,13 +292,13 @@ public partial class VocabWindow : Window
         // Show right in green and wrong in red for a moment.
         _checking = true;
         GoButton.IsEnabled = false;
-        foreach (Button tile in GreekColumn.Children)
+        foreach (Button tile in _leftTiles)
         {
             if (tile.Tag is not VocabCard c) continue;
             bool ok = ReferenceEquals(_pairs[c], c);
             tile.SetResourceReference(BorderBrushProperty, ok ? "BreakBrush" : "PriorityHigh");
         }
-        foreach (Button tile in EnglishColumn.Children)
+        foreach (Button tile in _rightTiles)
         {
             if (tile.Tag is not VocabCard meaning) continue;
             var owner = _pairs.FirstOrDefault(p => ReferenceEquals(p.Value, meaning)).Key;

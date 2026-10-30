@@ -1,6 +1,7 @@
 <Window x:Class="FocusApp.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:FocusApp"
         Title="Focus timer" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         SizeToContent="WidthAndHeight" Opacity="1" Cursor="SizeAll"
@@ -8,7 +9,7 @@
         MouseLeftButtonDown="Window_MouseLeftButtonDown" MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave"
         ToolTip="Drag to move. Double-click to open Focus.">
     <StackPanel>
-    <Grid x:Name="Root" Width="280" Height="38" Margin="4" SizeChanged="Root_SizeChanged">
+    <Grid x:Name="Root" Width="300" Height="38" Margin="4" SizeChanged="Root_SizeChanged">
         <!-- Background: solid, for good contrast on any screen -->
         <Rectangle Fill="{DynamicResource Panel}"/>
         <!-- Time-left bar: full at the start of a block, drains as time runs down -->
@@ -18,13 +19,20 @@
             </Rectangle.RenderTransform>
         </Rectangle>
         <Border x:Name="Outline" BorderBrush="{DynamicResource Muted}" BorderThickness="1.5" CornerRadius="19"/>
-        <StackPanel Orientation="Horizontal" Margin="14,0,14,0" VerticalAlignment="Center">
-            <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{DynamicResource FocusBrush}"
-                     VerticalAlignment="Center" Margin="0,0,10,0"/>
+        <StackPanel Orientation="Horizontal" Margin="8,0,14,0" VerticalAlignment="Center">
+            <!-- Focus sessions: the session number as a Roman numeral in a small serif ring. Breaks and idle: a dot. -->
+            <Grid Width="28" Margin="0,0,8,0" VerticalAlignment="Center">
+                <Ellipse x:Name="Dot" Width="9" Height="9" Fill="{DynamicResource FocusBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border x:Name="Badge" MinWidth="24" Height="24" CornerRadius="12" BorderThickness="1.3" BorderBrush="{DynamicResource FocusBrush}"
+                        Padding="3,0" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock x:Name="BadgeText" FontSize="12" Foreground="{DynamicResource Text}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="0,0,0,1"/>
+                </Border>
+            </Grid>
             <TextBlock x:Name="TimeText" Text="00:00" FontSize="16" FontWeight="SemiBold" FontFamily="{StaticResource HeadingFont}"
                        Typography.NumeralAlignment="Tabular" VerticalAlignment="Center"/>
             <TextBlock x:Name="NameText" FontSize="13" Foreground="{DynamicResource Text}" Opacity="1"
-                       MaxWidth="118" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                       MaxWidth="132" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0"/>
         </StackPanel>
         <!-- The caret: click to drop down your tasks (and again to fold them up) -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
@@ -76,6 +84,9 @@
                             Cursor="Hand" Click="TodayView_Click" Foreground="{DynamicResource Text}" Margin="4,0,0,0"/>
                     <Button x:Name="PersonalViewBtn" Content="Personal" FontSize="12.5" Padding="4,1" Background="Transparent" BorderThickness="0"
                             Cursor="Hand" Click="PersonalView_Click" Foreground="{DynamicResource Text}" Margin="4,0,0,0"/>
+                    <Button x:Name="PersonalScopeBtn" Content="▾" FontSize="11" Padding="3,1" Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="PersonalScope_Click" Foreground="{DynamicResource Text}" Opacity="0.65"
+                            ToolTip="Choose which personal tasks show: Today, This week, All, or one project"/>
                 </StackPanel>
             </DockPanel>
             <TextBlock x:Name="TasksHeader" FontSize="11" Foreground="{DynamicResource Muted}" Margin="4,0,0,6"/>
@@ -89,7 +100,7 @@
                                           Margin="0,0,8,0" VerticalAlignment="Top" Click="Task_Click">
                                     <CheckBox.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></CheckBox.LayoutTransform>
                                 </CheckBox>
-                                <TextBlock x:Name="Text" Text="{Binding Text}" FontSize="13" Foreground="{DynamicResource Text}" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="Text" local:ScriptureLinks.Text="{Binding Text}" FontSize="13" Foreground="{DynamicResource Text}" TextWrapping="Wrap"/>
                             </DockPanel>
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding Done}" Value="True">

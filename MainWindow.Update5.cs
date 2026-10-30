@@ -1034,7 +1034,7 @@ public partial class MainWindow
         if (BinUpcomingView.IsChecked == true)
             return ("Upcoming", () => (UpcomingList.ItemsSource as IEnumerable<UpcomingDay> ?? Enumerable.Empty<UpcomingDay>())
                 .Select(g => new ExportGroup { Header = g.Header, Items = g.Items.Select(ItemOf).ToList() }).Where(g => g.Items.Count > 0).ToList());
-        string label = BinUndatedView.IsChecked == true ? "Undated" : BinTomorrowView.IsChecked == true ? "Tomorrow" : _binFilter == "all" ? "All tasks" : "Filtered tasks";
+        string label = BinUndatedView.IsChecked == true ? "Undated" : BinTodayView.IsChecked == true ? "Today" : BinTomorrowView.IsChecked == true ? "Tomorrow" : _binFilter == "all" ? "All tasks" : "Filtered tasks";
         return (label, () => new List<ExportGroup> { new() { Header = label, Items = VisibleBinTasks().Select(ItemOf).ToList() } });
     }
 

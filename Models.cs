@@ -113,6 +113,11 @@ public abstract class TaskBase : INotifyPropertyChanged
     [JsonIgnore] public bool IsOverdue => Due != null && Due < DateTime.Today;
     [JsonIgnore] public bool IsDueToday => Due != null && Due == DateTime.Today;
     [JsonIgnore] public bool IsPlannedToday => PlannedFor == DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    /// <summary>Set for today (picked or due), so the task row offers only Tomorrow.</summary>
+    [JsonIgnore] public bool IsSetForToday => IsPlannedToday || IsDueToday;
+    /// <summary>Set for tomorrow (picked or due), so the task row offers only Today.</summary>
+    [JsonIgnore] public bool IsSetForTomorrow =>
+        PlannedFor == DateTime.Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) || (Due != null && Due.Value.Date == DateTime.Today.AddDays(1));
     [JsonIgnore] public bool IsHigh => Priority == TaskPriority.High;
     [JsonIgnore] public bool IsLow => Priority == TaskPriority.Low;
 
@@ -964,6 +969,8 @@ public class AppSettings
     public string PersonalHotkey { get; set; } = "Ctrl+Alt+Space";
     /// <summary>The floating timer's list: "session", "today" or "personal" (empty: from the older setting).</summary>
     public string OverlayView { get; set; } = "";
+    /// <summary>What the floating timer's Personal tab shows: "today", "week", "all", or "project:ID".</summary>
+    public string OverlayPersonalScope { get; set; } = "today";
 
     public int ConceptPerDay { get; set; } = 2;
     public int ConceptCount { get; set; } = 4;

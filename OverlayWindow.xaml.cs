@@ -33,6 +33,57 @@ public partial class OverlayWindow : Window
     public bool TodayView => _view == "today";
     public string View => _view;
 
+    /// <summary>What the Personal tab shows: "today", "week", "all", or "project:ID" (chosen with the caret beside it).</summary>
+    public string PersonalScope { get; private set; } = "today";
+    public event Action<string>? PersonalScopeChanged;
+    /// <summary>Your personal projects (ID and name), for the caret's menu.</summary>
+    public Func<IEnumerable<(string Id, string Name)>>? PersonalProjects { get; set; }
+
+    public void SetPersonalScope(string scope)
+    {
+        PersonalScope = scope is "today" or "week" or "all" || scope.StartsWith("project:") ? scope : "today";
+        UpdateViewLook();
+    }
+
+    private string PersonalScopeName()
+    {
+        switch (PersonalScope)
+        {
+            case "week": return "This week";
+            case "all": return "All";
+            case "today": return "Today";
+        }
+        string id = PersonalScope.StartsWith("project:") ? PersonalScope[8..] : "";
+        return PersonalProjects?.Invoke().FirstOrDefault(p => p.Id == id).Name ?? "Project";
+    }
+
+    private void PersonalScope_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = PersonalScopeBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        void Add(string scope, string text)
+        {
+            var item = new System.Windows.Controls.MenuItem { Header = text, IsCheckable = true, IsChecked = PersonalScope == scope };
+            item.Click += (_, _) =>
+            {
+                PersonalScope = scope;
+                _shown = "";
+                PersonalScopeChanged?.Invoke(scope);
+                if (_view != "personal") SwitchView("personal"); else { UpdateViewLook(); ViewChanged?.Invoke("personal"); }
+            };
+            menu.Items.Add(item);
+        }
+        Add("today", "Today");
+        Add("week", "This week");
+        Add("all", "All");
+        var projects = PersonalProjects?.Invoke().ToList() ?? new();
+        if (projects.Count > 0)
+        {
+            menu.Items.Add(new System.Windows.Controls.Separator());
+            foreach (var (id, name) in projects) Add("project:" + id, name);
+        }
+        menu.IsOpen = true;
+    }
+
     private const double RowHeight = 27;
 
     /// <summary>How many tasks show before the list scrolls (Settings; resets to this each time Focus opens).</summary>
@@ -48,12 +99,15 @@ public partial class OverlayWindow : Window
             button.FontWeight = _view == view ? FontWeights.SemiBold : FontWeights.Normal;
             button.Opacity = _view == view ? 1 : 0.65;
         }
+        // The Personal tab shows its current choice, like "Personal · This week".
+        PersonalViewBtn.Content = PersonalScope == "today" ? "Personal" : $"Personal · {PersonalScopeName()}";
     }
     private double _movedUpBy;
 
     public OverlayWindow()
     {
         InitializeComponent();
+        BadgeText.FontFamily = SessionLook.NumeralFont;
         _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); Collapse(); };
     }
 
@@ -163,10 +217,20 @@ public partial class OverlayWindow : Window
     }
 
     /// <param name="fractionLeft">1 at the start of a block, 0 when it ends.</param>
-    public void Update(string time, string name, Brush accent, double fractionLeft)
+    /// <param name="focusNumber">For a focus session, its number (shown as a Roman numeral); 0 for breaks, meetings and idle.</param>
+    public void Update(string time, string name, Brush accent, double fractionLeft, int focusNumber = 0)
     {
         TimeText.Text = time;
-        NameText.Text = name;
+        bool focus = focusNumber > 0;
+        // Focus sessions: FOCUS SESSION (or the session's own name) in small spaced capitals.
+        NameText.Text = focus ? SessionLook.Label(name) : name;
+        NameText.FontSize = focus ? 10.5 : 13;
+        NameText.FontWeight = focus ? FontWeights.SemiBold : FontWeights.Normal;
+        NameText.ToolTip = focus && SessionLook.IsNamed(name) ? name : null;
+        Badge.Visibility = focus ? Visibility.Visible : Visibility.Collapsed;
+        Dot.Visibility = focus ? Visibility.Collapsed : Visibility.Visible;
+        BadgeText.Text = focus ? SessionLook.Roman(focusNumber) : "";
+        Badge.BorderBrush = accent;
         Dot.Fill = accent;
         Fill.Fill = accent;
         FillScale.ScaleX = Math.Clamp(fractionLeft, 0, 1);

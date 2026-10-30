@@ -42,6 +42,9 @@ public partial class MainWindow
             SaveSettingsQuietly();
             UpdateOverlayVisibility();
         };
+        _overlay.PersonalProjects = () => PersonalTasks.ProjectList.Select(pr => (pr.Id, pr.Name)).ToList();
+        _overlay.PersonalScopeChanged += scope => { _settings.OverlayPersonalScope = scope; SaveSettingsQuietly(); };
+        _overlay.SetPersonalScope(_settings.OverlayPersonalScope ?? "today");
         if (_settings.OverlayHidden) _overlayChoice = false;
         _overlay.SetView(_settings.OverlayView.Length > 0 ? _settings.OverlayView : _settings.OverlayToday ? "today" : "session");
         _overlay.SetRows(_settings.OverlayRows);
@@ -405,9 +408,12 @@ public partial class MainWindow
         // Personal: today's personal tasks (or all of them, if none are for today).
         if (_overlay.View == "personal")
         {
-            var mine = PersonalTasks.View("today").ToList();
+            // The caret beside Personal chooses Today, This week, All, or one project.
+            string scope = _overlay.PersonalScope;
+            string? project = scope.StartsWith("project:") ? scope[8..] : null;
+            var mine = PersonalTasks.View(project != null ? "all" : scope, project).ToList();
             string head = "";
-            if (mine.Count == 0) { mine = PersonalTasks.View("all").ToList(); head = "All personal tasks"; }
+            if (mine.Count == 0 && scope == "today") { mine = PersonalTasks.View("all").ToList(); head = "Nothing for today: all personal tasks"; }
             _overlay.SetTasks(mine.Select(t => new OverlayTask { Source = t, Kind = "personal", Id = t.Id, Key = "p" + t.Id, Text = t.Text, IsHigh = t.IsHigh }).ToList(), head, "personal",
                               "No personal tasks yet.");
             return;

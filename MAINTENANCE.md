@@ -192,6 +192,10 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | logo.png, app.ico        | The logo and app icon                                          |
 | Sync.cs, MainWindow.Sync.cs | Syncing through a OneDrive folder                           |
 | Installer.cs             | Installing, updating and uninstalling for the current user     |
+| SessionLook.cs           | The numeral badge: Roman numerals and spaced capitals for focus sessions (floating timer, dashboard) |
+| Fonts\*.ttf             | Cormorant Garamond SemiBold for the numeral badge (SIL Open Font License, OFL.txt) |
+| DatePopup.cs             | The small pop-up calendar on date fields                       |
+| ScriptureLinks.cs        | Finds Scripture references and opens them in Logos (book names and abbreviations are listed here) |
 | Updater.cs               | Checks GitHub Releases and downloads FocusSetup.exe            |
 | MainWindow.Updates.cs    | Check for updates (tray menu), the twice-a-day check, installing an update |
 | .github\workflows\release.yml | GitHub builds the app and installer and publishes a Release |

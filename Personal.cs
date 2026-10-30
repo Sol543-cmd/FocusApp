@@ -125,6 +125,14 @@ public static class PersonalTasks
 
     public static bool IsToday(BinTask t) => t.IsPlannedToday || t.IsDueToday || t.IsOverdue;
 
+    /// <summary>From today to Sunday.</summary>
+    private static bool IsThisWeek(DateTime? day)
+    {
+        if (day is not DateTime d) return false;
+        var end = DateTime.Today.AddDays(6 - ((int)DateTime.Today.DayOfWeek + 6) % 7);
+        return d.Date >= DateTime.Today && d.Date <= end;
+    }
+
     public static IEnumerable<BinTask> View(string view, string? projectId = null)
     {
         var all = All.Where(t => !t.IsSnoozed);
@@ -132,6 +140,7 @@ public static class PersonalTasks
         all = view switch
         {
             "today" => all.Where(IsToday),
+            "week" => all.Where(t => IsToday(t) || IsThisWeek(t.PlannedDate) || IsThisWeek(t.Due)),
             "undated" => all.Where(t => t.IsUndated),
             "upcoming" => all.Where(t => t.Due != null && t.Due.Value.Date > DateTime.Today),
             _ => all

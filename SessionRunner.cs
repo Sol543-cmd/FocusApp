@@ -22,6 +22,18 @@ public class SessionRunner
     public int Index { get; private set; } = -1;
     public int Count => _queue.Count;
     public int Round { get; private set; } = 1;
+
+    /// <summary>Which focus session this is (1, 2, 3…), counting every round of a repeating cycle. 0 when nothing runs.</summary>
+    public int FocusNumber
+    {
+        get
+        {
+            if (Index < 0 || Index >= _queue.Count) return 0;
+            int before = _queue.Take(Index + 1).Count(b => b.IsFocus);
+            int perRound = _queue.Count(b => b.IsFocus);
+            return Math.Max(1, (Round - 1) * perRound + before);
+        }
+    }
     public bool IsPaused { get; private set; }
     public bool IsRunning => Index >= 0;
 

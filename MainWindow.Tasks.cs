@@ -33,9 +33,9 @@ public partial class MainWindow
     private void BinView_Checked(object sender, RoutedEventArgs e)
     {
         if (BinDoneView == null || DoneScroll == null || BoardGrid == null) return;
-        bool todo = BinTodoView.IsChecked == true || BinUndatedView.IsChecked == true || BinTomorrowView.IsChecked == true, upcoming = BinUpcomingView.IsChecked == true,
+        bool todo = BinTodoView.IsChecked == true || BinUndatedView.IsChecked == true || BinTodayView.IsChecked == true || BinTomorrowView.IsChecked == true, upcoming = BinUpcomingView.IsChecked == true,
              board = BinBoardView.IsChecked == true, done = BinDoneView.IsChecked == true;
-        _settings.LastBinView = BinUndatedView.IsChecked == true ? "undated" : BinTomorrowView.IsChecked == true ? "tomorrow" : upcoming ? "upcoming" : board ? "board" : done ? "done" : "list";
+        _settings.LastBinView = BinUndatedView.IsChecked == true ? "undated" : BinTodayView.IsChecked == true ? "today" : BinTomorrowView.IsChecked == true ? "tomorrow" : upcoming ? "upcoming" : board ? "board" : done ? "done" : "list";
         SaveSettingsQuietly();
         ClearSelection();
         BinTodoHeader.Visibility = todo ? Visibility.Visible : Visibility.Collapsed;
@@ -282,7 +282,8 @@ public partial class MainWindow
     private bool MatchesFilter(BinTask t) =>
         MatchesSearch(t) && !(t.IsSnoozed && _settings.On("upcoming") && BinTomorrowView?.IsChecked != true) && MatchesFilterButton(t) &&
         (BinUndatedView?.IsChecked != true || t.IsUndated) &&
-        (BinTomorrowView?.IsChecked != true || IsForTomorrow(t));
+        (BinTomorrowView?.IsChecked != true || IsForTomorrow(t)) &&
+        (BinTodayView?.IsChecked != true || t.IsPlannedToday || t.IsDueToday || t.IsOverdue);
 
     /// <summary>For the Tomorrow tab: picked for tomorrow, due tomorrow, or snoozed until tomorrow.</summary>
     private static bool IsForTomorrow(BinTask t)
@@ -346,10 +347,15 @@ public partial class MainWindow
     /// <summary>The filter buttons: All, Today, Overdue, High priority, No due date, and one per tag.</summary>
     private void BuildBinFilters()
     {
+        // Today is a tab in the top bar now. An old "Today" filter becomes that tab.
+        if (_binFilter == "today")
+        {
+            _binFilter = "all";
+            if (BinTodayView.IsChecked != true) { BinTodayView.IsChecked = true; return; } // switching tabs refreshes again
+        }
         var filters = new List<(string Key, string Label)>
         {
             ("all", $"All ({TaskBin.All.Count})"),
-            ("today", $"Today ({TaskBin.All.Count(t => t.IsPlannedToday || t.IsDueToday || t.IsOverdue)})"),
             ("overdue", $"Overdue ({TaskBin.All.Count(t => t.IsOverdue)})"),
             ("high", $"High priority ({TaskBin.All.Count(t => t.IsHigh)})"),
             ("nodate", "No due date")
@@ -612,9 +618,9 @@ public partial class MainWindow
         if (BinNewBox.Text.Trim().Length == 0) return;
         AddToBin(BinNewBox.Text.Trim(), $"Added {DateTime.Now:ddd MMM d}");
         // Added on the Tomorrow tab: it's for tomorrow (unless you gave it a day yourself).
-        if (BinTomorrowView.IsChecked == true && TaskBin.All.LastOrDefault() is BinTask added && added.PlannedFor.Length == 0 && added.Due == null)
+        if ((BinTomorrowView.IsChecked == true || BinTodayView.IsChecked == true) && TaskBin.All.LastOrDefault() is BinTask added && added.PlannedFor.Length == 0 && added.Due == null)
         {
-            added.PlannedFor = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            added.PlannedFor = DateTime.Today.AddDays(BinTodayView.IsChecked == true ? 0 : 1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             TaskBin.Save();
             RefreshTasksTab();
         }
@@ -778,6 +784,21 @@ public partial class MainWindow
         task.PlannedFor = task.IsPlannedToday ? "" : DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         TaskBin.Save();
         RefreshTasksTab();
+    }
+
+    private void AddToToday_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today);
+    private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today.AddDays(1));
+
+    /// <summary>The Today and Tomorrow buttons on a task row: picks the task for that day (and wakes it if snoozed).</summary>
+    private void AddToDay(object sender, DateTime day)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not BinTask task) return;
+        PushUndo();
+        task.PlannedFor = day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        task.SnoozedUntil = null;
+        TaskBin.Save();
+        RefreshTasksTab();
+        _toast.ShowMessage(day == DateTime.Today ? "Added to today" : "Added to tomorrow", task.Text, "Undo", Undo);
     }
 
     private void ReopenDoneTask_Click(object sender, RoutedEventArgs e)

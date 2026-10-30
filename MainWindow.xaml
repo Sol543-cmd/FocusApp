@@ -191,7 +191,9 @@
                         </ItemsControl>
                         <TextBox x:Name="TaskSubtaskBox" PreviewKeyDown="TaskSubtaskBox_PreviewKeyDown" ToolTip="Type a step and press Enter"/>
                         <TextBlock Text="Notes (optional)" Style="{StaticResource Caption}" Margin="0,12,0,4"/>
-                        <TextBox x:Name="TaskNotesBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="160" VerticalScrollBarVisibility="Auto"/>
+                        <TextBox x:Name="TaskNotesBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="160" VerticalScrollBarVisibility="Auto" TextChanged="TaskNotesBox_TextChanged"/>
+                        <!-- Scripture references in the task or its notes, as links to Logos -->
+                        <TextBlock x:Name="TaskRefsText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
                     </StackPanel>
                     <StackPanel x:Name="TaskSnoozeRow">
                         <TextBlock Text="Snooze (hide from the bin until a day)" Style="{StaticResource Caption}" Margin="0,12,0,4"/>
@@ -679,7 +681,7 @@
                                         <DockPanel>
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="PlanTaskCheck_Click" ToolTip="Finish this task"/>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="PlanTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
-                                                <TextBlock x:Name="Title" Text="{Binding Task.Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
+                                                <TextBlock x:Name="Title" local:ScriptureLinks.Text="{Binding Task.Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
                                                 <TextBox x:Name="RenameBox" Text="{Binding Task.Text, UpdateSourceTrigger=Explicit}" Visibility="Collapsed" FontSize="{DynamicResource TaskFontSize}" PreviewKeyDown="RenameBox_PreviewKeyDown" LostFocus="RenameBox_LostFocus"/>
                                                 <TextBlock x:Name="Details" Text="{Binding Task.Details}" Style="{StaticResource Caption}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     <TextBlock Text="{Binding Sessions}" FontSize="11.5" Foreground="{DynamicResource FocusBrush}"/>
@@ -821,7 +823,7 @@
                                         <DockPanel>
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="ResolveBinTask_Click" ToolTip="Finish this task"/>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
-                                                <TextBlock x:Name="Title" Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
+                                                <TextBlock x:Name="Title" local:ScriptureLinks.Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
                                                 <TextBox x:Name="RenameBox" Text="{Binding Text, UpdateSourceTrigger=Explicit}" Visibility="Collapsed" FontSize="{DynamicResource TaskFontSize}" PreviewKeyDown="RenameBox_PreviewKeyDown" LostFocus="RenameBox_LostFocus"/>
                                                 <TextBlock x:Name="Details" Text="{Binding Details}" Style="{StaticResource Caption}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                             </StackPanel>
@@ -887,7 +889,14 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <!-- The current session -->
-                        <TextBlock x:Name="DashKind" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource FocusBrush}"/>
+                        <!-- Focus sessions: the numeral badge (session number in a serif ring) and FOCUS SESSION or the session's name -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Border x:Name="DashBadge" MinWidth="30" Height="30" CornerRadius="15" BorderThickness="1.5" BorderBrush="{DynamicResource FocusBrush}"
+                                    Padding="4,0" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                <TextBlock x:Name="DashBadgeText" FontSize="15" Foreground="{DynamicResource Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1"/>
+                            </Border>
+                            <TextBlock x:Name="DashKind" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource FocusBrush}"/>
+                        </StackPanel>
                         <TextBlock x:Name="DashName" Style="{StaticResource SubHeading}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,12"/>
                         <!-- The timer, with your focus totals beside it -->
                         <Grid HorizontalAlignment="Center">
@@ -999,7 +1008,7 @@
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="ResolveBinTask_Click" ToolTip="Finish this task"/>
                                             <Button DockPanel.Dock="Right" Content="+ Session" Style="{StaticResource LinkButton}" Click="DashAddToSession_Click" VerticalAlignment="Top" ToolTip="Add this task to the focus session you're in"/>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
-                                                <TextBlock x:Name="Title" Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
+                                                <TextBlock x:Name="Title" local:ScriptureLinks.Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
                                                 <TextBox x:Name="RenameBox" Text="{Binding Text, UpdateSourceTrigger=Explicit}" Visibility="Collapsed" FontSize="{DynamicResource TaskFontSize}" PreviewKeyDown="RenameBox_PreviewKeyDown" LostFocus="RenameBox_LostFocus"/>
                                                 <TextBlock x:Name="Details" Text="{Binding Details}" Style="{StaticResource Caption}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                             </StackPanel>
@@ -1064,6 +1073,7 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <RadioButton x:Name="BinTodoView" Content="List" GroupName="binview" IsChecked="True" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
                                 <RadioButton x:Name="BinUndatedView" Content="Undated" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks with no due date and not picked for a day"/>
+                                <RadioButton x:Name="BinTodayView" Content="Today" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks picked for today, due today, or overdue"/>
                                 <RadioButton x:Name="BinTomorrowView" Content="Tomorrow" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks picked for tomorrow, due tomorrow, or snoozed until tomorrow"/>
                                 <RadioButton x:Name="BinUpcomingView" Content="Upcoming" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
                                 <RadioButton x:Name="BinBoardView" Content="Board" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
@@ -1105,10 +1115,17 @@
                                     <Border x:Name="Card" Background="{DynamicResource TaskRowBg}" CornerRadius="{DynamicResource TaskRowCorner}" Padding="{DynamicResource TaskRowPadding}" Margin="{DynamicResource TaskRowMargin}" BorderBrush="{DynamicResource TaskRowLine}" BorderThickness="{DynamicResource TaskRowLineThickness}" MouseRightButtonUp="TaskRow_RightClick" PreviewMouseLeftButtonDown="BinRow_MouseDown" PreviewMouseMove="BinRow_MouseMove" AllowDrop="True" Drop="BinRow_Drop">
                                         <DockPanel>
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="ResolveBinTask_Click" ToolTip="Finish this task"/>
-                                            <Button x:Name="TodayBtn" DockPanel.Dock="Right" Content="☀" Style="{StaticResource IconButton}" FontSize="15" Click="ToggleTodayBinTask_Click" ToolTip="Do this today" VerticalAlignment="Center" Visibility="{Binding DataContext.TodayVisibility, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                             <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource IconButton}" FontSize="12" Click="DeleteBinTask_Click" ToolTip="Delete task (Delete)" VerticalAlignment="Center"/>
+                                            <!-- Add to today / Add to tomorrow: shown while the cursor is over the task -->
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding DataContext.TodayVisibility, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                <StackPanel x:Name="DayBtns" Orientation="Horizontal">
+                                                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/></Style></StackPanel.Style>
+                                                    <Button x:Name="AddTodayBtn" Content="Today" Style="{StaticResource LinkButton}" FontSize="12" Padding="6,2" Margin="0" Click="AddToToday_Click" ToolTip="Add to today" VerticalAlignment="Center"/>
+                                                    <Button x:Name="AddTomorrowBtn" Content="Tomorrow" Style="{StaticResource LinkButton}" FontSize="12" Padding="6,2" Margin="0,0,4,0" Click="AddToTomorrow_Click" ToolTip="Add to tomorrow" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </StackPanel>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
-                                                <TextBlock x:Name="Title" Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
+                                                <TextBlock x:Name="Title" local:ScriptureLinks.Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
                                                 <TextBox x:Name="RenameBox" Text="{Binding Text, UpdateSourceTrigger=Explicit}" Visibility="Collapsed" FontSize="{DynamicResource TaskFontSize}" PreviewKeyDown="RenameBox_PreviewKeyDown" LostFocus="RenameBox_LostFocus"/>
                                                 <TextBlock x:Name="Details" Text="{Binding Details}" Style="{StaticResource Caption}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                             </StackPanel>
@@ -1126,6 +1143,15 @@
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsLow}" Value="True">
                                             <Setter TargetName="Check" Property="BorderBrush" Value="{DynamicResource PriorityLow}"/>
+                                        </DataTrigger>
+                                        <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="DayBtns" Property="Visibility" Value="Visible"/>
+                                        </Trigger>
+                                        <DataTrigger Binding="{Binding IsSetForToday}" Value="True">
+                                            <Setter TargetName="AddTodayBtn" Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsSetForTomorrow}" Value="True">
+                                            <Setter TargetName="AddTomorrowBtn" Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                             <Setter TargetName="Card" Property="Background" Value="{DynamicResource NavSelected}"/>
@@ -1152,7 +1178,7 @@
                                         <DockPanel>
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="ResolveBinTask_Click" ToolTip="Finish this task"/>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
-                                                <TextBlock x:Name="Title" Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
+                                                <TextBlock x:Name="Title" local:ScriptureLinks.Text="{Binding Text}" TextWrapping="Wrap" FontSize="{DynamicResource TaskFontSize}"/>
                                                 <TextBox x:Name="RenameBox" Text="{Binding Text, UpdateSourceTrigger=Explicit}" Visibility="Collapsed" FontSize="{DynamicResource TaskFontSize}" PreviewKeyDown="RenameBox_PreviewKeyDown" LostFocus="RenameBox_LostFocus"/>
                                                 <TextBlock x:Name="Details" Text="{Binding Details}" Style="{StaticResource Caption}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                             </StackPanel>

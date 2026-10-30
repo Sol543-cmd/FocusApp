@@ -229,7 +229,7 @@ public partial class MainWindow
 
     private void ShowAddBox()
     {
-        if (BinTodoView.IsChecked != true && BinUndatedView.IsChecked != true && BinTomorrowView.IsChecked != true) BinTodoView.IsChecked = true;
+        if (BinTodoView.IsChecked != true && BinUndatedView.IsChecked != true && BinTodayView.IsChecked != true && BinTomorrowView.IsChecked != true) BinTodoView.IsChecked = true;
         AddRow.Visibility = Visibility.Visible;
         Dispatcher.BeginInvoke(new Action(() => BinNewBox.Focus()), System.Windows.Threading.DispatcherPriority.Input);
     }

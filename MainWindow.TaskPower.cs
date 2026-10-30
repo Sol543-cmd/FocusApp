@@ -339,6 +339,7 @@ public partial class MainWindow
         TaskStatusWaiting.IsChecked = task.Status == "waiting";
         TaskWaitingBox.Text = task.WaitingOn;
         TaskNotesBox.Text = task.Notes;
+        ShowTaskReferences();
         _editSubtasks.Clear();
         foreach (var s in task.Subtasks) _editSubtasks.Add(new Subtask { Text = s.Text, Done = s.Done });
         TaskSubtaskList.ItemsSource = _editSubtasks;
@@ -537,6 +538,7 @@ public partial class MainWindow
                 case "day": binTask.PlannedFor = choice.Day!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); break;
                 case "bin": binTask.PlannedFor = ""; break;
                 case "drop": TaskBin.All.Remove(binTask); RemoveLinkedCopies(binTask.Id); break;
+                case "resolve": FinishListTask(binTask, binTask.From, binTask.Spent); break; // done, just not ticked off
             }
         }
         TaskBin.Save();
@@ -697,4 +699,19 @@ public partial class MainWindow
             GuidePanel.Children.Add(body);
         }
     }
+
+    // ---------- Scripture references in the task editor ----------
+
+    private void TaskNotesBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => ShowTaskReferences();
+
+    /// <summary>Under the notes: every Scripture reference in the task's name and notes, each opening in Logos.</summary>
+    private void ShowTaskReferences()
+    {
+        if (TaskRefsText == null) return;
+        string text = (_editingTask?.Text ?? "") + "\n" + (TaskNotesBox?.Text ?? "");
+        var refs = ScriptureLinks.Find(text).Select(r => text.Substring(r.Start, r.Length).Trim()).Distinct().ToList();
+        TaskRefsText.Visibility = refs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (refs.Count > 0) ScriptureLinks.Fill(TaskRefsText, "Open in Logos: " + string.Join(" · ", refs));
+    }
+
 }

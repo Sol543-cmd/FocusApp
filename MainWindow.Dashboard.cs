@@ -69,9 +69,18 @@ public partial class MainWindow
             DashTimer.AccentKey = AccentKey(cur);
             DashTimer.FractionLeft = total > 0 ? remaining.TotalSeconds / total : 0;
             DashTimer.Running = !_runner.IsPaused;
-            DashKind.Text = cur.KindLabel.ToUpperInvariant() == "FOCUS" ? "Focus session" : cur.KindLabel;
-            DashKind.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, AccentKey(cur));
-            DashName.Text = cur.Name;
+            // Focus sessions: the numeral badge, then FOCUS SESSION (or the session's own name) in spaced capitals.
+            bool focus = cur.IsFocus;
+            DashKind.Text = focus ? SessionLook.Label(cur.Name) : cur.KindLabel;
+            DashKind.FontSize = focus ? 12.5 : 13;
+            DashKind.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, focus ? "Text" : AccentKey(cur));
+            DashBadge.Visibility = focus ? Visibility.Visible : Visibility.Collapsed;
+            DashBadge.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, AccentKey(cur));
+            DashBadgeText.FontFamily = SessionLook.NumeralFont;
+            DashBadgeText.Text = focus ? SessionLook.Roman(_runner.FocusNumber) : "";
+            // The name is already in the label for focus sessions.
+            DashName.Text = focus ? "" : cur.Name;
+            DashName.Visibility = DashName.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             DashMinutes.Text = Format.MinutesLeft(remaining);
             DashMinutesCaption.Text = _runner.IsPaused ? "Paused" : $"until {(DateTime.Now + remaining):t}";
             DashStartBtn.Visibility = Visibility.Collapsed;
@@ -97,6 +106,9 @@ public partial class MainWindow
             DashTimer.FractionLeft = 1;
             DashTimer.Running = false;
             DashKind.Text = "Nothing running";
+            DashKind.FontSize = 13;
+            DashBadge.Visibility = Visibility.Collapsed;
+            DashName.Visibility = Visibility.Visible;
             DashKind.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Muted");
             DashName.Text = _planDate == DateTime.Today ? "Ready when you are." : "";
             DashMinutes.Text = "";

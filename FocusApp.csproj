@@ -10,7 +10,7 @@
     <AssemblyName>FocusApp</AssemblyName>
     <RootNamespace>FocusApp</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>Focus</Product>
   </PropertyGroup>
 
@@ -27,6 +27,7 @@
   <ItemGroup>
     <Resource Include="app.ico" />
     <Resource Include="logo.png" />
+    <Resource Include="Fonts\FocusCormorant-SemiBold.ttf" />
     <EmbeddedResource Include="GreekWords.tsv" LogicalName="FocusApp.GreekWords.tsv" />
   </ItemGroup>
 

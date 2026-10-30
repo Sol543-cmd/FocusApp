@@ -50,17 +50,17 @@
                     </StackPanel>
                 </DockPanel>
                 <TextBlock x:Name="TitleText" Text="Greek practice" FontSize="28" FontWeight="SemiBold" FontFamily="{StaticResource HeadingFont}"/>
-                <TextBlock x:Name="HintText" FontSize="14" Foreground="{DynamicResource Muted}" Margin="0,4,0,20" TextWrapping="Wrap"
+                <TextBlock x:Name="HintText" FontSize="15" Foreground="{DynamicResource Muted}" Margin="0,4,0,20" TextWrapping="Wrap"
                            Text="Click a Greek word, then its meaning. Click a matched pair again to undo it."/>
                 <ScrollViewer x:Name="TilesScroll" VerticalScrollBarVisibility="Auto">
-                    <Grid>
+                    <!-- An even two-column grid: questions numbered 1, 2, 3 on the left, answers lettered A, B, C on the right,
+                         each row as tall as its taller side so the two columns line up -->
+                    <Grid x:Name="PairGrid">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="1.4*"/>
+                            <ColumnDefinition Width="28"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel x:Name="GreekColumn"/>
-                        <StackPanel x:Name="EnglishColumn" Grid.Column="2"/>
                     </Grid>
                 </ScrollViewer>
                 <!-- Reviewing any time: keep going, with a choice of round size -->
