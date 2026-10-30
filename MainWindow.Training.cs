@@ -52,6 +52,7 @@ public partial class MainWindow
             try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.Reload", ex); }
         }
         if (_lessonWindow != null || VocabWindow.IsShowing) return;
+        if (PracticePausedToday()) return; // weekend pause: lessons, All-books and card review only when you start them
         var now = DateTime.Now.TimeOfDay;
         if (!LessonTime(now)) CheckAllBooks(now, last: false);
         if (_lessonWindow == null) CheckCardReview(now);
@@ -66,9 +67,8 @@ public partial class MainWindow
         if (slot < 0) return false;
         Course.ReloadEvents(); // another device may have finished today's lesson
         if (Course.DoneToday() || (Course.NextLesson() == null && Course.ExamDue() == null)) return false;
-        if (InMeetingOrLunch()) return true;                                 // waits until the meeting ends
+        if (PracticeMustWait()) return true;                                 // waits until the meeting, break or lunch is over
         bool last = slot == times.Count - 1;
-        if (!last && _runner.IsRunning && _runner.Current is PlanBlock cur && cur.IsFocus) return true; // waits for a break
         if (last) { StartLesson(required: true); return true; }
         string key = Course.Today + "#" + slot;
         if (_trainingPromptKey == key || DateTime.Now < _trainingSnoozeUntil) return false;
@@ -143,7 +143,7 @@ public partial class MainWindow
         if (slot < 0 || now - times[slot] > TimeSpan.FromHours(2)) return;
         string key = Course.Today + "#ab" + slot;
         if (_allBooksPromptKey == key || Course.Events.Any(e => e.Kind == "allBooksDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
-        if (_runner.IsRunning && _runner.Current is PlanBlock cur && cur.IsFocus) return;
+        if (PracticeMustWait()) return;
         _allBooksPromptKey = key;
         StartAllBooks();
     }
@@ -171,8 +171,7 @@ public partial class MainWindow
         if (slot < 0 || now - times[slot] > TimeSpan.FromHours(3)) return;
         string key = Course.Today + "#cr" + slot;
         if (_cardReviewKey == key || Course.CardReviewDoneToday()) return;
-        if (InMeetingOrLunch()) return;                                                   // waits until the meeting ends
-        if (_runner.IsRunning && _runner.Current is PlanBlock cur && cur.IsFocus) return; // waits for a break
+        if (PracticeMustWait()) return; // waits until the meeting, break or lunch is over
         _cardReviewKey = key;
         StartCardReview(quietIfNone: true);
     }
@@ -716,6 +715,16 @@ public partial class MainWindow
         lookPanel.Margin = new Thickness(0, 12, 0, 0);
         look.Children.Add(lookPanel);
         TrainingHost.Children.Add(TCard(look));
+
+        // Weekends
+        var wk = new StackPanel();
+        wk.Children.Add(TT("Weekends", 15, bold: true));
+        var wkCheck = new CheckBox { Content = "Pause all practice on weekends", IsChecked = _settings.PauseWeekends, Margin = new Thickness(0, 8, 0, 0) };
+        wkCheck.Checked += (_, _) => SetPauseWeekends(true);
+        wkCheck.Unchecked += (_, _) => SetPauseWeekends(false);
+        wk.Children.Add(wkCheck);
+        wk.Children.Add(TT("On Saturdays and Sundays no lesson, card review, All-books round or Greek practice pops up by itself, and no lesson is required. You can still start any of them yourself, from this page or the dashboard.", 12, brush: "Muted", top: 4));
+        TrainingHost.Children.Add(TCard(wk));
 
         // Evening card review
         var cr = new StackPanel();

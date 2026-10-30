@@ -8,9 +8,9 @@ using System.Windows.Controls;
 namespace FocusApp;
 
 /// <summary>
-/// When Greek practice pops up: the number of rounds a day you choose, spread evenly between your
-/// start and end times. A round never appears during a meeting or lunch; it waits for the next
-/// focus session or break instead. "Later" brings it back in 20 minutes.
+/// When Greek practice pops up: at the times on each practice's timeline (Practice timelines), with or without a
+/// focus session running. A round never appears during a meeting, break or lunch; it waits until that's over.
+/// "Later" brings it back in 20 minutes.
 /// </summary>
 public partial class MainWindow
 {
@@ -26,6 +26,8 @@ public partial class MainWindow
         Alphabet.Load();
         PomoTasksCheck.IsChecked = _settings.PomoShowTasks;
         SetUpPractice();
+        MovePracticeOntoTimelines();
+        PauseWeekendsCheck.IsChecked = _settings.PauseWeekends;
         Vocab.Changed += () => Dispatcher.BeginInvoke(new Action(UpdateVocabSummary));
     }
 
@@ -81,23 +83,6 @@ public partial class MainWindow
 
     private DateTime _alphaLaterUntil = DateTime.MinValue;
     private int _alphaLaterSlot = -1;
-
-    /// <summary>The alphabet's rounds: same hours as the words, never in meetings or lunch, never at the same time.</summary>
-    private void CheckAlphabet()
-    {
-        if (!_settings.On("alphabet") || VocabWindow.IsShowing || DateTime.Now < _alphaLaterUntil) { if (!VocabWindow.IsShowing) CheckConcepts(); return; }
-        if (Application.Current.Windows.OfType<FlashWindow>().Any()) return;
-        var now = DateTime.Now;
-        var done = DoneToday(_settings.AlphaDone);
-        var slots = SlotsFor(_settings.AlphaPerDay, "alphabet");
-        int due = -1;
-        for (int i = 0; i < slots.Count; i++)
-            if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
-        if (due < 0 && _alphaLaterSlot >= 0 && !done.Contains(_alphaLaterSlot)) due = _alphaLaterSlot;
-        if (due < 0) { CheckConcepts(); return; }
-        if (InMeetingOrLunch()) return;
-        StartAlphaRound(due);
-    }
 
     private void StartAlphaRound(int slot, bool keepGoing = false, Action<bool>? after = null)
     {
@@ -167,25 +152,71 @@ public partial class MainWindow
         return false;
     }
 
-    /// <summary>Checked every 30 seconds: shows a round when one is due (unless it's a meeting or lunch).</summary>
+    /// <summary>
+    /// Checked every 30 seconds: each practice comes up at the times on its practice timeline, whether or not a
+    /// focus session is running, as long as Focus is open (even just in the tray). Rounds wait out meetings, breaks
+    /// and lunch, and nothing comes up on weekends when practice is paused for them.
+    /// </summary>
     private void CheckVocab()
     {
-        // Outside a running focus day or session, the "outside sessions" schedule applies instead.
-        // Outside a running focus day or session: practices with times on the practice timeline still come up
-        // at exactly those times; the others follow the "every so many minutes" outside-sessions setting.
-        if (!_runner.IsRunning) { if (!TryTimelineRoundOutsideSessions()) CheckAwayPractice(); return; }
-        if (!_settings.On("greek") || VocabWindow.IsShowing || DateTime.Now < _vocabLaterUntil) { CheckAlphabet(); return; }
-        if (Application.Current.Windows.OfType<FlashWindow>().Any()) return; // let a session alert finish first
-        var now = DateTime.Now;
-        var done = VocabDoneToday();
-        var slots = VocabSlots();
-        int due = -1;
-        for (int i = 0; i < slots.Count; i++)
-            if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
-        if (due < 0 && _vocabLaterSlot >= 0 && !done.Contains(_vocabLaterSlot)) due = _vocabLaterSlot;
-        if (due < 0) { CheckAlphabet(); return; }
-        if (InMeetingOrLunch()) return; // waits for the next focus session or break
-        StartVocabRound(due);
+        if (PracticePausedToday()) return;
+        TryTimelineRounds();
+    }
+
+    /// <summary>
+    /// Once (1.7.1): every practice that still spread its rounds evenly ("rounds a day" between its hours) gets those
+    /// same times saved on its timeline, so the timelines are the one place that decides when practice comes up.
+    /// </summary>
+    private void MovePracticeOntoTimelines()
+    {
+        if (_settings.PracticeOnTimelines) return;
+        try
+        {
+            foreach (var p in Practices)
+                if (CustomPracticeTimes(p) == null)
+                    _settings.PracticeTimes[p] = FormatTimes(EvenSlots(PerDayFor(p), p).Select(t => t.TimeOfDay));
+            _settings.PracticeOnTimelines = true;
+            SaveSettingsQuietly();
+            Log.Write("Practice moved onto the timelines");
+        }
+        catch (Exception ex) { Log.Error("MovePracticeOntoTimelines", ex); }
+    }
+
+    /// <summary>Turns the weekend pause on or off (shared with your other computers).</summary>
+    private void SetPauseWeekends(bool on)
+    {
+        if (_settings.PauseWeekends == on) return;
+        _settings.PauseWeekends = on;
+        SaveSettingsQuietly();
+        SaveSharedPlanDefaults();
+        if (PauseWeekendsCheck != null && PauseWeekendsCheck.IsChecked != on) PauseWeekendsCheck.IsChecked = on;
+    }
+
+    private void PauseWeekends_Changed(object sender, RoutedEventArgs e) => SetPauseWeekends(PauseWeekendsCheck.IsChecked == true);
+
+    /// <summary>True on Saturdays and Sundays when "Pause all practice on weekends" is on (you can still start anything yourself).</summary>
+    private bool PracticePausedToday() =>
+        _settings.PauseWeekends && DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+    /// <summary>True during a meeting, a break or lunch: practice and lesson reminders wait until it's over.</summary>
+    private bool PracticeMustWait()
+    {
+        if (InMeetingOrLunch()) return true;
+        if (_runner.IsRunning && _runner.Current is PlanBlock cur) return cur.Kind == BlockKind.Break;
+        try
+        {
+            var now = DateTime.Now;
+            var (blocks, start) = TodaysSchedule();
+            var t = DateTime.Today + start;
+            foreach (var b in blocks)
+            {
+                var end = t + TimeSpan.FromMinutes(b.Minutes);
+                if (t <= now && now < end) return b.Kind == BlockKind.Break;
+                t = end;
+            }
+        }
+        catch (Exception ex) { Log.Error("PracticeMustWait", ex); }
+        return false;
     }
 
     private void StartVocabRound(int slot, Action<bool>? after = null)

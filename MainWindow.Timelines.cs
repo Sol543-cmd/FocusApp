@@ -15,7 +15,7 @@ namespace FocusApp;
 /// on one shared time line with today's meetings and lunch, plus an "All practice" row showing every
 /// round together. Rounds snap to 15 minutes. "Use for today" changes only today; "Save as default"
 /// makes the times every day's. A round that falls in a meeting still waits until the meeting ends.
-/// Changing a practice's rounds a day or hours in Settings goes back to even spacing for it.
+/// Every practice follows its timeline, in or out of focus sessions.
 /// </summary>
 public partial class MainWindow
 {
@@ -62,9 +62,13 @@ public partial class MainWindow
         ["concepts"] = $"{_settings.ConceptPerDay}|{_settings.ConceptFrom}|{_settings.ConceptTo}"
     };
 
-    /// <summary>After saving Settings: a practice whose rounds a day or hours you changed there goes back to even spacing.</summary>
+    /// <summary>
+    /// Formerly: changing a practice's rounds a day or hours in Settings cleared its timeline. Since 1.7.1 the timelines
+    /// are the only schedule (those settings are hidden), so nothing is cleared.
+    /// </summary>
     private void ForgetTimelinesChangedInSettings(Dictionary<string, string> before)
     {
+        if (_settings.PracticeOnTimelines) return;
         var after = PracticeScheduleSignatures();
         foreach (var p in Practices)
         {
@@ -128,17 +132,16 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Outside sessions: starts a round for the first practice whose timeline time has come (same rules as in
-    /// sessions: done rounds don't repeat, Later brings it back in 20 minutes, meetings and lunch make it wait).
-    /// Returns true when a timeline round started or is waiting for a meeting, so no other round starts.
+    /// Starts a round for the first practice whose timeline time has come (in a focus session or not): done rounds
+    /// don't repeat, Later brings it back in 20 minutes, and meetings, breaks and lunch make it wait.
+    /// Returns true when a round started or is waiting, so no other round starts.
     /// </summary>
-    private bool TryTimelineRoundOutsideSessions()
+    private bool TryTimelineRounds()
     {
         if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
         var now = DateTime.Now;
         foreach (var p in Practices)
         {
-            if (CustomPracticeTimes(p) == null) continue;
             bool on = p switch { "alphabet" => _settings.On("alphabet"), "concepts" => _settings.On("concepts") && Concepts.Cards.Count >= 2, _ => _settings.On("greek") };
             var laterUntil = p switch { "alphabet" => _alphaLaterUntil, "concepts" => _conceptLaterUntil, _ => _vocabLaterUntil };
             int laterSlot = p switch { "alphabet" => _alphaLaterSlot, "concepts" => _conceptLaterSlot, _ => _vocabLaterSlot };
@@ -150,7 +153,7 @@ public partial class MainWindow
                 if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
             if (due < 0 && laterSlot >= 0 && !done.Contains(laterSlot)) due = laterSlot;
             if (due < 0) continue;
-            if (InMeetingOrLunch()) return true; // waits until the meeting ends
+            if (PracticeMustWait()) return true; // waits until the meeting, break or lunch is over
             switch (p)
             {
                 case "alphabet": StartAlphaRound(due); break;
@@ -446,7 +449,8 @@ public partial class MainWindow
         var intro = new TextBlock
         {
             Text = "Today's rounds for each practice, with your meetings and lunch shaded. Drag a round to move it (it snaps to 15 minutes), " +
-                   "double-click a row to add one, right-click a round to remove it. A round that lands in a meeting waits until the meeting ends. Timeline times apply in and out of sessions. The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
+                   "double-click a row to add one, right-click a round to remove it. Each round comes up at its time whether or not a focus session is running (Focus just needs to be open, even in the tray); " +
+                   "one that lands in a meeting, break or lunch waits until it's over. The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
                    "The All practice row shows every round together, so you can spread them apart or put them back to back.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 24, 6)
         };
@@ -464,7 +468,11 @@ public partial class MainWindow
         buttons.Children.Add(status);
 
         var layout = new DockPanel();
-        var top = new StackPanel(); top.Children.Add(title); top.Children.Add(intro);
+        var weekends = new CheckBox { Content = "Pause all practice on weekends", IsChecked = _settings.PauseWeekends, Margin = new Thickness(24, 2, 24, 8),
+                                      ToolTip = "On Saturdays and Sundays nothing on these timelines pops up by itself; you can still start any of it yourself." };
+        weekends.Checked += (_, _) => SetPauseWeekends(true);
+        weekends.Unchecked += (_, _) => SetPauseWeekends(false);
+        var top = new StackPanel(); top.Children.Add(title); top.Children.Add(intro); top.Children.Add(weekends);
         DockPanel.SetDock(top, Dock.Top); DockPanel.SetDock(buttons, Dock.Bottom);
         layout.Children.Add(top); layout.Children.Add(buttons);
         layout.Children.Add(new ScrollViewer { Content = grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });

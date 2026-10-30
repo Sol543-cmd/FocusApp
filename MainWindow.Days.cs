@@ -707,15 +707,17 @@ public partial class MainWindow
         {
             if (Storage.TryLoad<PlanDefaults>("plan-defaults.json", out var shared) && shared.UpdatedUtc != default)
             {
-                bool same = shared.Lists.SequenceEqual(_settings.DefaultPlanLists) &&
+                bool same = shared.Lists.SequenceEqual(_settings.DefaultPlanLists) && shared.PauseWeekends == _settings.PauseWeekends &&
                             shared.Apps.Select(a => a.Key).SequenceEqual(_settings.DefaultPlanApps.Select(a => a.Key));
                 if (same) return;
+                _settings.PauseWeekends = shared.PauseWeekends;
+                if (PauseWeekendsCheck != null) PauseWeekendsCheck.IsChecked = shared.PauseWeekends;
                 _settings.DefaultPlanLists = shared.Lists.Where(id => BlockLists.Find(id) != null).Distinct().ToList();
                 _settings.DefaultPlanApps = shared.Apps.Select(a => a.Copy()).ToList();
                 SaveSettingsQuietly();
                 if (IsLoaded) FillCalendarSettings();
             }
-            else if (_settings.DefaultPlanLists.Count > 0 || _settings.DefaultPlanApps.Count > 0) SaveSharedPlanDefaults();
+            else if (_settings.DefaultPlanLists.Count > 0 || _settings.DefaultPlanApps.Count > 0 || _settings.PauseWeekends) SaveSharedPlanDefaults();
         }
         catch (Exception ex) { Log.Error("AdoptSharedPlanDefaults", ex); }
     }
@@ -728,6 +730,7 @@ public partial class MainWindow
             {
                 Lists = _settings.DefaultPlanLists.ToList(),
                 Apps = _settings.DefaultPlanApps.Select(a => a.Copy()).ToList(),
+                PauseWeekends = _settings.PauseWeekends,
                 UpdatedUtc = DateTime.UtcNow
             });
         }

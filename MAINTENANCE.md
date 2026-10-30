@@ -181,7 +181,7 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | MainWindow.Personal.cs   | Opening the Tasks page on the Personal set, its look, the quick-add shortcut, and Personal in Pomodoro |
 | Concepts.cs              | Concepts practice: your own questions and answers |
 | ConceptsWindow.xaml(.cs) | Entering and editing concepts (and pasting a list) |
-| MainWindow.Practice.cs   | Concepts schedule, practice outside sessions, extra answers |
+| MainWindow.Practice.cs   | Concepts, extra answers, the Greek settings card summaries |
 | MainWindow.Vocab.cs      | When Greek practice pops up (never in meetings or lunch) |
 | SyncMerge.cs             | Three-way merging for synced lists, so stale computers never undo newer changes |
 | TitleBar.cs              | Makes window title bars match the theme |

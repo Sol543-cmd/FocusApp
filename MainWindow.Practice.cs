@@ -7,23 +7,18 @@ using System.Windows;
 namespace FocusApp;
 
 /// <summary>
-/// Greek practice beyond the session schedule: Concepts (your own questions and answers), practice that pops up
-/// now and then while Focus runs outside focus sessions, and the extra unmatched answers. During a running
-/// focus day or session, the session schedules ("rounds a day") take over and the outside schedule pauses.
+/// Concepts (your own questions and answers) and the extra unmatched answers. When rounds come up is set on the
+/// practice timelines (MainWindow.Timelines.cs).
 /// </summary>
 public partial class MainWindow
 {
     private DateTime _conceptLaterUntil = DateTime.MinValue;
     private int _conceptLaterSlot = -1;
-    private readonly Dictionary<string, DateTime> _awayLast = new();
-    private DateTime _lastAwayRound = DateTime.MinValue;
 
     private void SetUpPractice()
     {
         Concepts.Load();
         ApplyExtraSettings();
-        // Outside-session practice waits its full interval after Focus opens before the first round.
-        foreach (var key in new[] { "words", "alphabet", "concepts" }) _awayLast[key] = DateTime.Now;
     }
 
     private void ApplyExtraSettings()
@@ -33,22 +28,7 @@ public partial class MainWindow
         Concepts.ExtraSetting = Math.Clamp(_settings.ConceptExtras, 0, 3);
     }
 
-    // ---------- Concepts: the session schedule ----------
-
-    private void CheckConcepts()
-    {
-        if (!_settings.On("concepts") || VocabWindow.IsShowing || DateTime.Now < _conceptLaterUntil || Concepts.Cards.Count < 2) return;
-        if (Application.Current.Windows.OfType<FlashWindow>().Any()) return;
-        var now = DateTime.Now;
-        var done = DoneToday(_settings.ConceptDone);
-        var slots = SlotsFor(_settings.ConceptPerDay, "concepts");
-        int due = -1;
-        for (int i = 0; i < slots.Count; i++)
-            if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
-        if (due < 0 && _conceptLaterSlot >= 0 && !done.Contains(_conceptLaterSlot)) due = _conceptLaterSlot;
-        if (due < 0 || InMeetingOrLunch()) return;
-        StartConceptRound(due);
-    }
+    // ---------- Concepts ----------
 
     private void SetConceptDone(HashSet<int> done) { _settings.ConceptDone = DoneRecord(done); SaveSettingsQuietly(); }
 
@@ -97,47 +77,7 @@ public partial class MainWindow
             : $"{n} question{(n == 1 ? "" : "s")}, {due} due now.";
     }
 
-    // ---------- Outside focus sessions: now and then, while Focus runs ----------
-
-    private bool InPracticeHours(DateTime now, string practice)
-    {
-        var (from, to) = HoursFor(practice);
-        return now.TimeOfDay >= from && now.TimeOfDay <= to;
-    }
-
-    /// <summary>
-    /// While no focus day or session is running: each practice you switched on for outside sessions comes up
-    /// every so many minutes (within your practice hours, never in a meeting or lunch, at least 15 minutes apart).
-    /// </summary>
-    private void CheckAwayPractice()
-    {
-        if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return;
-        var now = DateTime.Now;
-        if (now - _lastAwayRound < TimeSpan.FromMinutes(15)) return;
-        var options = new List<(string Key, int Minutes, Action<Action<bool>> Start)>();
-        // A practice with timeline times only comes up at those times (TryTimelineRoundOutsideSessions).
-        if (_settings.On("greek") && _settings.VocabAwayOn && CustomPracticeTimes("words") == null) options.Add(("words", _settings.VocabAwayMinutes, done => StartVocabRound(-1, done)));
-        if (_settings.On("alphabet") && _settings.AlphaAwayOn && CustomPracticeTimes("alphabet") == null) options.Add(("alphabet", _settings.AlphaAwayMinutes, done => StartAlphaRound(-1, false, done)));
-        if (_settings.On("concepts") && _settings.ConceptAwayOn && Concepts.Cards.Count >= 2 && CustomPracticeTimes("concepts") == null) options.Add(("concepts", _settings.ConceptAwayMinutes, done => StartConceptRound(-1, false, done)));
-        var due = options
-            .Select(o => (o.Key, o.Minutes, o.Start, Over: now - (_awayLast.TryGetValue(o.Key, out var last) ? last : now) - TimeSpan.FromMinutes(Math.Clamp(o.Minutes, 10, 600))))
-            .Where(o => o.Over >= TimeSpan.Zero && InPracticeHours(now, o.Key == "words" ? "words" : o.Key)) // each within its own hours
-            .OrderByDescending(o => o.Over)
-            .FirstOrDefault();
-        if (due.Key == null || InMeetingOrLunch()) return;
-        string key = due.Key;
-        int minutes = Math.Clamp(due.Minutes, 10, 600);
-        _lastAwayRound = now;
-        _awayLast[key] = now; // so it isn't started twice
-        due.Start(finished =>
-        {
-            _lastAwayRound = DateTime.Now;
-            // Later: back in 20 minutes rather than a whole interval.
-            _awayLast[key] = finished ? DateTime.Now : DateTime.Now - TimeSpan.FromMinutes(minutes) + TimeSpan.FromMinutes(20);
-        });
-    }
-
-    // ---------- Settings for all three practices (extras, outside sessions, Concepts) ----------
+    // ---------- Settings for all three practices (extras, Concepts) ----------
 
     private void FillPracticeSettings()
     {
@@ -213,10 +153,13 @@ public partial class MainWindow
     private void UpdateGreekHeaders()
     {
         if (VocabHeaderSummary == null) return;
-        static string Outside(bool on, int minutes) => on ? $"every {minutes} min outside sessions" : "";
         static string Extras(int n) => n == 0 ? "" : n == 1 ? "1 extra answer" : $"{n} extra answers";
         static string Join(params string[] parts) => string.Join(" · ", parts.Where(p => p.Length > 0));
-        string Hours(string practice) { var (f, t) = HoursFor(practice); return $"{DateTime.Today.Add(f):t} to {DateTime.Today.Add(t):t}"; }
+        string Times(string practice)
+        {
+            var times = SlotsFor(PerDayFor(practice), practice);
+            return times.Count == 0 ? "no times on its timeline" : "at " + string.Join(", ", times.Select(t => t.ToString("t")));
+        }
         void State(string key, bool on)
         {
             if (FindName(key + "State") is not System.Windows.Controls.TextBlock t) return;
@@ -226,10 +169,10 @@ public partial class MainWindow
         bool words = _settings.On("greek"), alpha = _settings.On("alphabet"), concepts = _settings.On("concepts");
         State("Vocab", words); State("Alpha", alpha); State("Concept", concepts);
         VocabHeaderSummary.Text = !words ? "Matching Greek words to their meanings" :
-            Join($"{_settings.VocabPerDay} a day in sessions", Outside(_settings.VocabAwayOn, _settings.VocabAwayMinutes), Hours("words"), $"{_settings.VocabWords} words a round", Extras(_settings.VocabExtras));
+            Join(Times("words"), $"{_settings.VocabWords} words a round", Extras(_settings.VocabExtras));
         AlphaHeaderSummary.Text = !alpha ? "Matching letters to their modern Greek sounds" :
-            Join($"{_settings.AlphaPerDay} a day in sessions", Outside(_settings.AlphaAwayOn, _settings.AlphaAwayMinutes), Hours("alphabet"), $"{_settings.AlphaLetters} letters a round", Extras(_settings.AlphaExtras));
+            Join(Times("alphabet"), $"{_settings.AlphaLetters} letters a round", Extras(_settings.AlphaExtras));
         ConceptHeaderSummary.Text = !concepts ? "Your own questions and answers" :
-            Join($"{_settings.ConceptPerDay} a day in sessions", Outside(_settings.ConceptAwayOn, _settings.ConceptAwayMinutes), Hours("concepts"), $"{Concepts.Cards.Count} questions", Extras(_settings.ConceptExtras));
+            Join(Times("concepts"), $"{Concepts.Cards.Count} questions", Extras(_settings.ConceptExtras));
     }
 }

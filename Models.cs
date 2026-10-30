@@ -970,7 +970,7 @@ public class AppSettings
     /// <summary>How many tasks the floating timer shows before scrolling (each time Focus opens).</summary>
     public int OverlayRows { get; set; } = 6;
 
-    // Concepts, practice outside focus sessions, and extra unmatched answers
+    // Concepts and extra unmatched answers (the *Away* settings are no longer used: practice follows the timelines)
     /// <summary>How tasks look: "default", "compact" or "paper" (also used when printing).</summary>
     public string TaskLook { get; set; } = "default";
 
@@ -1038,6 +1038,10 @@ public class AppSettings
     // Practice timelines (1.3.0): your own round times for "words", "alphabet" and "concepts", like "09:00,11:30".
     // A practice with no entry spreads its rounds evenly between its hours, as before.
     public Dictionary<string, string> PracticeTimes { get; set; } = new();
+    /// <summary>Saturdays and Sundays: no practice, lesson or review pops up by itself (you can still start any of them). Synced.</summary>
+    public bool PauseWeekends { get; set; }
+    /// <summary>1.7.1 moved every practice onto its timeline (the old evenly spread rounds became timeline times once).</summary>
+    public bool PracticeOnTimelines { get; set; }
     /// <summary>Times changed for today only (PracticeTodayDate is the day they're for).</summary>
     public Dictionary<string, string> PracticeTodayTimes { get; set; } = new();
     public string PracticeTodayDate { get; set; } = "";
@@ -1118,6 +1122,8 @@ public class PlanDefaults
 {
     public List<string> Lists { get; set; } = new();
     public List<BlockedApp> Apps { get; set; } = new();
+    /// <summary>Pause all practice on weekends (shared so every computer agrees).</summary>
+    public bool PauseWeekends { get; set; }
     public DateTime UpdatedUtc { get; set; }
 }
 

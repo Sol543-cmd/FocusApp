@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.1
+
+- One schedule for practice: Words, Alphabet and Concepts each come up at the times on their own row of Practice
+  timelines, whether or not a focus session is running. Focus only needs to be open (the tray is enough). The
+  "Also practise outside focus sessions, every … minutes" option is gone (that's what brought rounds up at seemingly
+  random times), and so are "Rounds a day (in sessions)" and the practice hours: your current times were moved onto
+  the timelines once, so nothing shifts.
+- Practice, lessons, the card review and All-books practice now all follow the same rule: they wait out meetings,
+  breaks and lunch, and no longer wait for a focus session to end.
+- Pause all practice on weekends (Greek practice settings, Training settings or the timelines): nothing pops up by
+  itself on Saturdays and Sundays and no lesson is required, but you can still start anything yourself. Shared with
+  your other computers.
+
 ## 1.7.0
 
 - Training, reading: choose the font (any font on your PC), size and background (Focus theme, Paper, Sepia, White,
