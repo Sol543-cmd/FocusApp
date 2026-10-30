@@ -678,6 +678,7 @@ public partial class MainWindow
         {
             _settings.DefaultPlanApps = chosen;
             SaveSettingsQuietly();
+            SaveSharedPlanDefaults();
             FillCalendarSettings();
             RebuildAutomaticPlanOnScreen();
         });
@@ -685,11 +686,99 @@ public partial class MainWindow
     private void DefaultLists_Click(object sender, RoutedEventArgs e) =>
         OpenListPicker((UIElement)sender, _settings.DefaultPlanLists, ids =>
         {
+            var before = _settings.DefaultPlanLists.ToList();
             _settings.DefaultPlanLists = ids;
             SaveSettingsQuietly();
+            SaveSharedPlanDefaults();
             FillCalendarSettings();
             RebuildAutomaticPlanOnScreen();
+            OfferDefaultsOnPlannedDays(before, ids);
         });
+
+    // ---------- Default block lists, shared by your computers ----------
+
+    /// <summary>
+    /// Takes the default block lists and apps from plan-defaults.json (synced), so every computer fills focus sessions
+    /// the same way. The first time, this computer's own defaults go into the file.
+    /// </summary>
+    private void AdoptSharedPlanDefaults()
+    {
+        try
+        {
+            if (Storage.TryLoad<PlanDefaults>("plan-defaults.json", out var shared) && shared.UpdatedUtc != default)
+            {
+                bool same = shared.Lists.SequenceEqual(_settings.DefaultPlanLists) &&
+                            shared.Apps.Select(a => a.Key).SequenceEqual(_settings.DefaultPlanApps.Select(a => a.Key));
+                if (same) return;
+                _settings.DefaultPlanLists = shared.Lists.Where(id => BlockLists.Find(id) != null).Distinct().ToList();
+                _settings.DefaultPlanApps = shared.Apps.Select(a => a.Copy()).ToList();
+                SaveSettingsQuietly();
+                if (IsLoaded) FillCalendarSettings();
+            }
+            else if (_settings.DefaultPlanLists.Count > 0 || _settings.DefaultPlanApps.Count > 0) SaveSharedPlanDefaults();
+        }
+        catch (Exception ex) { Log.Error("AdoptSharedPlanDefaults", ex); }
+    }
+
+    private void SaveSharedPlanDefaults()
+    {
+        try
+        {
+            Storage.Save("plan-defaults.json", new PlanDefaults
+            {
+                Lists = _settings.DefaultPlanLists.ToList(),
+                Apps = _settings.DefaultPlanApps.Select(a => a.Copy()).ToList(),
+                UpdatedUtc = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex) { Log.Error("SaveSharedPlanDefaults", ex); }
+    }
+
+    /// <summary>After changing the default block lists: offers to change them in the focus sessions of days already planned (today on).</summary>
+    private void OfferDefaultsOnPlannedDays(List<string> before, List<string> after)
+    {
+        var added = after.Except(before).ToList();
+        var removed = before.Except(after).ToList();
+        if (added.Count == 0 && removed.Count == 0) return;
+        try
+        {
+            string folder = Path.Combine(Storage.SharedFolder, "plans");
+            var dates = new List<DateTime>();
+            if (Directory.Exists(folder))
+                foreach (var path in Directory.GetFiles(folder, "*.json"))
+                    if (DateTime.TryParseExact(Path.GetFileNameWithoutExtension(path), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) &&
+                        d >= DateTime.Today && !(d == DateTime.Today && _ui.PlanRunning) && d != _planDate)
+                        dates.Add(d);
+            bool screen = !ViewingRunningDay && !_planAutomatic && _plan.Any(b => b.IsFocus);
+            if (dates.Count == 0 && !screen) return;
+            string change = string.Join(" and ", new[]
+            {
+                added.Count > 0 ? "add " + string.Join(", ", added.Select(id => BlockLists.Find(id)?.Name ?? "a list")) : "",
+                removed.Count > 0 ? "take off " + string.Join(", ", removed.Select(id => BlockLists.Find(id)?.Name ?? "a removed list")) : ""
+            }.Where(x => x.Length > 0));
+            if (!Ask($"Also {change} in the focus sessions you've already planned (today and later days)?" +
+                     (_ui.PlanRunning ? "\n\nToday's running day isn't changed; edit its sessions on the Day plan." : ""), "Default block lists")) return;
+            List<string> Fix(List<string> ids) => ids.Where(id => !removed.Contains(id)).Concat(added.Where(id => !ids.Contains(id))).ToList();
+            foreach (var d in dates)
+            {
+                if (!TryLoadPlanFile(d, out var file)) continue;
+                bool changed = false;
+                foreach (var b in file.Blocks.Where(b => b.IsFocus))
+                {
+                    var fixedIds = Fix(b.BlockListIds);
+                    if (!fixedIds.SequenceEqual(b.BlockListIds)) { b.BlockListIds = fixedIds; changed = true; }
+                }
+                if (changed) Storage.Save(DayPlanFile.FileFor(d), file);
+            }
+            if (screen)
+            {
+                foreach (var b in _plan.Where(b => b.IsFocus)) b.BlockListIds = Fix(b.BlockListIds);
+                MarkPlanEdited();
+                SavePlanNow(force: true);
+            }
+        }
+        catch (Exception ex) { Log.Error("OfferDefaultsOnPlannedDays", ex); }
+    }
 
     /// <summary>Applies new default blocking to the plan on screen if it's still automatic.</summary>
     private void RebuildAutomaticPlanOnScreen()

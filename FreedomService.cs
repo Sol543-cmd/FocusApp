@@ -22,6 +22,10 @@ public class FreedomData
 {
     /// <summary>The Freedom sign-in token, encrypted with your Windows account. Your password is never saved.</summary>
     public string ProtectedToken { get; set; } = "";
+    /// <summary>Freedom's renewal token (encrypted), used to renew the sign-in when it runs out.</summary>
+    public string ProtectedRefresh { get; set; } = "";
+    /// <summary>Only with "Keep me signed in": your Freedom password, encrypted with your Windows account, used just to sign in again if Freedom ends the sign-in.</summary>
+    public string ProtectedPassword { get; set; } = "";
     public string Email { get; set; } = "";
     /// <summary>Identifies this copy of Focus to Freedom, so signing in again doesn't look like a new device.</summary>
     public string ClientId { get; set; } = "";
@@ -80,7 +84,8 @@ public static class FreedomService
         Changed?.Invoke();
     }
 
-    public static bool SignedIn => !string.IsNullOrEmpty(Data.ProtectedToken);
+    /// <summary>Signed in, or able to sign in again by itself (renewal token or Keep me signed in).</summary>
+    public static bool SignedIn => !string.IsNullOrEmpty(Data.ProtectedToken) || !string.IsNullOrEmpty(Data.ProtectedRefresh) || !string.IsNullOrEmpty(Data.ProtectedPassword);
 
     private static string Token()
     {
@@ -97,7 +102,19 @@ public static class FreedomService
 
     // ---------- Signing in ----------
 
-    public static async Task SignInAsync(string email, string password)
+    public static async Task SignInAsync(string email, string password, bool keepSignedIn = true)
+    {
+        await RequestTokenAsync(email, password);
+        Data.Email = email.Trim();
+        Data.ProtectedPassword = keepSignedIn ? CalendarService.Protect(password) : "";
+        Save();
+        await SyncAsync();
+    }
+
+    public static bool KeepsSignedIn => !string.IsNullOrEmpty(Data.ProtectedPassword);
+
+    /// <summary>Asks Freedom for a sign-in with your email and password and keeps it (and its renewal token).</summary>
+    private static async Task RequestTokenAsync(string email, string password)
     {
         var form = new Dictionary<string, string>
         {
@@ -115,27 +132,84 @@ public static class FreedomService
             throw new FreedomException("Freedom didn't accept that email and password.");
         if (!response.IsSuccessStatusCode)
             throw new FreedomException($"Freedom couldn't sign you in right now ({(int)response.StatusCode}). Try again later.");
-        string token = "";
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("access_token", out var t)) token = t.GetString() ?? "";
-        }
-        catch (JsonException) { }
-        if (token.Length == 0)
+        if (!KeepTokens(body))
         {
             Log.Write("Freedom sign-in reply without a token: " + Trim(body));
             throw new FreedomException("Freedom answered, but not the way Focus expects. Its service may have changed; see log.txt.");
         }
+    }
+
+    /// <summary>Saves the access token (and the renewal token, if Freedom sent one) from a sign-in reply. False if there's no token.</summary>
+    private static bool KeepTokens(string body)
+    {
+        string token = "", refresh = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("access_token", out var t)) token = t.GetString() ?? "";
+            if (doc.RootElement.TryGetProperty("refresh_token", out var r) && r.ValueKind == JsonValueKind.String) refresh = r.GetString() ?? "";
+        }
+        catch (JsonException) { }
+        if (token.Length == 0) return false;
         Data.ProtectedToken = CalendarService.Protect(token);
-        Data.Email = email.Trim();
+        if (refresh.Length > 0) Data.ProtectedRefresh = CalendarService.Protect(refresh);
         Save();
-        await SyncAsync();
+        return true;
+    }
+
+    private static readonly System.Threading.SemaphoreSlim RenewLock = new(1, 1);
+
+    /// <summary>
+    /// Freedom ended the sign-in (it runs out after a while): renew it with the renewal token, or sign in again with
+    /// the saved password (Keep me signed in). True when Focus is signed in again.
+    /// </summary>
+    public static async Task<bool> RenewAsync()
+    {
+        await RenewLock.WaitAsync();
+        try
+        {
+            string refresh = Unprotect(Data.ProtectedRefresh);
+            if (refresh.Length > 0)
+            {
+                try
+                {
+                    var form = new Dictionary<string, string> { ["grant_type"] = "refresh_token", ["refresh_token"] = refresh, ["hash"] = Data.ClientId, ["os"] = "ios" };
+                    using var response = await Http.PostAsync(Base + "/auth/oauth/token", new FormUrlEncodedContent(form));
+                    string body = await response.Content.ReadAsStringAsync();
+                    if (response.IsSuccessStatusCode && KeepTokens(body)) { Log.Write("Freedom sign-in renewed"); return true; }
+                    Log.Write($"Freedom renewal refused ({(int)response.StatusCode})");
+                    if ((int)response.StatusCode is >= 400 and < 500) { Data.ProtectedRefresh = ""; Save(); }
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { Log.Write("Freedom renewal: " + ex.Message); return SignedIn; }
+            }
+            string password = Unprotect(Data.ProtectedPassword);
+            if (password.Length > 0 && Data.Email.Length > 0)
+            {
+                try { await RequestTokenAsync(Data.Email, password); Log.Write("Freedom signed in again (Keep me signed in)"); return true; }
+                catch (FreedomException ex) when (ex.Message.StartsWith("Freedom didn't accept", StringComparison.Ordinal))
+                {
+                    Data.ProtectedPassword = ""; // the password changed: ask once more
+                    Save();
+                    Log.Write("Freedom: the saved password no longer works");
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or FreedomException) { Log.Write("Freedom sign-in again: " + ex.Message); return SignedIn; }
+            }
+            return false;
+        }
+        finally { RenewLock.Release(); }
+    }
+
+    private static string Unprotect(string stored)
+    {
+        if (string.IsNullOrEmpty(stored)) return "";
+        try { return CalendarService.Unprotect(stored); } catch { return ""; }
     }
 
     public static void SignOut()
     {
         Data.ProtectedToken = "";
+        Data.ProtectedRefresh = "";
+        Data.ProtectedPassword = "";
         Save();
     }
 
@@ -156,25 +230,37 @@ public static class FreedomService
         Save();
     }
 
-    private static async Task<string> GetAsync(string path)
+    private static Task<string> GetAsync(string path) => SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Base + path));
+
+    /// <summary>Sends a request with the sign-in; if Freedom says the sign-in ran out, renews it once and tries again.</summary>
+    private static async Task<string> SendAsync(Func<HttpRequestMessage> make)
     {
-        string token = Token();
-        if (token.Length == 0) throw new FreedomException("Sign in to Freedom first.", signedOut: true);
-        using var request = new HttpRequestMessage(HttpMethod.Get, Base + path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await Http.SendAsync(request);
-        string body = await response.Content.ReadAsStringAsync();
-        Check(response, body);
-        return body;
+        if (Token().Length == 0 && !await RenewAsync()) throw new FreedomException("Sign in to Freedom first.", signedOut: true);
+        for (int attempt = 0; ; attempt++)
+        {
+            using var request = make();
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token());
+            using var response = await Http.SendAsync(request);
+            string body = await response.Content.ReadAsStringAsync();
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                if (attempt == 0 && await RenewAsync()) continue;
+                Data.ProtectedToken = "";
+                Save();
+                throw new FreedomException("Freedom signed you out. Sign in again in the Freedom window (tick Keep me signed in).", signedOut: true);
+            }
+            Check(response, body);
+            return body;
+        }
     }
 
     private static void Check(HttpResponseMessage response, string body)
     {
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            Data.ProtectedToken = "";
-            Save();
-            throw new FreedomException("Freedom signed you out. Sign in again in the Freedom window.", signedOut: true);
+            // Not a sign-out: Freedom refused this one thing (for example, a device your plan can't block). Stay signed in.
+            Log.Write($"Freedom refused (403): {Trim(body)}");
+            throw new FreedomException("Freedom refused that (403). You're still signed in; see log.txt.");
         }
         if ((int)response.StatusCode is >= 300 and < 400)
             throw new FreedomException("Freedom sent Focus somewhere unexpected, so nothing was changed. Its service may have changed; see log.txt.");
@@ -242,8 +328,6 @@ public static class FreedomService
         if (devices.Count == 0) throw new FreedomException("Tick at least one Freedom device.");
         minutes = Math.Clamp(minutes, 1, 24 * 60);
 
-        string token = Token();
-        if (token.Length == 0) throw new FreedomException("Sign in to Freedom first.", signedOut: true);
         var payload = new
         {
             device_ids = devices.Select(AsJsonId).ToList(),
@@ -251,14 +335,11 @@ public static class FreedomService
             filter_list_ids = lists.Select(AsJsonId).ToList(),
             duration = minutes * 60
         };
-        using var request = new HttpRequestMessage(HttpMethod.Post, Base + "/api/v1/schedules")
+        string json = JsonSerializer.Serialize(payload);
+        await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, Base + "/api/v1/schedules")
         {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await Http.SendAsync(request);
-        string body = await response.Content.ReadAsStringAsync();
-        Check(response, body);
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
         Data.LastStartUtc = DateTime.UtcNow;
         Data.LastEndUtc = DateTime.UtcNow.AddMinutes(minutes);
         Save();

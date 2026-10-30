@@ -3,6 +3,34 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.0
+
+- Training, reading: choose the font (any font on your PC), size and background (Focus theme, Paper, Sepia, White,
+  Sage, Gray, Slate or Night) under Aa while reading, or in Training settings. The reading fills the window with its
+  own scroll bar, and the mouse wheel scrolls it.
+- Page view turns like a Kindle: click or tap the left or right side of the page (or use the arrow keys or the
+  mouse wheel).
+- Highlights and notes: select text and a small pop-up appears beside it with the colors and Note. Select a
+  highlight to change its color, edit its note or remove it.
+- Show where this is in the text: the reading opens at the answer, and the sentence it comes from flashes a few times.
+- Memory cards grade like the BMA app: ✕ (comes back later in this lesson), ✓✓ (know it well: away for a long time)
+  and ✓ (know it fairly well: back after a while). Keys 1, 2, 3 grade and Space flips.
+- Evening card review: a five-minute pop-up with the hardest cards from that day's lesson. Move it with its slider on
+  the practice timelines (Card review row); length and on/off in Training settings; once a day across your devices.
+- Finish a lesson later: your place is saved after every step, on every computer. Finish later closes it; the lesson
+  picks up where you left off at the next time (or Continue lesson on the Training page). Whatever's left must be
+  finished at the day's last lesson time.
+- Lessons finished on another computer are noticed within a couple of minutes: no more reminders here, and an open
+  lesson says it's done and can be closed.
+- Freedom stays signed in: Focus renews Freedom's sign-in when it runs out, and with Keep me signed in (when you
+  connect) it signs in again by itself, through restarts and updates. Freedom refusing one request no longer signs
+  you out.
+- Freedom joins a focus session partway: starting the day in the middle of a session, or Focus reopening during one
+  (after a restart or an update), gives Freedom exactly the minutes left in that session.
+- Default block lists for focus sessions (Settings, Planning): every focus session Focus fills in, including ones
+  you add yourself, starts with them; remove them from any session while planning. They're now the same on all your
+  synced computers, and changing them offers to update days you've already planned.
+
 ## 1.6.1
 
 - Training has its own place in the sidebar, with an icon like the other pages, and opens inside the main

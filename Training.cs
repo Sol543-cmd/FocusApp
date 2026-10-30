@@ -276,6 +276,8 @@ public class TrainingEvent
     public int Para { get; set; } = -1;
     public string Quote { get; set; } = "";
     public string Color { get; set; } = "";
+    /// <summary>A memory card's grade: 0 = ✕ (again in this lesson), 1 = ✓ (know it fairly well), 2 = ✓✓ (know it well); -1 for older answers and multiple choice.</summary>
+    public int Grade { get; set; } = -1;
 }
 
 /// <summary>One book in your library.</summary>
@@ -312,6 +314,19 @@ public class CourseConfig
     /// <summary>All-books practice: its times, and whether it pops up by itself.</summary>
     public List<string> AllBooksTimes { get; set; } = new() { "16:00" };
     public bool AllBooksAuto { get; set; } = true;
+
+    // ----- How the reading looks (Training settings, or Aa while reading) -----
+    /// <summary>The reading's font (any font installed on the PC).</summary>
+    public string ReadingFont { get; set; } = "Georgia";
+    public double ReadingSize { get; set; } = 17;
+    /// <summary>The reading's background: theme (follows Focus), paper, sepia, white, sage, gray, slate or night.</summary>
+    public string ReadingBg { get; set; } = "theme";
+
+    // ----- Evening card review: a short round of the day's hardest memory cards -----
+    public bool CardReviewOn { get; set; } = true;
+    /// <summary>When it pops up (set on the practice timelines).</summary>
+    public List<string> CardReviewTimes { get; set; } = new() { "20:30" };
+    public int CardReviewMinutes { get; set; } = 5;
 }
 
 public enum ConceptStage { New, Learning, Learned, Retired }
@@ -420,7 +435,7 @@ public static class Course
     }
 
     /// <summary>Reads every device's log (others may have added to theirs through OneDrive).</summary>
-    public static void ReloadEvents()
+    public static void ReloadEvents(bool raiseChanged = false)
     {
         var all = new List<TrainingEvent>();
         if (Directory.Exists(Dir))
@@ -430,7 +445,9 @@ public static class Course
                 try { all.AddRange(JsonSerializer.Deserialize<List<TrainingEvent>>(File.ReadAllText(f)) ?? new()); }
                 catch (Exception ex) { Log.Error("Course.ReadLog " + f, ex); }
             }
+        int before = Events.Count;
         Events = all.OrderBy(e => e.At).ThenBy(e => e.Device).ThenBy(e => e.Seq).ToList();
+        if (Events.Count != before && raiseChanged) Changed?.Invoke(); // another device added something
     }
 
     public static void SaveConfig()
@@ -548,6 +565,45 @@ public static class Course
         return Lessons().FirstOrDefault(l => !done.Contains(l.Index));
     }
 
+    // ---------- Finishing a lesson later (progress saved step by step, on every device) ----------
+
+    /// <summary>The steps of a lesson already finished ("reading", "practice:id", "card:id"…), from any device and any day.</summary>
+    public static HashSet<string> StepsDone(int lessonIndex) =>
+        CE.Where(e => e.Kind == "lessonStep" && e.Lesson == lessonIndex).Select(e => e.Question).ToHashSet();
+
+    public static void MarkStep(int lessonIndex, string key) => Add(new TrainingEvent { Kind = "lessonStep", Lesson = lessonIndex, Question = key });
+
+    /// <summary>True when the next lesson was started (here or on another device) but isn't finished.</summary>
+    public static bool InProgress(LessonRef? lesson) => lesson != null && !DoneLessons().Contains(lesson.Index) && StepsDone(lesson.Index).Count > 0;
+
+    // ---------- Evening card review ----------
+
+    public static bool CardReviewDoneToday() => CE.Any(e => e.Kind == "cardReviewDone" && e.Day == Today);
+
+    /// <summary>
+    /// Today's lesson cards, hardest first: cards marked ✕ today (most often first), then ✓ (fairly well).
+    /// Cards whose last grade today was ✓✓ (know it well) and that were never missed today are left out.
+    /// </summary>
+    public static List<(LessonRef Lesson, PackQuestion Q)> HardestCardsToday(int max = 40)
+    {
+        var lessonIdx = CE.Where(e => e.Day == Today && e.Lesson >= 0 && (e.Kind == "lessonDone" || e.Kind == "lessonStep")).Select(e => e.Lesson).ToHashSet();
+        if (lessonIdx.Count == 0) return new();
+        var hidden = Hidden();
+        var todayAnswers = CE.Where(e => e.Kind == "answer" && e.Day == Today).GroupBy(e => e.Question).ToDictionary(g => g.Key, g => g.ToList());
+        var list = new List<(LessonRef, PackQuestion, int Score)>();
+        foreach (var l in Lessons().Where(l => lessonIdx.Contains(l.Index)))
+            foreach (var q in l.Lesson.Cards)
+            {
+                if (hidden.Contains(q.Id) || !todayAnswers.TryGetValue(q.Id, out var answers)) continue;
+                int misses = answers.Count(a => a.Grade == 0 || (a.Grade < 0 && !a.Correct));
+                var last = answers[^1];
+                int lastGrade = last.Grade >= 0 ? last.Grade : last.Correct ? 1 : 0;
+                if (lastGrade == 2 && misses == 0) continue;
+                list.Add((l, q, misses * 2 + (lastGrade == 0 ? 2 : lastGrade == 1 ? 1 : 0)));
+            }
+        return list.OrderByDescending(x => x.Score).Take(Math.Max(1, max)).Select(x => (x.Item1, x.Item2)).ToList();
+    }
+
     /// <summary>The paragraphs a lesson reads: from its first part to the next lesson's first part (or the chapter's end).</summary>
     public static (int Start, int End) LessonRange(LessonRef lesson)
     {
@@ -637,7 +693,14 @@ public static class Course
         {
             seen++;
             var day = DateTime.TryParse(e.Day, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : e.At.ToLocalTime().Date;
-            if (e.Correct && e.Sure) { streak++; miscon = false; due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)]); }
+            if (e.Grade == 0) { streak = 0; miscon = false; due = day.AddDays(1); }
+            else if (e.Grade == 2)
+            {
+                // ✓✓ Know it well: a much longer gap (two weeks the first time, then months).
+                streak = Math.Max(streak + 2, 3); miscon = false;
+                due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)] * 2);
+            }
+            else if (e.Grade == 1 || (e.Correct && e.Sure)) { streak++; miscon = false; due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)]); }
             else { streak = 0; miscon = !e.Correct && e.Sure; due = day.AddDays(1); }
         }
         return new QState(due, streak, miscon, seen);

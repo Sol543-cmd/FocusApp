@@ -89,6 +89,7 @@ public partial class MainWindow : Window
 
         BlockLists.Load();
         BlockLists.Changed += BlockLists_Changed;
+        AdoptSharedPlanDefaults(); // default block lists for focus sessions, shared by your computers
         ListsList.ItemsSource = null;
         RefreshListsTab();
 
@@ -645,12 +646,17 @@ public partial class MainWindow : Window
 
     // ---------- Default day ----------
 
-    private PlanBlock NewFocus(int minutes) => new()
+    private PlanBlock NewFocus(int minutes)
     {
-        Kind = BlockKind.Focus,
-        Name = $"Focus session {_plan.Count(b => b.IsFocus) + 1}",
-        Minutes = minutes
-    };
+        var b = new PlanBlock
+        {
+            Kind = BlockKind.Focus,
+            Name = $"Focus session {_plan.Count(b => b.IsFocus) + 1}",
+            Minutes = minutes
+        };
+        ApplyDefaultBlocking(b); // your default block lists (Settings, Planning)
+        return b;
+    }
 
     private static PlanBlock NewBreak(string name, int minutes) => new()
     {

@@ -64,17 +64,22 @@ public partial class MainWindow
     /// </summary>
     private async void FreedomBlockStarted(PlanBlock block)
     {
-        if (!block.IsFocus || _resuming || !FreedomService.SignedIn) return;
+        if (!block.IsFocus || !FreedomService.SignedIn) return;
         if (FreedomListsFor(block).Count == 0) return;
-        int minutes = (int)Math.Ceiling(_runner.Remaining.TotalMinutes);
-        if (minutes < 1) return;
         var data = FreedomService.Data;
+        // Joining a session partway (starting the day late, or Focus reopening after a restart or an update):
+        // Freedom gets exactly the minutes left in this session. If Freedom is already on to the end of it, nothing changes.
+        var sessionEndUtc = DateTime.UtcNow + _runner.Remaining;
+        if (_resuming && data.LastEndUtc >= sessionEndUtc.AddMinutes(-1)) return;
         try
         {
             await FreedomService.SyncAsync(); // lists deleted in Freedom since the last sync aren't sent
             PruneFreedomFromLists();
             var lists = FreedomListsFor(block);
             if (lists.Count == 0) return;
+            if (_runner.Current != block) return; // the session ended while Freedom was syncing
+            int minutes = (int)Math.Ceiling((sessionEndUtc - DateTime.UtcNow).TotalMinutes);
+            if (minutes < 1) return;
             // Back-to-back sessions with the same lists: Freedom is already on long enough.
             if (lists.SetEquals(_freedomLastLists) && data.LastEndUtc > DateTime.UtcNow.AddMinutes(minutes)) return;
             if (data.DeviceIds.Count == 0)
@@ -84,6 +89,7 @@ public partial class MainWindow
             }
             await FreedomService.StartAsync(lists, data.DeviceIds, minutes);
             _freedomLastLists = lists;
+            if (minutes < block.Minutes) Log.Write($"Freedom joined a session partway: {minutes} of its {block.Minutes} minutes");
         }
         catch (Exception ex)
         {
@@ -170,6 +176,9 @@ public partial class MainWindow
                 body.Children.Add(email);
                 body.Children.Add(Caption("Freedom password", 10));
                 body.Children.Add(password);
+                var keep = new CheckBox { Content = "Keep me signed in", IsChecked = true, Margin = new Thickness(0, 10, 0, 0),
+                                          ToolTip = "If Freedom ends the sign-in (it runs out after a while), Focus signs in again by itself, so it stays connected through restarts and updates." };
+                body.Children.Add(keep);
                 var signIn = new Button { Content = "Connect", Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(18, 6, 18, 6) };
                 signIn.SetResourceReference(StyleProperty, "PrimaryButton");
                 async void Connect()
@@ -177,18 +186,21 @@ public partial class MainWindow
                     string mail = email.Text.Trim(), pass = password.Password;
                     if (mail.Length == 0 || pass.Length == 0) { Say("Enter your Freedom email and password."); return; }
                     password.Clear();
-                    await Run("Connecting to Freedom…", () => FreedomService.SignInAsync(mail, pass), "Connected. Your blocklists and devices are below.");
+                    bool stay = keep.IsChecked == true;
+                    await Run("Connecting to Freedom…", () => FreedomService.SignInAsync(mail, pass, stay), "Connected. Your blocklists and devices are below.");
                 }
                 signIn.Click += (_, _) => Connect();
                 password.KeyDown += (_, e) => { if (e.Key == Key.Enter) Connect(); };
                 body.Children.Add(signIn);
-                body.Children.Add(Caption("Your password goes only to Freedom and isn't saved. Focus keeps Freedom's sign-in, " +
-                                          "encrypted with your Windows account, on this PC only.", 10));
+                body.Children.Add(Caption("Your password goes only to Freedom. Focus keeps Freedom's sign-in, encrypted with your Windows account, " +
+                                          "on this PC only, and renews it when it runs out. With Keep me signed in, your password is also kept " +
+                                          "(encrypted the same way) just to sign in again if Freedom asks; Disconnect removes it.", 10));
                 return;
             }
 
             string synced = d.LastSyncUtc == default ? "not yet" : d.LastSyncUtc.ToLocalTime().ToString("t");
-            body.Children.Add(Caption($"Connected as {d.Email}. Last synced with Freedom {synced}.", 0));
+            body.Children.Add(Caption($"Connected as {d.Email}. Last synced with Freedom {synced}." +
+                                      (FreedomService.KeepsSignedIn ? " Stays signed in (through restarts and updates)." : ""), 0));
             var links = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
             links.Children.Add(Link("Sync Freedom", async () => await Run("Syncing with Freedom…", FreedomService.SyncAsync, "Synced. Focus now matches Freedom.")));
             links.Children.Add(Link("Launch Freedom dashboard", () => OpenWeb("https://freedom.to/dashboard")));

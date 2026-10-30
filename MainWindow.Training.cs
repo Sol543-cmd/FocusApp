@@ -30,7 +30,11 @@ public partial class MainWindow
         _tray.ContextMenuStrip?.Items.Insert(1, new System.Windows.Forms.ToolStripMenuItem("Training…", null, (_, _) => { ShowFromTray(); OpenCoursePage(); }));
         _trainingTimer.Tick += (_, _) => CheckTraining();
         _trainingTimer.Start();
+        // A lesson finished (or started) on another computer shows up here straight away.
+        Sync.RemoteChanged += () => { try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.RemoteChanged", ex); } };
     }
+
+    private DateTime _trainingReloadedAt = DateTime.MinValue;
 
     private void Training_Click(object sender, RoutedEventArgs e) => OpenCoursePage();
 
@@ -41,9 +45,16 @@ public partial class MainWindow
     /// <summary>Every 30 seconds: offers the day's lesson at each time, opens it (required) at the last one, and runs All-books practice.</summary>
     private void CheckTraining()
     {
+        // Every two minutes, read the other devices' progress (OneDrive notices can be missed).
+        if (DateTime.Now - _trainingReloadedAt > TimeSpan.FromMinutes(2))
+        {
+            _trainingReloadedAt = DateTime.Now;
+            try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.Reload", ex); }
+        }
         if (_lessonWindow != null || VocabWindow.IsShowing) return;
         var now = DateTime.Now.TimeOfDay;
         if (!LessonTime(now)) CheckAllBooks(now, last: false);
+        if (_lessonWindow == null) CheckCardReview(now);
     }
 
     /// <summary>True when a lesson was offered or opened (or is waiting for a meeting or break).</summary>
@@ -63,7 +74,15 @@ public partial class MainWindow
         if (_trainingPromptKey == key || DateTime.Now < _trainingSnoozeUntil) return false;
         _trainingPromptKey = key;
         string what = Course.ExamDue()?.Title ?? Course.NextLesson()?.Lesson.Title ?? "Today's lesson";
-        _toast.ShowMessage("Today's lesson is ready", $"{what}. Later waits until the next lesson time.", "Start lesson", () => StartLesson(required: false));
+        bool part = Course.ExamDue() == null && Course.InProgress(Course.NextLesson());
+        _toast.ShowMessage(part ? "Finish today's lesson" : "Today's lesson is ready",
+                           part ? $"{what}: pick up where you left off. Later waits until the next lesson time." : $"{what}. Later waits until the next lesson time.",
+                           part ? "Continue" : "Start lesson", () =>
+                           {
+                               Course.ReloadEvents();
+                               if (Course.DoneToday()) { _toast.ShowMessage("Already done today", "You finished today's lesson on another device."); return; }
+                               StartLesson(required: false);
+                           });
         return true;
     }
 
@@ -93,6 +112,14 @@ public partial class MainWindow
         window.Closed += (_, _) =>
         {
             _lessonWindow = null;
+            if (window.LeftPartWay)
+            {
+                var times = TrainingTimes();
+                var nextTime = times.FirstOrDefault(t => t > DateTime.Now.TimeOfDay);
+                _toast.ShowMessage("Lesson saved", nextTime > TimeSpan.Zero
+                    ? $"It picks up where you left off at {DateTime.Today.Add(nextTime):t}{(nextTime == times[^1] ? " (required)" : "")}, on any of your devices."
+                    : "It picks up where you left off next time, on any of your devices.");
+            }
             if (blocking) EndTrainingBlocking();
             _trainingSnoozeUntil = DateTime.Now.AddMinutes(1);
             _refreshCoursePage?.Invoke();
@@ -127,6 +154,39 @@ public partial class MainWindow
         var round = Course.AllBooksRound(6);
         if (round.Count == 0) { Info("All-books practice starts once you've finished a book (passed its final exam).", "Training"); return; }
         OpenTrainingWindow(new LessonWindow("All-books practice", round, null, _ => { }), blocking: false);
+    }
+
+    // ---------- Evening card review ----------
+
+    private string _cardReviewKey = "";
+
+    /// <summary>At its time: a few minutes with today's hardest memory cards, once a day across all devices, never in meetings.</summary>
+    private void CheckCardReview(TimeSpan now)
+    {
+        var cfg = Course.Config;
+        if (!cfg.CardReviewOn || Course.Packs.Count == 0) return;
+        var times = cfg.CardReviewTimes.Select(t => TimeSpan.TryParse(t, CultureInfo.InvariantCulture, out var v) ? v : (TimeSpan?)null)
+                       .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
+        int slot = times.FindLastIndex(t => t <= now);
+        if (slot < 0 || now - times[slot] > TimeSpan.FromHours(3)) return;
+        string key = Course.Today + "#cr" + slot;
+        if (_cardReviewKey == key || Course.CardReviewDoneToday()) return;
+        if (InMeetingOrLunch()) return;                                                   // waits until the meeting ends
+        if (_runner.IsRunning && _runner.Current is PlanBlock cur && cur.IsFocus) return; // waits for a break
+        _cardReviewKey = key;
+        StartCardReview(quietIfNone: true);
+    }
+
+    private void StartCardReview(bool quietIfNone)
+    {
+        if (_lessonWindow != null) { _lessonWindow.Activate(); return; }
+        var cards = Course.HardestCardsToday();
+        if (cards.Count == 0)
+        {
+            if (!quietIfNone) Info("No cards to review: there's no lesson from today yet, or you knew every card well.", "Training");
+            return;
+        }
+        OpenTrainingWindow(LessonWindow.CardReview(cards, TimeSpan.FromMinutes(Math.Clamp(Course.Config.CardReviewMinutes, 1, 30)), _ => { }), blocking: false);
     }
 
     // ---------- Highlights and notes ----------
@@ -181,7 +241,7 @@ public partial class MainWindow
                     links.Children.Add(Link("Show in the book", () =>
                     {
                         var (cs, ce) = Course.Packs.TryGetValue(hh.Chapter, out var p) ? Course.ChapterRange(p) : (Math.Max(0, hh.Para - 20), hh.Para + 20);
-                        LessonWindow.OpenPassage(w, Math.Max(0, cs), ce, hh.Para, $"Chapter {hh.Chapter}");
+                        LessonWindow.OpenPassage(w, Math.Max(0, cs), ce, hh.Para, $"Chapter {hh.Chapter}", hh.Quote);
                     }));
                     links.Children.Add(Link(h.Note.Length > 0 ? "Edit note" : "Add note", () =>
                     {
@@ -460,7 +520,8 @@ public partial class MainWindow
         var next = Course.NextLesson();
         var exam = Course.ExamDue();
         var np = new StackPanel();
-        np.Children.Add(TT(Course.DoneToday() ? "Today's lesson is done" : "Next lesson", 13, brush: "Muted"));
+        bool partWay = exam == null && Course.InProgress(next);
+        np.Children.Add(TT(Course.DoneToday() ? "Today's lesson is done" : partWay ? "Lesson in progress: picks up where you left off" : "Next lesson", 13, brush: "Muted"));
         string headline = exam != null ? $"{exam.Title} · {exam.Questions.Count} questions"
                         : next != null ? $"Chapter {next.Pack.Chapter}: {next.Pack.Title}  ·  {next.Lesson.Title}"
                         : Course.Book.Count == 0 ? "Choose the book's Word file to begin."
@@ -470,7 +531,7 @@ public partial class MainWindow
         np.Children.Add(TT($"Streak {Course.Streak()} · {Course.DoneLessons().Count} of {Course.Lessons().Count} imported lessons done" +
                            (times.Count > 0 ? $" · comes up at {string.Join(", ", times.Select(t => DateTime.Today.Add(t).ToString("t")))}" : ""), 13, brush: "Muted", top: 6));
         var row = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
-        if (next != null || exam != null) row.Children.Add(TButton(exam != null ? "Start exam" : "Start lesson", () => StartLesson(required: false), primary: true));
+        if (next != null || exam != null) row.Children.Add(TButton(exam != null ? "Start exam" : partWay ? "Continue lesson" : "Start lesson", () => StartLesson(required: false), primary: true));
         row.Children.Add(TButton("Import chapter pack…", () =>
         {
             var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Chapter packs (*.focuspack)|*.focuspack|All files|*.*", Title = "Import a chapter pack" };
@@ -482,6 +543,7 @@ public partial class MainWindow
         links.Children.Add(TLink("Highlights and notes", () => OpenNotesWindow(this)));
         links.Children.Add(TLink("Export notes to Markdown…", () => ExportNotes(this)));
         links.Children.Add(TLink("All-books practice", StartAllBooks));
+        links.Children.Add(TLink("Review today's hardest cards", () => StartCardReview(quietIfNone: false)));
         np.Children.Add(links);
         np.Children.Add(TT("You can also drag a .focuspack file onto this page.", 12, brush: "Muted", top: 10));
         TrainingHost.Children.Add(TCard(np, 18));
@@ -645,6 +707,36 @@ public partial class MainWindow
         capRow.Children.Add(cap);
         rp.Children.Add(capRow);
         TrainingHost.Children.Add(TCard(rp));
+
+        // How the reading looks
+        var look = new StackPanel();
+        look.Children.Add(TT("How the reading looks", 15, bold: true));
+        look.Children.Add(TT("Font, size and background of the book's text in lessons (also under Aa while reading).", 12, brush: "Muted", top: 2));
+        var lookPanel = LessonWindow.AppearancePanel(() => { });
+        lookPanel.Margin = new Thickness(0, 12, 0, 0);
+        look.Children.Add(lookPanel);
+        TrainingHost.Children.Add(TCard(look));
+
+        // Evening card review
+        var cr = new StackPanel();
+        cr.Children.Add(TT("Evening card review", 15, bold: true));
+        var crTime = cfg.CardReviewTimes.Count > 0 && TimeSpan.TryParse(cfg.CardReviewTimes[0], CultureInfo.InvariantCulture, out var crt) ? DateTime.Today.Add(crt).ToString("t") : "no time set";
+        cr.Children.Add(TT($"A short pop-up with the hardest memory cards from that day's lesson (ones you marked ✕ come first, then ✓). Comes up at {crTime}; move it with its slider on the practice timelines. Never in a meeting or focus session, and once a day across your devices.", 12, brush: "Muted", top: 2));
+        var crOn = new CheckBox { Content = "Pop up each evening", IsChecked = cfg.CardReviewOn, Margin = new Thickness(0, 10, 0, 0) };
+        crOn.Checked += (_, _) => { cfg.CardReviewOn = true; Course.SaveConfig(); };
+        crOn.Unchecked += (_, _) => { cfg.CardReviewOn = false; Course.SaveConfig(); };
+        cr.Children.Add(crOn);
+        var minRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        minRow.Children.Add(TT("Length, in minutes", 13));
+        var mins = new TextBox { Width = 50, Margin = new Thickness(10, 0, 10, 0), Padding = new Thickness(6, 2, 6, 2), Text = cfg.CardReviewMinutes.ToString() };
+        mins.LostFocus += (_, _) => { if (int.TryParse(mins.Text, out int n) && n >= 1 && n <= 30) { cfg.CardReviewMinutes = n; Course.SaveConfig(); } else mins.Text = cfg.CardReviewMinutes.ToString(); };
+        minRow.Children.Add(mins);
+        cr.Children.Add(minRow);
+        var crLinks = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+        crLinks.Children.Add(TLink("Set its time on the practice timelines", OpenPracticeTimelines));
+        crLinks.Children.Add(TLink("Review now", () => StartCardReview(quietIfNone: false)));
+        cr.Children.Add(crLinks);
+        TrainingHost.Children.Add(TCard(cr));
 
         // All-books practice
         var ap = new StackPanel();

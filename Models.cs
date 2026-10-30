@@ -1113,6 +1113,14 @@ public class AppSettings
 }
 
 /// <summary>The plan for one date, saved as plans\yyyy-MM-dd.json.</summary>
+/// <summary>plan-defaults.json (synced): the block lists and apps every new focus session starts with, the same on every computer.</summary>
+public class PlanDefaults
+{
+    public List<string> Lists { get; set; } = new();
+    public List<BlockedApp> Apps { get; set; } = new();
+    public DateTime UpdatedUtc { get; set; }
+}
+
 public class DayPlanFile
 {
     public string Date { get; set; } = "";

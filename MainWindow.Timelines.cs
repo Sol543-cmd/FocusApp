@@ -190,14 +190,15 @@ public partial class MainWindow
     {
         if (_timelineWindow != null) { _timelineWindow.Activate(); return; }
 
-        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "All-books" };
-        var rows = Practices.Concat(new[] { "lesson", "allbooks" }).ToArray();
-        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["allbooks"] = "Muted" };
+        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "All-books", ["cardreview"] = "Card review" };
+        var rows = Practices.Concat(new[] { "lesson", "cardreview", "allbooks" }).ToArray();
+        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["cardreview"] = "PriorityNormal", ["allbooks"] = "Muted" };
         var features = new Dictionary<string, string> { ["words"] = "greek", ["alphabet"] = "alphabet", ["concepts"] = "concepts" };
         var work = rows.ToDictionary(p => p, p => p switch
         {
             "lesson" => TrainingTimes(),
             "allbooks" => ParseTimes(string.Join(",", Course.Config.AllBooksTimes)) ?? new List<TimeSpan>(),
+            "cardreview" => ParseTimes(string.Join(",", Course.Config.CardReviewTimes)) ?? new List<TimeSpan>(),
             _ => SlotsFor(PerDayFor(p), p).Select(s => s.TimeOfDay).ToList()
         });
         var doneAt = rows.ToDictionary(p => p, p =>
@@ -222,7 +223,7 @@ public partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var canvases = new List<(Canvas Canvas, string? Practice)>();
 
-        int Limit(string p) => p == "lesson" ? 3 : p == "allbooks" ? 6 : MaxRounds;
+        int Limit(string p) => p == "lesson" ? 3 : p == "cardreview" ? 1 : p == "allbooks" ? 6 : MaxRounds;
         double X(TimeSpan t, double width) => (t - axisStart).TotalMinutes / (axisEnd - axisStart).TotalMinutes * width;
         TimeSpan TimeAt(double x, double width)
         {
@@ -249,9 +250,10 @@ public partial class MainWindow
                 {
                     "lesson" => Course.Config.On && Course.Packs.Count > 0,
                     "allbooks" => Course.Finished && Course.Config.AllBooksAuto,
+                    "cardreview" => Course.Config.CardReviewOn && Course.Packs.Count > 0,
                     _ => _settings.On(features[practice])
                 };
-                string offText = practice switch { "lesson" => "Not set up (Training page)", "allbooks" => "After you finish a book", _ => "Off in Settings" };
+                string offText = practice switch { "lesson" => "Not set up (Training page)", "cardreview" => "Off (Training settings)", "allbooks" => "After you finish a book", _ => "Off in Settings" };
                 if (!on) { var off = new TextBlock { Text = offText }; off.SetResourceReference(StyleProperty, "Caption"); labelPanel.Children.Add(off); name.Opacity = 0.6; }
                 var actions = new WrapPanel();
                 Button Small(string text, string tip, Action click)
@@ -444,7 +446,7 @@ public partial class MainWindow
         var intro = new TextBlock
         {
             Text = "Today's rounds for each practice, with your meetings and lunch shaded. Drag a round to move it (it snaps to 15 minutes), " +
-                   "double-click a row to add one, right-click a round to remove it. A round that lands in a meeting waits until the meeting ends. Timeline times apply in and out of sessions. The Book lesson row holds your three lesson times (the last is required). " +
+                   "double-click a row to add one, right-click a round to remove it. A round that lands in a meeting waits until the meeting ends. Timeline times apply in and out of sessions. The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
                    "The All practice row shows every round together, so you can spread them apart or put them back to back.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 24, 6)
         };
@@ -482,6 +484,7 @@ public partial class MainWindow
             SaveSettingsQuietly();
             // The book lesson's three times and All-books practice times (these are always every day's).
             Course.Config.Times = work["lesson"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
+            Course.Config.CardReviewTimes = work["cardreview"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.AllBooksTimes = work["allbooks"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.SaveConfig();
             try { FillVocabSettings(); } catch (Exception ex) { Log.Error("Timelines.Fill", ex); } // Settings shows the new rounds a day and hours
