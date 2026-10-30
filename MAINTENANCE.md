@@ -107,6 +107,7 @@ To remove it: Settings, Uninstall Focus.
 | calendar-share.json | The next three weeks of meetings, for the phone app       |
 | Daily records\\      | One Markdown file per day (unless an Obsidian folder is chosen) |
 | templates.json      | Task templates                                            |
+| training\\          | The book course (synced): course.json, the book and chapter packs per course, and one progress-<computer>.json per device |
 | freedom.json        | Your Freedom connection and choices, this PC only (the sign-in is encrypted with your Windows account; your password is never saved) |
 | log.txt             | Error log. Look here first if something goes wrong        |
 
@@ -199,6 +200,9 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | FreedomService.cs        | Freedom (freedom.to): signing in, reading your blocklists and devices, starting a session |
 | MainWindow.Freedom.cs    | The Freedom window, and starting Freedom for each focus session whose block lists include Freedom blocklists |
 | MainWindow.Timelines.cs  | Practice timelines: your own round times for Words, Alphabet and Concepts |
+| Training.cs              | The book course: chapter packs, reading your Word file, the per-device progress logs, review scheduling |
+| LessonWindow.cs          | The lesson player: warm-up, reading, review, practice, memory cards, chapter quiz |
+| MainWindow.Training.cs   | The Training page, the three daily lesson times, block lists during lessons |
 | ScriptureLinks.cs        | Finds Scripture references and opens them in Logos (book names and abbreviations are listed here) |
 | Updater.cs               | Checks GitHub Releases and downloads FocusSetup.exe            |
 | MainWindow.Updates.cs    | Check for updates (tray menu), the twice-a-day check, installing an update |

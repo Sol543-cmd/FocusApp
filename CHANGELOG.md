@@ -3,6 +3,24 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.5.0
+
+- Training, the book course (desktop): Training in the sidebar (or the tray menu) opens the course page.
+  Choose your book's Word file once; the reading always comes from it, word for word, with headings,
+  italics and shaded sidebars. Import chapter packs (Import, or drag a .focuspack onto the page); Focus
+  checks each one against your book before adding it.
+- Each lesson: warm-up guesses, the whole reading with no timer, review of what's due from earlier lessons
+  (this book only), practice questions with Sure or Guessing (double-click an answer for Sure), memory cards
+  that flip when clicked (missed ones come back later in the lesson), and the chapter quiz, including
+  putting events in order. Every answer has Show where this is in the text, Hide and Flag.
+- Three lesson times a day: the first two pop up and can wait; at the last, the lesson opens and can't be
+  closed until finished (quitting Focus moves it to tomorrow). Lessons wait for meetings and lunch, and the
+  first two for a break. Chosen block lists (apps and Freedom) are on during lessons.
+- Progress is kept per device in the synced Focus folder (training), so a lesson finished on one PC counts
+  on the others.
+- Not in this build yet: highlights and notes, page view, phone and Boox, all-books practice, the course on
+  the practice timelines, unit and final exams.
+
 ## 1.4.0
 
 - Block lists can now include Freedom web blocking: each list has a Freedom web blocking section with

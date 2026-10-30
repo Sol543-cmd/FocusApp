@@ -518,6 +518,7 @@
                     <RadioButton x:Name="NavPersonal" Content="Personal" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavStats" Content="Stats" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavLists" Content="Block lists" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
+                    <Button x:Name="NavTraining" Content="Training" Foreground="{Binding Foreground, ElementName=NavLists}" FontSize="{Binding FontSize, ElementName=NavLists}" Click="Training_Click" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="14,8" Margin="0,2,0,0" Cursor="Hand" ToolTip="The book course: today&#x27;s lesson, chapter packs, lesson times"/>
                     <RadioButton x:Name="NavPomodoro" Content="Pomodoro" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavFocus" Content="Quick focus" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavSettings" Content="Settings" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>

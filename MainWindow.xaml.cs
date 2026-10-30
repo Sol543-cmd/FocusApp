@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         SetUpPopupKeys();
         // Pop-up calendars on the task editor's date fields (DatePopup.cs).
         try { DatePopup.Attach(TaskDueBox); DatePopup.Attach(TaskSnoozeBox); } catch (Exception ex) { Log.Error("DatePopup", ex); }
+        try { SetUpTraining(); } catch (Exception ex) { Log.Error("SetUpTraining", ex); } // the book course (MainWindow.Training.cs)
         try { SetUpFreedom(); } catch (Exception ex) { Log.Error("SetUpFreedom", ex); } // Freedom window and starting Freedom with focus sessions (MainWindow.Freedom.cs)
         try { SetUpUpdates(); } catch (Exception ex) { Log.Error("SetUpUpdates", ex); } // tray "Check for updates" and the quiet check (MainWindow.Updates.cs)
         Nav_Checked(NavDashboard, new RoutedEventArgs()); // open on the dashboard
