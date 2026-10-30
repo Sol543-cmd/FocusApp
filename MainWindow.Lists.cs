@@ -23,7 +23,9 @@ public partial class MainWindow
     private void RefreshListsTab()
     {
         var lists = BlockLists.All.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        ListsList.ItemsSource = lists;
+        if (_editingList != null && !BlockLists.All.Contains(_editingList)) _editingList = null;
+        ListsList.ItemsSource = lists.Select(l => new ListRow(l, l == _editingList)).ToList();
+        ListsCountText.Text = lists.Count == 1 ? "1 list" : $"{lists.Count} lists";
         NoListsHint.Visibility = lists.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_editingList != null && !BlockLists.All.Contains(_editingList)) _editingList = null;
         ShowListEditor();
@@ -57,15 +59,30 @@ public partial class MainWindow
         BlockLists.All.Add(list);
         _editingList = list;
         BlockLists.Save();
+        RefreshListsTab();
         ListNameBox.Focus();
         ListNameBox.SelectAll();
     }
 
-    private void SelectList_Click(object sender, RoutedEventArgs e)
+    /// <summary>A row on the left: the list, and whether it's the one open.</summary>
+    public record ListRow(BlockList List, bool Selected)
     {
-        if ((sender as FrameworkElement)?.DataContext is not BlockList list) return;
-        _editingList = list;
-        ShowListEditor();
+        public string Name => List.Name;
+        public string Summary => List.Summary;
+    }
+
+    private void ListRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ListRow row) return;
+        _editingList = row.List;
+        RefreshListsTab();
+    }
+
+    private void ListRowOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ListRow row) return;
+        _editingList = row.List;
+        RefreshListsTab();
     }
 
     private void ListName_TextChanged(object sender, TextChangedEventArgs e)
@@ -104,7 +121,7 @@ public partial class MainWindow
     private void DeleteListFromCard_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true; // don't also open the list
-        if ((sender as FrameworkElement)?.DataContext is BlockList list) DeleteList(list);
+        if ((sender as FrameworkElement)?.DataContext is ListRow row) DeleteList(row.List);
     }
 
     /// <summary>Deletes a list and takes it off every session. Only the session running right now keeps it until it ends.</summary>

@@ -127,6 +127,41 @@ public partial class MainWindow
         if (practice == "concepts") _conceptLaterSlot = -1;
     }
 
+    /// <summary>
+    /// Outside sessions: starts a round for the first practice whose timeline time has come (same rules as in
+    /// sessions: done rounds don't repeat, Later brings it back in 20 minutes, meetings and lunch make it wait).
+    /// Returns true when a timeline round started or is waiting for a meeting, so no other round starts.
+    /// </summary>
+    private bool TryTimelineRoundOutsideSessions()
+    {
+        if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
+        var now = DateTime.Now;
+        foreach (var p in Practices)
+        {
+            if (CustomPracticeTimes(p) == null) continue;
+            bool on = p switch { "alphabet" => _settings.On("alphabet"), "concepts" => _settings.On("concepts") && Concepts.Cards.Count >= 2, _ => _settings.On("greek") };
+            var laterUntil = p switch { "alphabet" => _alphaLaterUntil, "concepts" => _conceptLaterUntil, _ => _vocabLaterUntil };
+            int laterSlot = p switch { "alphabet" => _alphaLaterSlot, "concepts" => _conceptLaterSlot, _ => _vocabLaterSlot };
+            if (!on || now < laterUntil) continue;
+            var slots = SlotsFor(PerDayFor(p), p);
+            var done = DoneToday(DoneRecordFor(p));
+            int due = -1;
+            for (int i = 0; i < slots.Count; i++)
+                if (!done.Contains(i) && slots[i] <= now && now - slots[i] < TimeSpan.FromHours(3)) { due = i; break; }
+            if (due < 0 && laterSlot >= 0 && !done.Contains(laterSlot)) due = laterSlot;
+            if (due < 0) continue;
+            if (InMeetingOrLunch()) return true; // waits until the meeting ends
+            switch (p)
+            {
+                case "alphabet": StartAlphaRound(due); break;
+                case "concepts": StartConceptRound(due); break;
+                default: StartVocabRound(due); break;
+            }
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Today's meetings and lunch (calendar and the running or planned day), for drawing behind the rounds.</summary>
     private List<(DateTime Start, DateTime End, string Name)> MeetingSpansToday()
     {
@@ -155,12 +190,19 @@ public partial class MainWindow
     {
         if (_timelineWindow != null) { _timelineWindow.Activate(); return; }
 
-        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts" };
-        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh" };
+        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "All-books" };
+        var rows = Practices.Concat(new[] { "lesson", "allbooks" }).ToArray();
+        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["allbooks"] = "Muted" };
         var features = new Dictionary<string, string> { ["words"] = "greek", ["alphabet"] = "alphabet", ["concepts"] = "concepts" };
-        var work = Practices.ToDictionary(p => p, p => SlotsFor(PerDayFor(p), p).Select(s => s.TimeOfDay).ToList());
-        var doneAt = Practices.ToDictionary(p => p, p =>
+        var work = rows.ToDictionary(p => p, p => p switch
         {
+            "lesson" => TrainingTimes(),
+            "allbooks" => ParseTimes(string.Join(",", Course.Config.AllBooksTimes)) ?? new List<TimeSpan>(),
+            _ => SlotsFor(PerDayFor(p), p).Select(s => s.TimeOfDay).ToList()
+        });
+        var doneAt = rows.ToDictionary(p => p, p =>
+        {
+            if (!Practices.Contains(p)) return new HashSet<TimeSpan>();
             var slots = SlotsFor(PerDayFor(p), p);
             return DoneToday(DoneRecordFor(p)).Where(i => i < slots.Count).Select(i => slots[i].TimeOfDay).ToHashSet();
         });
@@ -180,6 +222,7 @@ public partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var canvases = new List<(Canvas Canvas, string? Practice)>();
 
+        int Limit(string p) => p == "lesson" ? 3 : p == "allbooks" ? 6 : MaxRounds;
         double X(TimeSpan t, double width) => (t - axisStart).TotalMinutes / (axisEnd - axisStart).TotalMinutes * width;
         TimeSpan TimeAt(double x, double width)
         {
@@ -202,8 +245,14 @@ public partial class MainWindow
             labelPanel.Children.Add(name);
             if (practice != null)
             {
-                bool on = _settings.On(features[practice]);
-                if (!on) { var off = new TextBlock { Text = "Off in Settings" }; off.SetResourceReference(StyleProperty, "Caption"); labelPanel.Children.Add(off); name.Opacity = 0.6; }
+                bool on = practice switch
+                {
+                    "lesson" => Course.Config.On && Course.Packs.Count > 0,
+                    "allbooks" => Course.Finished && Course.Config.AllBooksAuto,
+                    _ => _settings.On(features[practice])
+                };
+                string offText = practice switch { "lesson" => "Not set up (Training page)", "allbooks" => "After you finish a book", _ => "Off in Settings" };
+                if (!on) { var off = new TextBlock { Text = offText }; off.SetResourceReference(StyleProperty, "Caption"); labelPanel.Children.Add(off); name.Opacity = 0.6; }
                 var actions = new WrapPanel();
                 Button Small(string text, string tip, Action click)
                 {
@@ -215,7 +264,7 @@ public partial class MainWindow
                 actions.Children.Add(Small("Add", "Add a round in the biggest free gap", () =>
                 {
                     var list = work[practice];
-                    if (list.Count >= MaxRounds) { status.Text = $"{names[practice]} can have up to {MaxRounds} rounds a day."; return; }
+                    if (list.Count >= Limit(practice)) { status.Text = $"{names[practice]} can have up to {Limit(practice)} a day."; return; }
                     var points = new List<TimeSpan> { axisStart }.Concat(list.OrderBy(t => t)).Append(axisEnd).ToList();
                     int best = 0;
                     for (int i = 1; i < points.Count - 1; i++) if (points[i + 1] - points[i] > points[best + 1] - points[best]) best = i;
@@ -247,7 +296,7 @@ public partial class MainWindow
                 {
                     if (e.ClickCount != 2 || e.OriginalSource != canvas) return;
                     var list = work[practice];
-                    if (list.Count >= MaxRounds) { status.Text = $"{names[practice]} can have up to {MaxRounds} rounds a day."; return; }
+                    if (list.Count >= Limit(practice)) { status.Text = $"{names[practice]} can have up to {Limit(practice)} a day."; return; }
                     list.Add(TimeAt(e.GetPosition(canvas).X, canvas.ActualWidth));
                     Changed();
                 };
@@ -306,9 +355,9 @@ public partial class MainWindow
             {
                 // Every practice's rounds together, as dots, so you can spread them apart or put them back to back.
                 int lane = 0;
-                foreach (var p in Practices)
+                foreach (var p in rows)
                 {
-                    double y = 8 + lane * (h - 16) / 2.0;
+                    double y = 8 + lane * (h - 16) / (rows.Length - 1.0);
                     foreach (var t in work[p])
                     {
                         var dot = new Ellipse { Width = 12, Height = 12, ToolTip = $"{names[p]}  {TimeLabel(t)}" };
@@ -362,7 +411,7 @@ public partial class MainWindow
                     e.Handled = true;
                 };
                 var menu = new ContextMenu();
-                var remove = new MenuItem { Header = "Remove this round", IsEnabled = !(practice == "words" && list.Count <= 1) };
+                var remove = new MenuItem { Header = "Remove this round", IsEnabled = !((practice == "words" || practice == "lesson") && list.Count <= 1) };
                 remove.Click += (_, _) => { list.Remove(current); Changed(); };
                 menu.Items.Add(remove);
                 handle.ContextMenu = menu;
@@ -386,16 +435,16 @@ public partial class MainWindow
                 hours.Children.Add(t);
             }
         };
-        AddRow(1, "All practice", null, 58);
+        AddRow(1, "All practice", null, 74);
         int r = 2;
-        foreach (var p in Practices) AddRow(r++, names[p], p, 70);
+        foreach (var p in rows) AddRow(r++, names[p], p, 70);
 
         var title = new TextBlock { Text = "Practice timelines", Margin = new Thickness(24, 20, 24, 0) };
         title.SetResourceReference(StyleProperty, "Heading");
         var intro = new TextBlock
         {
             Text = "Today's rounds for each practice, with your meetings and lunch shaded. Drag a round to move it (it snaps to 15 minutes), " +
-                   "double-click a row to add one, right-click a round to remove it. A round that lands in a meeting waits until the meeting ends. " +
+                   "double-click a row to add one, right-click a round to remove it. A round that lands in a meeting waits until the meeting ends. Timeline times apply in and out of sessions. The Book lesson row holds your three lesson times (the last is required). " +
                    "The All practice row shows every round together, so you can spread them apart or put them back to back.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 24, 6)
         };
@@ -420,7 +469,7 @@ public partial class MainWindow
 
         var window = new Window
         {
-            Title = "Practice timelines", Width = 1000, Height = 520, MinWidth = 640, MinHeight = 400, Content = layout,
+            Title = "Practice timelines", Width = 1000, Height = 680, MinWidth = 640, MinHeight = 400, Content = layout,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = IsVisible ? this : null
         };
         window.SetResourceReference(BackgroundProperty, "Panel");
@@ -431,6 +480,10 @@ public partial class MainWindow
         {
             foreach (var p in Practices) ReplaceTodaysTimes(p, work[p].Distinct().ToList(), asDefault);
             SaveSettingsQuietly();
+            // The book lesson's three times and All-books practice times (these are always every day's).
+            Course.Config.Times = work["lesson"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
+            Course.Config.AllBooksTimes = work["allbooks"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
+            Course.SaveConfig();
             try { FillVocabSettings(); } catch (Exception ex) { Log.Error("Timelines.Fill", ex); } // Settings shows the new rounds a day and hours
             dirty = false;
             status.Text = asDefault ? "Saved. These are your times every day." : "Saved for today. Tomorrow goes back to your default times.";

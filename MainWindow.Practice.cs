@@ -115,9 +115,10 @@ public partial class MainWindow
         var now = DateTime.Now;
         if (now - _lastAwayRound < TimeSpan.FromMinutes(15)) return;
         var options = new List<(string Key, int Minutes, Action<Action<bool>> Start)>();
-        if (_settings.On("greek") && _settings.VocabAwayOn) options.Add(("words", _settings.VocabAwayMinutes, done => StartVocabRound(-1, done)));
-        if (_settings.On("alphabet") && _settings.AlphaAwayOn) options.Add(("alphabet", _settings.AlphaAwayMinutes, done => StartAlphaRound(-1, false, done)));
-        if (_settings.On("concepts") && _settings.ConceptAwayOn && Concepts.Cards.Count >= 2) options.Add(("concepts", _settings.ConceptAwayMinutes, done => StartConceptRound(-1, false, done)));
+        // A practice with timeline times only comes up at those times (TryTimelineRoundOutsideSessions).
+        if (_settings.On("greek") && _settings.VocabAwayOn && CustomPracticeTimes("words") == null) options.Add(("words", _settings.VocabAwayMinutes, done => StartVocabRound(-1, done)));
+        if (_settings.On("alphabet") && _settings.AlphaAwayOn && CustomPracticeTimes("alphabet") == null) options.Add(("alphabet", _settings.AlphaAwayMinutes, done => StartAlphaRound(-1, false, done)));
+        if (_settings.On("concepts") && _settings.ConceptAwayOn && Concepts.Cards.Count >= 2 && CustomPracticeTimes("concepts") == null) options.Add(("concepts", _settings.ConceptAwayMinutes, done => StartConceptRound(-1, false, done)));
         var due = options
             .Select(o => (o.Key, o.Minutes, o.Start, Over: now - (_awayLast.TryGetValue(o.Key, out var last) ? last : now) - TimeSpan.FromMinutes(Math.Clamp(o.Minutes, 10, 600))))
             .Where(o => o.Over >= TimeSpan.Zero && InPracticeHours(now, o.Key == "words" ? "words" : o.Key)) // each within its own hours

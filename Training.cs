@@ -95,6 +95,8 @@ public class BookPara
     public int Heading { get; set; }          // 0 = body text, 1-3 = heading level
     public bool Sidebar { get; set; }         // shaded box in the book
     public bool InTable { get; set; }
+    /// <summary>A picture or map from the book (a file in the course's media folder), if this paragraph holds one.</summary>
+    public string? Image { get; set; }
     public List<BookRun> Runs { get; set; } = new();
     [JsonIgnore] public string Text => string.Concat(Runs.Select(r => r.Text));
 }
@@ -104,9 +106,21 @@ public static class BookReader
     private static readonly XNamespace W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
     /// <summary>Reads a .docx file into paragraphs, keeping italics, bold, superscript, headings, shaded sidebars and tables.</summary>
-    public static List<BookPara> ReadDocx(string path)
+    private static readonly XNamespace A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+    private static readonly XNamespace R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    private static readonly XNamespace Rel = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+    /// <summary>Reads a .docx file into paragraphs; pictures (PNG, JPEG, GIF, BMP) are saved into <paramref name="mediaDir"/>.</summary>
+    public static List<BookPara> ReadDocx(string path, string? mediaDir = null)
     {
         using var zip = ZipFile.OpenRead(path);
+        var rels = new Dictionary<string, string>();
+        if (zip.GetEntry("word/_rels/document.xml.rels") is ZipArchiveEntry relEntry)
+        {
+            using var rs = relEntry.Open();
+            foreach (var r in XDocument.Load(rs).Descendants(Rel + "Relationship"))
+                rels[(string?)r.Attribute("Id") ?? ""] = (string?)r.Attribute("Target") ?? "";
+        }
         var entry = zip.GetEntry("word/document.xml") ?? throw new InvalidDataException("This isn't a Word (.docx) file.");
         XDocument doc;
         using (var s = entry.Open()) doc = XDocument.Load(s);
@@ -165,6 +179,20 @@ public static class BookReader
                 if (last != null && last.Italic == run.Italic && last.Bold == run.Bold && last.Super == run.Super) last.Text += run.Text;
                 else para.Runs.Add(run);
             }
+            if (mediaDir != null)
+                foreach (var blip in p.Descendants(A + "blip"))
+                {
+                    string rid = (string?)blip.Attribute(R + "embed") ?? "";
+                    if (!rels.TryGetValue(rid, out var target)) continue;
+                    string ext = Path.GetExtension(target).ToLowerInvariant();
+                    if (ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp")) continue;
+                    var img = zip.GetEntry("word/" + target.TrimStart('/').Replace("word/", "")) ?? zip.GetEntry(target.TrimStart('/'));
+                    if (img == null) continue;
+                    Directory.CreateDirectory(mediaDir);
+                    string name = Path.GetFileName(target);
+                    img.ExtractToFile(Path.Combine(mediaDir, name), overwrite: true);
+                    paras.Add(new BookPara { Image = name, Sidebar = para.Sidebar });
+                }
             if (para.Text.Trim().Length > 0) paras.Add(para);
         }
         return paras;
@@ -241,6 +269,11 @@ public class TrainingEvent
     public bool Sure { get; set; }
     public int Lesson { get; set; } = -1;          // index in the course's lesson order
     public string Note { get; set; } = "";
+    // Highlights: the chapter, the paragraph (in the book), the exact words and the color.
+    public int Chapter { get; set; }
+    public int Para { get; set; } = -1;
+    public string Quote { get; set; } = "";
+    public string Color { get; set; } = "";
 }
 
 /// <summary>The course settings, shared between your devices.</summary>
@@ -255,6 +288,13 @@ public class CourseConfig
     public List<string> BlockListIds { get; set; } = new();
     public int ReviewCap { get; set; } = 8;
     public bool On { get; set; } = true;
+    /// <summary>Read in pages (like a book) instead of scrolling.</summary>
+    public bool PageView { get; set; }
+    /// <summary>The last chapter of each part of the book; a unit exam follows each one.</summary>
+    public List<int> UnitEnds { get; set; } = new();
+    /// <summary>All-books practice: its times, and whether it pops up by itself.</summary>
+    public List<string> AllBooksTimes { get; set; } = new() { "16:00" };
+    public bool AllBooksAuto { get; set; } = true;
 }
 
 public enum ConceptStage { New, Learning, Learned, Retired }
@@ -275,6 +315,7 @@ public static class Course
 
     private static string Dir => Path.Combine(Storage.SharedFolder, "training");
     private static string CourseDir => Path.Combine(Dir, Config.Id);
+    public static string MediaDir => Path.Combine(CourseDir, "media");
     private static string MyLog => Path.Combine(Dir, $"progress-{Safe(Device)}.json");
     private static string Safe(string s) => string.Concat(s.Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '_'));
 
@@ -347,7 +388,7 @@ public static class Course
 
     public static int ImportBook(string docxPath)
     {
-        var paras = BookReader.ReadDocx(docxPath);
+        var paras = BookReader.ReadDocx(docxPath, MediaDir);
         if (paras.Count < 20) throw new InvalidDataException("Focus found almost no text in that file.");
         Directory.CreateDirectory(CourseDir);
         WriteAtomic(Path.Combine(CourseDir, "book.json"), JsonSerializer.Serialize(paras, Json));
@@ -541,4 +582,111 @@ public static class Course
               .GroupBy(e => e.Concept).Select(g => (g.Key, g.Count()))
               .Where(x => StageOf(x.Key) < ConceptStage.Learned)
               .OrderByDescending(x => x.Item2).Take(count).ToList();
+
+    // ---------- Highlights and notes ----------
+
+    public record Highlight(string Id, int Chapter, int Para, string Quote, string Color, string Note, DateTime At);
+
+    public static List<Highlight> Highlights()
+    {
+        var map = new Dictionary<string, Highlight>();
+        foreach (var e in Events)
+        {
+            if (e.Kind == "highlight") map[e.Question] = new Highlight(e.Question, e.Chapter, e.Para, e.Quote, e.Color, e.Note, e.At);
+            else if (e.Kind == "highlightNote" && map.TryGetValue(e.Question, out var h)) map[e.Question] = h with { Note = e.Note };
+            else if (e.Kind == "unhighlight") map.Remove(e.Question);
+        }
+        return map.Values.OrderBy(h => h.Para).ToList();
+    }
+
+    public static string AddHighlight(int chapter, int para, string quote, string color, string note)
+    {
+        string id = Guid.NewGuid().ToString("N")[..12];
+        Add(new TrainingEvent { Kind = "highlight", Question = id, Chapter = chapter, Para = para, Quote = quote, Color = color, Note = note });
+        return id;
+    }
+
+    /// <summary>Every highlight and note as Markdown: chapter, section heading, the quote, then your note.</summary>
+    public static string ExportMarkdown()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# " + Config.Title).AppendLine();
+        sb.AppendLine($"Highlights and notes, exported {DateTime.Now:d MMMM yyyy}.").AppendLine();
+        foreach (var chapter in Highlights().GroupBy(h => h.Chapter).OrderBy(g => g.Key))
+        {
+            string title = Packs.TryGetValue(chapter.Key, out var pk) ? pk.Title : "";
+            sb.AppendLine($"## Chapter {chapter.Key}{(title.Length > 0 ? ": " + title : "")}").AppendLine();
+            string lastHeading = "";
+            foreach (var h in chapter.OrderBy(h => h.Para))
+            {
+                string heading = "";
+                for (int i = Math.Min(h.Para, Book.Count - 1); i >= 0; i--) if (Book[i].Heading >= 2) { heading = Book[i].Text.Trim(); break; }
+                if (heading.Length > 0 && heading != lastHeading) { sb.AppendLine("### " + heading).AppendLine(); lastHeading = heading; }
+                sb.AppendLine("> " + h.Quote.Replace("\n", " ").Trim()).AppendLine();
+                if (h.Note.Trim().Length > 0) sb.AppendLine(h.Note.Trim()).AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    public static string ExportPath => Path.Combine(Dir, $"{Safe(Config.Id)}-notes.md");
+
+    // ---------- Unit exams and the final exam ----------
+
+    public record Exam(string Key, string Title, List<(LessonRef Lesson, PackQuestion Q)> Questions);
+
+    public static HashSet<string> ExamsPassed() => Events.Where(e => e.Kind == "examDone" && e.Correct).Select(e => e.Note).ToHashSet();
+    public static HashSet<string> ExamsTaken() => Events.Where(e => e.Kind == "examDone").Select(e => e.Note).ToHashSet();
+
+    /// <summary>The book is finished once its final exam is passed; its questions then join All-books practice.</summary>
+    public static bool Finished => ExamsPassed().Contains("final");
+
+    /// <summary>An exam that's due: a unit exam once every lesson of that part is done, or the final once the whole book is.</summary>
+    public static Exam? ExamDue()
+    {
+        var lessons = Lessons();
+        var done = DoneLessons();
+        int prev = 0;
+        for (int u = 0; u < Config.UnitEnds.Count; u++)
+        {
+            int last = Config.UnitEnds[u];
+            var unit = lessons.Where(l => l.Pack.Chapter > prev && l.Pack.Chapter <= last).ToList();
+            bool complete = Enumerable.Range(prev + 1, Math.Max(0, last - prev)).All(c => Packs.ContainsKey(c)) && unit.Count > 0 && unit.All(l => done.Contains(l.Index));
+            string key = $"unit{u + 1}";
+            if (complete && !ExamsPassed().Contains(key)) return new Exam(key, $"Unit exam {u + 1}: chapters {prev + 1}–{last}", ExamQuestions(unit, 20));
+            prev = last;
+        }
+        bool all = Enumerable.Range(1, Config.Chapters).All(c => Packs.ContainsKey(c)) && lessons.Count > 0 && lessons.All(l => done.Contains(l.Index));
+        if (all && !ExamsPassed().Contains("final")) return new Exam("final", "Final exam: the whole book", ExamQuestions(lessons, 40));
+        return null;
+    }
+
+    /// <summary>Questions you haven't answered yet first, then the ones seen longest ago; multiple choice only.</summary>
+    private static List<(LessonRef, PackQuestion)> ExamQuestions(List<LessonRef> lessons, int count)
+    {
+        var hidden = Hidden();
+        var rnd = new Random();
+        return lessons.SelectMany(l => l.Lesson.Practice.Concat(l.Lesson.Quiz).Where(q => q.Kind == "mc" && !hidden.Contains(q.Id)).Select(q => (l, q)))
+            .Select(x => (x.l, x.q, s: StateOf(x.q.Id)))
+            .OrderBy(x => x.s.Seen > 0).ThenBy(x => x.s.Due).ThenBy(_ => rnd.Next())
+            .Take(count).Select(x => (x.l, x.q)).ToList();
+    }
+
+    // ---------- All-books practice ----------
+
+    /// <summary>A short round from finished books: missed questions and ones not seen for a while come up more often.</summary>
+    public static List<(LessonRef Lesson, PackQuestion Q)> AllBooksRound(int count)
+    {
+        if (!Finished) return new();
+        var hidden = Hidden();
+        var rnd = new Random();
+        return Lessons().SelectMany(l => l.Lesson.AllQuestions.Where(q => q.Kind == "mc" && !hidden.Contains(q.Id)).Select(q => (l, q)))
+            .Select(x =>
+            {
+                var st = StateOf(x.q.Id);
+                double weight = 1 + (st.Misconception ? 3 : 0) + (st.Streak == 0 ? 1.5 : 0) + Math.Min(3, (DateTime.Today - st.Due).TotalDays / 30.0);
+                return (x.l, x.q, key: -Math.Log(Math.Max(1e-9, rnd.NextDouble())) / weight);
+            })
+            .OrderBy(x => x.key).Take(count).Select(x => (x.l, x.q)).ToList();
+    }
 }

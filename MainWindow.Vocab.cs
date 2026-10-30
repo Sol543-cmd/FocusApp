@@ -171,7 +171,9 @@ public partial class MainWindow
     private void CheckVocab()
     {
         // Outside a running focus day or session, the "outside sessions" schedule applies instead.
-        if (!_runner.IsRunning) { CheckAwayPractice(); return; }
+        // Outside a running focus day or session: practices with times on the practice timeline still come up
+        // at exactly those times; the others follow the "every so many minutes" outside-sessions setting.
+        if (!_runner.IsRunning) { if (!TryTimelineRoundOutsideSessions()) CheckAwayPractice(); return; }
         if (!_settings.On("greek") || VocabWindow.IsShowing || DateTime.Now < _vocabLaterUntil) { CheckAlphabet(); return; }
         if (Application.Current.Windows.OfType<FlashWindow>().Any()) return; // let a session alert finish first
         var now = DateTime.Now;

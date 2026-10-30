@@ -32,12 +32,27 @@ public class LessonWindow : Window
     private readonly TextBlock _stepLabel = new() { FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
     private readonly Grid _readingLayer = new() { Visibility = Visibility.Collapsed };
 
+    private readonly string? _examKey;
+    private readonly List<(Course.LessonRef Lesson, PackQuestion Q)>? _questionsOnly;
+    private readonly string _title;
+
+    /// <summary>An exam (examKey "unit1"... or "final") or an All-books practice round (examKey null): multiple choice only.</summary>
+    public LessonWindow(string title, List<(Course.LessonRef Lesson, PackQuestion Q)> questions, string? examKey, Action<bool> finished, bool required = false)
+        : this(questions.Count > 0 ? questions[0].Lesson : Course.Lessons().First(), required, finished, title, questions, examKey) { }
+
     public LessonWindow(Course.LessonRef lesson, bool required, Action<bool> finished)
+        : this(lesson, required, finished, null, null, null) { }
+
+    private LessonWindow(Course.LessonRef lesson, bool required, Action<bool> finished, string? title,
+                         List<(Course.LessonRef Lesson, PackQuestion Q)>? questions, string? examKey)
     {
         _lesson = lesson;
+        _questionsOnly = questions;
+        _examKey = examKey;
+        _title = title ?? lesson.Lesson.Title;
         _required = required;
         _finished = finished;
-        Title = "Focus · " + lesson.Lesson.Title;
+        Title = "Focus · " + _title;
         WindowState = WindowState.Maximized;
         Width = 1100; Height = 800;
         Topmost = required;
@@ -51,7 +66,7 @@ public class LessonWindow : Window
         close.Click += (_, _) => Close();
         DockPanel.SetDock(close, Dock.Right);
         top.Children.Add(close);
-        var title = new TextBlock { Text = lesson.Lesson.Title, FontWeight = FontWeights.SemiBold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
+        var title = new TextBlock { Text = _title, FontWeight = FontWeights.SemiBold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
         top.Children.Add(title);
         _stepLabel.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         top.Children.Add(_stepLabel);
@@ -78,6 +93,24 @@ public class LessonWindow : Window
 
     private void BuildSteps()
     {
+        if (_questionsOnly != null)
+        {
+            _steps.Add(() =>
+            {
+                SetStep("Start");
+                _page.Children.Add(Text(_title, 28, bold: true));
+                _page.Children.Add(Text(_examKey == null ? $"{_questionsOnly.Count} questions from the books you've finished. Each names its chapter."
+                                                         : $"{_questionsOnly.Count} questions, mostly ones you haven't seen. Pass with 70%.", 16, top: 10));
+                _page.Children.Add(Primary("Begin", Next));
+            });
+            for (int i = 0; i < _questionsOnly.Count; i++)
+            {
+                var (ql, q) = _questionsOnly[i]; int n = i;
+                _steps.Add(() => ShowMc(q, ql, $"{(_examKey == null ? "Question" : "Exam question")} {n + 1} of {_questionsOnly.Count} · Chapter {ql.Pack.Chapter}", scored: true));
+            }
+            _steps.Add(Finish);
+            return;
+        }
         var l = _lesson.Lesson;
         var hidden = Course.Hidden();
         _steps.Add(Intro);
@@ -192,47 +225,83 @@ public class LessonWindow : Window
     {
         SetStep("Reading");
         var (start, end) = Course.LessonRange(_lesson);
-        _page.Children.Add(Text("Reading", 24, bold: true));
+        var head = new DockPanel();
+        var mode = new CheckBox { Content = "Page view", IsChecked = Course.Config.PageView, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Turn pages like a book instead of scrolling" };
+        DockPanel.SetDock(mode, Dock.Right);
+        head.Children.Add(mode);
+        head.Children.Add(Text("Reading", 24, bold: true));
+        _page.Children.Add(head);
         if (_lesson.Lesson.Parts.Count > 0)
             _page.Children.Add(Text("Parts: " + string.Join(" · ", _lesson.Lesson.Parts.Select(p => p.Title)), 14, brush: "Muted", top: 6));
         if (start < 0)
         {
             _page.Children.Add(Text("Focus couldn't find this lesson in your book file. Read it in your book, then continue.", 16, top: 16));
+            _page.Children.Add(Primary("I've finished reading", Next));
+            return;
         }
-        else
+        var map = new Dictionary<Paragraph, int>();
+        FrameworkElement? viewer = null;
+        var holder = new ContentControl { Margin = new Thickness(0, 14, 0, 0) };
+        void Build()
         {
-            var viewer = BuildReading(start, end, -1, null, out _);
-            viewer.Margin = new Thickness(0, 16, 0, 0);
-            _page.Children.Add(viewer);
+            map.Clear();
+            viewer = BuildReading(start, end, -1, Course.Config.PageView, ActualHeight - 260, map, out _);
+            holder.Content = viewer;
         }
+        _page.Children.Add(HighlightBar(() => viewer, map, _lesson.Pack.Chapter));
+        _page.Children.Add(holder);
+        Build();
+        mode.Checked += (_, _) => { Course.Config.PageView = true; Course.SaveConfig(); Build(); };
+        mode.Unchecked += (_, _) => { Course.Config.PageView = false; Course.SaveConfig(); Build(); };
         _page.Children.Add(Primary("I've finished reading", Next));
     }
 
-    /// <summary>The book's paragraphs as a document, with headings, italics and shaded sidebars; optionally one paragraph highlighted.</summary>
-    private FrameworkElement BuildReading(int start, int end, int highlight, string? find, out Block? target)
+    private static readonly Dictionary<string, Color> HighlightColors = new()
+    {
+        ["yellow"] = Color.FromArgb(0x70, 0xF5, 0xD0, 0x4A), ["green"] = Color.FromArgb(0x60, 0x7C, 0xC8, 0x7A), ["blue"] = Color.FromArgb(0x60, 0x6A, 0xA8, 0xE8)
+    };
+
+    /// <summary>
+    /// The book's paragraphs as a document, with headings, italics, shaded sidebars, pictures and your highlights;
+    /// optionally one paragraph marked (Show where). Page view turns pages like a book; otherwise it scrolls.
+    /// </summary>
+    public static FrameworkElement BuildReading(int start, int end, int highlight, bool pageView, double pageHeight,
+                                                Dictionary<Paragraph, int>? map, out Block? target)
     {
         target = null;
-        var docu = new FlowDocument { PagePadding = new Thickness(0), FontSize = 17, LineHeight = 28, TextAlignment = TextAlignment.Left };
+        var docu = new FlowDocument { PagePadding = new Thickness(pageView ? 24 : 0), FontSize = 17, LineHeight = 28, TextAlignment = TextAlignment.Left, ColumnWidth = 900 };
         docu.SetResourceReference(TextElement.ForegroundProperty, "Text");
         docu.FontFamily = new FontFamily("Georgia, Cambria, Segoe UI");
+        var highlights = Course.Highlights().Where(h => h.Para >= start && h.Para < end).ToLookup(h => h.Para);
         Section? sidebar = null;
         for (int i = start; i < end && i < Course.Book.Count; i++)
         {
             var bp = Course.Book[i];
-            var p = new Paragraph { Margin = new Thickness(0, bp.Heading > 0 ? 18 : 0, 0, 12) };
-            if (bp.Heading > 0) { p.FontSize = bp.Heading == 1 ? 26 : bp.Heading == 2 ? 21 : 18; p.FontWeight = FontWeights.SemiBold; p.FontFamily = new FontFamily("Segoe UI"); }
-            foreach (var r in bp.Runs)
+            Block block;
+            if (bp.Image != null)
             {
-                Inline run = new Run(r.Text);
-                if (r.Super) { run.BaselineAlignment = BaselineAlignment.Superscript; run.FontSize = 11; }
-                if (r.Italic) run = new Italic(run);
-                if (r.Bold) run = new Bold(run);
-                p.Inlines.Add(run);
+                var path = System.IO.Path.Combine(Course.MediaDir, bp.Image);
+                if (!System.IO.File.Exists(path)) continue;
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit(); bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; bmp.UriSource = new Uri(path); bmp.EndInit();
+                block = new BlockUIContainer(new Image { Source = bmp, MaxWidth = 700, MaxHeight = 520, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left }) { Margin = new Thickness(0, 8, 0, 14) };
             }
-            if (i == highlight)
+            else
             {
-                p.SetResourceReference(TextElement.BackgroundProperty, "FocusTint");
-                target = p;
+                var p = new Paragraph { Margin = new Thickness(0, bp.Heading > 0 ? 18 : 0, 0, 12) };
+                if (bp.Heading > 0) { p.FontSize = bp.Heading == 1 ? 26 : bp.Heading == 2 ? 21 : 18; p.FontWeight = FontWeights.SemiBold; p.FontFamily = new FontFamily("Segoe UI"); }
+                foreach (var r in bp.Runs)
+                {
+                    Inline run = new Run(r.Text);
+                    if (r.Super) { run.BaselineAlignment = BaselineAlignment.Superscript; run.FontSize = 11; }
+                    if (r.Italic) run = new Italic(run);
+                    if (r.Bold) run = new Bold(run);
+                    p.Inlines.Add(run);
+                }
+                if (i == highlight) { p.SetResourceReference(TextElement.BackgroundProperty, "FocusTint"); target = p; }
+                foreach (var h in highlights[i]) ApplyHighlight(p, h.Quote, h.Color, h.Note);
+                map?.Add(p, i);
+                block = p;
             }
             if (bp.Sidebar)
             {
@@ -243,13 +312,101 @@ public class LessonWindow : Window
                     sidebar.SetResourceReference(Block.BorderBrushProperty, "FocusBrush");
                     docu.Blocks.Add(sidebar);
                 }
-                p.FontSize = Math.Min(p.FontSize, 16);
-                sidebar.Blocks.Add(p);
+                if (block is Paragraph sp) sp.FontSize = Math.Min(sp.FontSize, 16);
+                sidebar.Blocks.Add(block);
             }
-            else { sidebar = null; docu.Blocks.Add(p); }
+            else { sidebar = null; docu.Blocks.Add(block); }
         }
-        var viewer = new FlowDocumentScrollViewer { Document = docu, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, IsToolBarVisible = false, IsSelectionEnabled = true };
-        return viewer;
+        if (pageView)
+            return new FlowDocumentPageViewer { Document = docu, Height = Math.Max(420, pageHeight), ToolTip = "Turn pages with the arrows below, or Page Up and Page Down" };
+        return new FlowDocumentScrollViewer { Document = docu, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, IsToolBarVisible = false, IsSelectionEnabled = true };
+    }
+
+    /// <summary>Colors the first place the quote appears in the paragraph.</summary>
+    public static void ApplyHighlight(Paragraph p, string quote, string color, string note)
+    {
+        try
+        {
+            var text = new System.Text.StringBuilder();
+            var positions = new List<TextPointer>();
+            for (var tp = p.ContentStart; tp != null && tp.CompareTo(p.ContentEnd) < 0; tp = tp.GetNextContextPosition(LogicalDirection.Forward))
+            {
+                if (tp.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text) continue;
+                string run = tp.GetTextInRun(LogicalDirection.Forward);
+                for (int k = 0; k < run.Length; k++) { text.Append(run[k]); positions.Add(tp.GetPositionAtOffset(k)!); }
+            }
+            int at = text.ToString().IndexOf(quote.Trim(), StringComparison.Ordinal);
+            if (at < 0 || quote.Trim().Length == 0) return;
+            int endIdx = at + quote.Trim().Length;
+            var endPtr = endIdx < positions.Count ? positions[endIdx] : p.ContentEnd;
+            var range = new TextRange(positions[at], endPtr);
+            range.ApplyPropertyValue(TextElement.BackgroundProperty, new SolidColorBrush(HighlightColors.TryGetValue(color, out var c) ? c : HighlightColors["yellow"]));
+        }
+        catch (Exception ex) { Log.Error("ApplyHighlight", ex); }
+    }
+
+    /// <summary>The highlight bar above the reading: select text, then pick a color or add a note.</summary>
+    private FrameworkElement HighlightBar(Func<FrameworkElement?> viewer, Dictionary<Paragraph, int> map, int chapter)
+    {
+        var bar = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var hint = new TextBlock { Text = "Select text, then:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), FontSize = 13 };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        bar.Children.Add(hint);
+        void Mark(string color, bool withNote)
+        {
+            var sel = viewer() switch { FlowDocumentScrollViewer v => v.Selection, FlowDocumentPageViewer v => v.Selection, _ => null };
+            if (sel == null || sel.IsEmpty) { hint.Text = "Select some text first, then:"; return; }
+            var para = sel.Start.Paragraph;
+            if (para == null || !map.TryGetValue(para, out int index)) { hint.Text = "Select text within one paragraph, then:"; return; }
+            var end = sel.End.CompareTo(para.ContentEnd) > 0 ? para.ContentEnd : sel.End;
+            string quote = new TextRange(sel.Start, end).Text.Trim();
+            if (quote.Length == 0) return;
+            string note = "";
+            if (withNote)
+            {
+                var box = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 90, Margin = new Thickness(0, 10, 0, 10) };
+                var ok = new Button { Content = "Save note", IsDefault = true, Padding = new Thickness(16, 5, 16, 5), HorizontalAlignment = HorizontalAlignment.Right };
+                var panel = new StackPanel { Margin = new Thickness(18) };
+                panel.Children.Add(new TextBlock { Text = "“" + (quote.Length > 120 ? quote[..120] + "…" : quote) + "”", TextWrapping = TextWrapping.Wrap, FontStyle = FontStyles.Italic });
+                panel.Children.Add(box); panel.Children.Add(ok);
+                var dlg = new Window { Title = "Note", Width = 460, SizeToContent = SizeToContent.Height, Content = panel, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, Topmost = Topmost };
+                dlg.SetResourceReference(BackgroundProperty, "Panel");
+                dlg.SetResourceReference(ForegroundProperty, "Text");
+                ok.Click += (_, _) => dlg.DialogResult = true;
+                dlg.Loaded += (_, _) => box.Focus();
+                if (dlg.ShowDialog() != true) return;
+                note = box.Text.Trim();
+            }
+            Course.AddHighlight(chapter, index, quote, color, note);
+            ApplyHighlight(para, quote, color, note);
+            sel.Select(sel.End, sel.End);
+            hint.Text = withNote ? "Highlight and note saved. Select more text, then:" : "Highlighted. Select more text, then:";
+        }
+        foreach (var (name, label) in new[] { ("yellow", "Yellow"), ("green", "Green"), ("blue", "Blue") })
+        {
+            var b = new Button { Content = label, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 6, 0), Background = new SolidColorBrush(HighlightColors[name]) };
+            string n = name;
+            b.Click += (_, _) => Mark(n, false);
+            bar.Children.Add(b);
+        }
+        var noteBtn = new Button { Content = "Highlight + note…", Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(6, 0, 0, 0) };
+        noteBtn.Click += (_, _) => Mark("yellow", true);
+        bar.Children.Add(noteBtn);
+        return bar;
+    }
+
+    /// <summary>A window showing part of the book with one paragraph marked (from the notes list).</summary>
+    public static void OpenPassage(Window? owner, int start, int end, int para, string title)
+    {
+        var host = new StackPanel { MaxWidth = 760, Margin = new Thickness(32, 20, 32, 40) };
+        var viewer = BuildReading(start, end, para, false, 0, null, out var target);
+        host.Children.Add(viewer);
+        var w = new Window { Title = title, Width = 900, Height = 760, Owner = owner, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                             Content = new ScrollViewer { Content = host, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+        w.SetResourceReference(BackgroundProperty, "Bg");
+        w.SetResourceReference(ForegroundProperty, "Text");
+        if (target != null) w.Loaded += (_, _) => w.Dispatcher.BeginInvoke(new Action(() => target.BringIntoView()), System.Windows.Threading.DispatcherPriority.ContextIdle);
+        w.Show();
     }
 
     /// <summary>Opens the lesson's reading over the question, scrolled to the answer with it highlighted.</summary>
@@ -272,7 +429,7 @@ public class LessonWindow : Window
         if (start >= 0)
         {
             var host = new StackPanel { MaxWidth = 760, Margin = new Thickness(32, 8, 32, 40) };
-            var viewer = BuildReading(start, end, at, r.Find, out var target);
+            var viewer = BuildReading(start, end, at, false, 0, null, out var target);
             host.Children.Add(viewer);
             var sv = new ScrollViewer { Content = host, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             panel.Children.Add(sv);
@@ -476,6 +633,23 @@ public class LessonWindow : Window
     {
         SetStep("Done");
         _done = true;
+        if (_questionsOnly != null)
+        {
+            bool passed = _asked > 0 && _right * 10 >= _asked * 7;
+            if (_examKey != null)
+            {
+                Course.Add(new TrainingEvent { Kind = "examDone", Note = _examKey, Correct = passed, Lesson = -1 });
+                Course.Add(new TrainingEvent { Kind = "lessonDone", Lesson = -1, Note = "exam:" + _examKey });
+            }
+            else Course.Add(new TrainingEvent { Kind = "allBooksDone" });
+            _page.Children.Add(Text(_examKey == null ? "Round finished" : passed ? "Passed" : "Not passed yet", 28, bold: true));
+            _page.Children.Add(Text($"{_right} of {_asked} right and sure.", 18, top: 10));
+            if (_examKey != null)
+                _page.Children.Add(Text(passed ? (_examKey == "final" ? "You've finished the book. Its questions now join All-books practice." : "On to the next part of the book.")
+                                               : "The questions you missed come back in review. The exam comes back as tomorrow's lesson.", 16, top: 10));
+            _page.Children.Add(Primary("Close", Close));
+            return;
+        }
         Course.Add(new TrainingEvent { Kind = "lessonDone", Lesson = _lesson.Index });
         _page.Children.Add(Text("Lesson finished", 28, bold: true));
         _page.Children.Add(Text(_asked == 0 ? "Nicely done." : $"{_right} of {_asked} right and sure.", 18, top: 10));

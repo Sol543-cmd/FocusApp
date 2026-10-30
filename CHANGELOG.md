@@ -3,6 +3,25 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.6.0
+
+- Fixed: Greek practice rounds came up at times other than the ones on the practice timeline. Outside
+  sessions, rounds used the separate "every so many minutes" setting and ignored the timeline. Now a
+  practice with timeline times comes up at exactly those times, in and out of sessions.
+- Block lists page redesigned: rows highlight the open list, with no trash icons in the list (right-click a
+  row to open or delete it); the editor has a large name, a Delete list button beside it, and Apps and
+  Freedom web blocking as clean sections with pill-shaped app chips.
+- Training: highlight while reading (select text, pick yellow, green or blue, or Highlight + note), a
+  Highlights and notes view with Show in the book, Edit note and Remove, and Export to Markdown.
+- Training: Page view (turn pages like a book) or scrolling, remembered.
+- Training: the book's pictures and maps appear in the reading (choose the book file again once, with
+  Replace…, to pick them up).
+- Training: unit exams after each part of the book (set the chapters where parts end on the Training page)
+  and a final exam; passing the final finishes the book.
+- Training: All-books practice for finished books, popping up at its times or opened from the Training page.
+- Practice timelines: Book lesson and All-books rows, so your three lesson times sit on the same timeline as
+  Greek practice.
+
 ## 1.5.0
 
 - Training, the book course (desktop): Training in the sidebar (or the tray menu) opens the course page.

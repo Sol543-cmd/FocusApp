@@ -1451,21 +1451,19 @@
         <!-- ===== Block lists ===== -->
         <Grid x:Name="ListsPanel" Grid.Column="1" Grid.Row="2" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="290"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <Border Background="{DynamicResource Panel}" CornerRadius="12" Padding="20">
+            <Border Background="{DynamicResource Panel}" CornerRadius="14" Padding="16,20,16,16">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top">
-                        <DockPanel>
-                            <Button x:Name="NewListBtn" Content="+ New" DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Padding="14,5" VerticalAlignment="Center" Click="NewList_Click" ToolTip="Make a new block list"/>
-                            <TextBlock Text="Block lists" Style="{StaticResource Heading}" VerticalAlignment="Center"/>
-                        </DockPanel>
-                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,16" Text="Apps and Freedom web blocking you use together. Add a list to any session when you plan your day."/>
+                    <StackPanel DockPanel.Dock="Top" Margin="4,0,4,14">
+                        <TextBlock Text="Block lists" Style="{StaticResource Heading}"/>
+                        <TextBlock x:Name="ListsCountText" Style="{StaticResource Caption}" Margin="0,2,0,14"/>
+                        <Button x:Name="NewListBtn" Content="+  New block list" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Padding="12,8" Click="NewList_Click"/>
                     </StackPanel>
-                    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel2}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0">
+                    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel2}" CornerRadius="10" Padding="14,10" Margin="0,12,0,0">
                         <DockPanel>
-                            <Button Content="Freedom…" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Click="OpenFreedom_Click" ToolTip="Connect Freedom, choose devices, sync"/>
+                            <Button Content="Manage" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Click="OpenFreedom_Click" ToolTip="Connect Freedom, choose devices, sync"/>
                             <StackPanel>
                                 <TextBlock Text="Freedom" FontWeight="SemiBold"/>
                                 <TextBlock x:Name="ListsFreedomStatus" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
@@ -1473,20 +1471,33 @@
                         </DockPanel>
                     </Border>
                     <Grid>
-                        <TextBlock x:Name="NoListsHint" IsHitTestVisible="False" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="No block lists yet. Click + New to make one."/>
+                        <TextBlock x:Name="NoListsHint" IsHitTestVisible="False" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="4,0" Text="No block lists yet."/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl x:Name="ListsList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Click="SelectList_Click" HorizontalContentAlignment="Stretch" Background="{DynamicResource Panel2}" BorderThickness="0" Padding="14,10" Margin="0,0,0,8" Cursor="Hand">
-                                            <DockPanel>
-                                                <Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Padding="6,4" VerticalAlignment="Center" Click="DeleteListFromCard_Click" ToolTip="Delete this block list"/>
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </Button>
+                                        <Border x:Name="Row" CornerRadius="10" Padding="14,10,12,10" Margin="0,0,0,6" BorderThickness="3,0,0,0" BorderBrush="Transparent" Background="Transparent" Cursor="Hand"
+                                                MouseLeftButtonUp="ListRow_Click" ToolTip="Right-click for more">
+                                            <Border.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Open" Click="ListRowOpen_Click"/>
+                                                    <MenuItem Header="Delete list…" Click="DeleteListFromCard_Click"/>
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14.5" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Selected}" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource FocusTint}"/>
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/>
+                                            </DataTrigger>
+                                            <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Panel2}"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -1494,34 +1505,47 @@
                     </Grid>
                 </DockPanel>
             </Border>
-            <Border Grid.Column="1" Background="{DynamicResource Panel}" CornerRadius="12" Padding="28,24" Margin="16,0,0,0">
+            <Border Grid.Column="1" Background="{DynamicResource Panel}" CornerRadius="14" Padding="32,26" Margin="14,0,0,0">
                 <Grid>
-                    <TextBlock x:Name="NoListSelectedHint" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Pick a block list on the left, or click + New."/>
+                    <StackPanel x:Name="NoListSelectedHint" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="360">
+                        <TextBlock Text="No list open" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0" Text="Pick a block list on the left, or make a new one. A list groups the apps Focus closes and the Freedom web blocking to turn on; add it to any session when you plan your day."/>
+                    </StackPanel>
                     <ScrollViewer x:Name="ListEditor" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-                        <StackPanel MaxWidth="640" HorizontalAlignment="Left">
-                            <TextBox x:Name="ListNameBox" FontSize="22" FontWeight="SemiBold" BorderThickness="0,0,0,1" Background="Transparent" Padding="0,4" MinWidth="320" HorizontalAlignment="Left" TextChanged="ListName_TextChanged" ToolTip="The list's name"/>
-                            <TextBlock x:Name="ListSummaryText" Style="{StaticResource Caption}" Margin="0,6,0,18"/>
-
-                            <Border Background="{DynamicResource Panel2}" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                        <StackPanel MaxWidth="680" HorizontalAlignment="Left">
+                            <DockPanel>
+                                <Button x:Name="DeleteListBtn" DockPanel.Dock="Right" VerticalAlignment="Top" Padding="12,6" Margin="16,4,0,0" Click="DeleteList_Click" BorderThickness="1" BorderBrush="{DynamicResource Line}" Background="Transparent" Foreground="{DynamicResource PriorityHigh}" ToolTip="Delete this block list">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Delete list" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                                 <StackPanel>
-                                    <DockPanel Margin="0,0,0,10">
-                                        <Button Content="+ Add apps" DockPanel.Dock="Right" Click="AddAppsToList_Click" Padding="12,4"/>
+                                    <TextBox x:Name="ListNameBox" FontSize="24" FontWeight="SemiBold" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Line}" Background="Transparent" Padding="0,2,0,4" HorizontalAlignment="Stretch" TextChanged="ListName_TextChanged" ToolTip="Click to rename"/>
+                                    <TextBlock x:Name="ListSummaryText" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+
+                            <Border Background="{DynamicResource Panel2}" CornerRadius="12" Padding="18,16" Margin="0,22,0,0">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,12">
+                                        <Button Content="+ Add apps" DockPanel.Dock="Right" Click="AddAppsToList_Click" Padding="14,5" VerticalAlignment="Center"/>
                                         <StackPanel>
-                                            <TextBlock Text="Apps" FontWeight="SemiBold" FontSize="14"/>
+                                            <TextBlock Text="Apps" FontWeight="SemiBold" FontSize="15"/>
                                             <TextBlock Style="{StaticResource Caption}" Text="Focus closes these during sessions that use this list."/>
                                         </StackPanel>
                                     </DockPanel>
-                                    <TextBlock x:Name="ListEmptyHint" Style="{StaticResource Caption}" Text="No apps yet."/>
+                                    <TextBlock x:Name="ListEmptyHint" Style="{StaticResource Caption}" Text="No apps in this list yet."/>
                                     <ItemsControl x:Name="ListAppsList">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Style="{StaticResource Chip}" Background="{DynamicResource Panel}">
+                                                <Border Background="{DynamicResource Panel}" CornerRadius="15" Padding="12,4,4,4" Margin="0,0,8,8" BorderThickness="1" BorderBrush="{DynamicResource Line}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                                                        <Button Content="✕" Style="{StaticResource IconButton}" Padding="6,0" FontSize="11" Click="RemoveAppFromList_Click" ToolTip="Remove from this list" Visibility="{Binding DataContext.RemoveVisibility, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                        <Button Content="✕" Style="{StaticResource IconButton}" Padding="7,1" Margin="4,0,0,0" FontSize="10" Click="RemoveAppFromList_Click" ToolTip="Remove from this list" Visibility="{Binding DataContext.RemoveVisibility, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                                     </StackPanel>
                                                 </Border>
                                             </DataTemplate>
@@ -1530,17 +1554,17 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource Panel2}" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                            <Border Background="{DynamicResource Panel2}" CornerRadius="12" Padding="18,16" Margin="0,14,0,0">
                                 <StackPanel>
-                                    <DockPanel Margin="0,0,0,10">
+                                    <DockPanel Margin="0,0,0,12">
                                         <Button Content="Sync" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Click="SyncFreedomLists_Click" ToolTip="Get your blocklists from Freedom again"/>
                                         <StackPanel>
-                                            <TextBlock Text="Freedom web blocking" FontWeight="SemiBold" FontSize="14"/>
+                                            <TextBlock Text="Freedom web blocking" FontWeight="SemiBold" FontSize="15"/>
                                             <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Freedom turns these on for exactly as long as each focus session that uses this list, and again after every break."/>
                                         </StackPanel>
                                     </DockPanel>
                                     <WrapPanel x:Name="FreedomListsHost"/>
-                                    <TextBlock x:Name="FreedomListsNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock x:Name="FreedomListsNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                                 </StackPanel>
                             </Border>
 
@@ -1550,9 +1574,7 @@
                                 <StackPanel x:Name="ListSitesHost"/>
                                 <TextBlock x:Name="ListSitesNote"/>
                             </StackPanel>
-
-                            <Button x:Name="DeleteListBtn" Content="Delete this list" Style="{StaticResource LinkButton}" Foreground="{DynamicResource PriorityHigh}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="DeleteList_Click"/>
-                            <TextBlock x:Name="ListRunningNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed" Text="A session is running: you can add apps now, and remove them after it ends."/>
+                            <TextBlock x:Name="ListRunningNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,14,0,0" Visibility="Collapsed" Text="A session is running: you can add apps now, and remove them after it ends."/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
