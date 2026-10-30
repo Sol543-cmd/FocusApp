@@ -66,8 +66,8 @@ public class LessonWindow : Window
         close.Click += (_, _) => Close();
         DockPanel.SetDock(close, Dock.Right);
         top.Children.Add(close);
-        var title = new TextBlock { Text = _title, FontWeight = FontWeights.SemiBold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
-        top.Children.Add(title);
+        var titleText = new TextBlock { Text = _title, FontWeight = FontWeights.SemiBold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
+        top.Children.Add(titleText);
         _stepLabel.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         top.Children.Add(_stepLabel);
 
