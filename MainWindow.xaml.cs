@@ -437,6 +437,8 @@ public partial class MainWindow : Window
         if (SettingsPanel == null) return; // still loading
         PlanPanel.Visibility = NavPlan.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ListsPanel.Visibility = NavLists.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        TrainingPanel.Visibility = NavTraining.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (NavTraining.IsChecked == true) RefreshTraining();
         CalendarPanel.Visibility = NavCalendar.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         DashboardPanel.Visibility = NavDashboard.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         HomePanel.Visibility = NavHome.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;

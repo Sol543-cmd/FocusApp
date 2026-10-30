@@ -3,6 +3,16 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.6.1
+
+- Training has its own place in the sidebar, with an icon like the other pages, and opens inside the main
+  window.
+- Training opens on a calm board of your books (Add a book for more). Click a book for its lessons,
+  chapters, notes, exams and hidden questions; ← All books goes back. Settings for all of Training (lesson
+  times, block lists, page view, review, All-books practice) are behind the gear at the top right.
+- Chapter packs: a lesson part is now found even when the book's heading is written a little differently
+  (for example "Lists, Councils, and Criteria"), so the chapter 1 pack imports without problems.
+
 ## 1.6.0
 
 - Fixed: Greek practice rounds came up at times other than the ones on the practice timeline. Outside

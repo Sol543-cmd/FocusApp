@@ -259,6 +259,8 @@ public static class BookReader
 public class TrainingEvent
 {
     public string Device { get; set; } = "";
+    /// <summary>The book this belongs to (empty in logs from before several books: the first book, desilva-nt).</summary>
+    public string CourseId { get; set; } = "";
     public long Seq { get; set; }
     public DateTime At { get; set; }
     public string Day { get; set; } = "";          // the local date it counts toward (yyyy-MM-dd)
@@ -276,9 +278,25 @@ public class TrainingEvent
     public string Color { get; set; } = "";
 }
 
-/// <summary>The course settings, shared between your devices.</summary>
+/// <summary>One book in your library.</summary>
+public class CourseInfo
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string BookFileName { get; set; } = "";
+    public int Chapters { get; set; } = 24;
+    /// <summary>The last chapter of each part of the book; a unit exam follows each one.</summary>
+    public List<int> UnitEnds { get; set; } = new();
+    public DateTime AddedUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Training settings (for every book) and your library, shared between your devices.</summary>
 public class CourseConfig
 {
+    public List<CourseInfo> Courses { get; set; } = new();
+    /// <summary>The book whose lessons come up each day.</summary>
+    public string ActiveId { get; set; } = "";
+    // From before the library (one book only); moved into Courses when first loaded.
     public string Id { get; set; } = "desilva-nt";
     public string Title { get; set; } = "deSilva, An Introduction to the New Testament";
     public string BookFileName { get; set; } = "";
@@ -290,7 +308,6 @@ public class CourseConfig
     public bool On { get; set; } = true;
     /// <summary>Read in pages (like a book) instead of scrolling.</summary>
     public bool PageView { get; set; }
-    /// <summary>The last chapter of each part of the book; a unit exam follows each one.</summary>
     public List<int> UnitEnds { get; set; } = new();
     /// <summary>All-books practice: its times, and whether it pops up by itself.</summary>
     public List<string> AllBooksTimes { get; set; } = new() { "16:00" };
@@ -314,7 +331,14 @@ public static class Course
     public static event Action? Changed;
 
     private static string Dir => Path.Combine(Storage.SharedFolder, "training");
-    private static string CourseDir => Path.Combine(Dir, Config.Id);
+    private static string CourseDir => Path.Combine(Dir, Safe(Current.Id));
+
+    /// <summary>The open book (the one whose lessons come up each day).</summary>
+    public static CourseInfo Current { get; private set; } = new() { Id = "desilva-nt", Title = "deSilva, An Introduction to the New Testament" };
+
+    private static string CourseOf(TrainingEvent e) => e.CourseId.Length == 0 ? "desilva-nt" : e.CourseId;
+    /// <summary>The open book's events only, so lessons, review and notes never mix books.</summary>
+    private static IEnumerable<TrainingEvent> CE => Events.Where(e => CourseOf(e) == Current.Id);
     public static string MediaDir => Path.Combine(CourseDir, "media");
     private static string MyLog => Path.Combine(Dir, $"progress-{Safe(Device)}.json");
     private static string Safe(string s) => string.Concat(s.Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '_'));
@@ -328,6 +352,59 @@ public static class Course
             Directory.CreateDirectory(Dir);
             string cfg = Path.Combine(Dir, "course.json");
             Config = File.Exists(cfg) ? JsonSerializer.Deserialize<CourseConfig>(File.ReadAllText(cfg)) ?? new() : new();
+            if (Config.Courses.Count == 0 && Directory.Exists(Path.Combine(Dir, Config.Id)))
+            {
+                // The first book, from before the library.
+                Config.Courses.Add(new CourseInfo { Id = Config.Id, Title = Config.Title, BookFileName = Config.BookFileName, Chapters = Config.Chapters, UnitEnds = Config.UnitEnds });
+                Config.ActiveId = Config.Id;
+                SaveConfig();
+            }
+            Current = Config.Courses.FirstOrDefault(c => c.Id == Config.ActiveId) ?? Config.Courses.FirstOrDefault() ?? Current;
+            LoadCurrent();
+            ReloadEvents();
+        }
+        catch (Exception ex) { Log.Error("Course.Load", ex); }
+    }
+
+    public static bool HasBook => Config.Courses.Any(c => c.Id == Current.Id);
+
+    /// <summary>Opens a book from the library; its lessons become the daily ones.</summary>
+    public static void Open(string id)
+    {
+        if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;
+        Current = c;
+        Config.ActiveId = id;
+        SaveConfig();
+        LoadCurrent();
+    }
+
+    /// <summary>Adds a book to the library and opens it.</summary>
+    public static CourseInfo AddCourse(string title)
+    {
+        string baseId = string.Concat(title.ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')).Trim('-');
+        if (baseId.Length == 0) baseId = "book";
+        if (baseId.Length > 40) baseId = baseId[..40].Trim('-');
+        string id = baseId;
+        for (int n = 2; Config.Courses.Any(c => c.Id == id); n++) id = $"{baseId}-{n}";
+        var info = new CourseInfo { Id = id, Title = title.Trim() };
+        Config.Courses.Add(info);
+        Open(id);
+        return info;
+    }
+
+    /// <summary>Takes a book out of the library (its files and your progress stay in the training folder).</summary>
+    public static void RemoveCourse(string id)
+    {
+        Config.Courses.RemoveAll(c => c.Id == id);
+        if (Config.ActiveId == id) Config.ActiveId = Config.Courses.FirstOrDefault()?.Id ?? "";
+        SaveConfig();
+        if (Config.Courses.FirstOrDefault(c => c.Id == Config.ActiveId) is CourseInfo next) Open(next.Id);
+    }
+
+    private static void LoadCurrent()
+    {
+        try
+        {
             Directory.CreateDirectory(CourseDir);
             string book = Path.Combine(CourseDir, "book.json");
             Book = File.Exists(book) ? JsonSerializer.Deserialize<List<BookPara>>(File.ReadAllText(book)) ?? new() : new();
@@ -337,9 +414,9 @@ public static class Course
                 try { var p = ChapterPack.Read(f); Packs[p.Chapter] = p; }
                 catch (Exception ex) { Log.Error("Course.LoadPack " + f, ex); }
             }
-            ReloadEvents();
         }
-        catch (Exception ex) { Log.Error("Course.Load", ex); }
+        catch (Exception ex) { Log.Error("Course.LoadCurrent", ex); }
+        Changed?.Invoke();
     }
 
     /// <summary>Reads every device's log (others may have added to theirs through OneDrive).</summary>
@@ -373,6 +450,7 @@ public static class Course
     public static void Add(TrainingEvent e)
     {
         e.Device = Device;
+        if (e.CourseId.Length == 0) e.CourseId = Current.Id;
         e.At = DateTime.UtcNow;
         if (e.Day.Length == 0) e.Day = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var mine = Events.Where(x => x.Device == Device).ToList();
@@ -393,7 +471,7 @@ public static class Course
         Directory.CreateDirectory(CourseDir);
         WriteAtomic(Path.Combine(CourseDir, "book.json"), JsonSerializer.Serialize(paras, Json));
         Book = paras;
-        Config.BookFileName = Path.GetFileName(docxPath);
+        Current.BookFileName = Path.GetFileName(docxPath);
         SaveConfig();
         return paras.Count;
     }
@@ -409,8 +487,8 @@ public static class Course
         if (start < 0) { problems.Add($"Couldn't find where chapter {pack.Chapter} starts (\"{pack.StartText}\")."); return problems; }
         foreach (var lesson in pack.Lessons)
         {
-            foreach (var part in lesson.Parts)
-                if (BookReader.Find(Book, part.Start, start, end, preferHeading: true) < 0) problems.Add($"Part \"{part.Title}\" wasn't found in chapter {pack.Chapter}.");
+            for (int pi = 0; pi < lesson.Parts.Count; pi++)
+                if (FindPart(lesson, pi, start, end) < 0) problems.Add($"Part \"{lesson.Parts[pi].Title}\" wasn't found in chapter {pack.Chapter}.");
             foreach (var q in lesson.AllQuestions)
             {
                 if (q.Kind == "mc" && (q.Options.Count < 2 || q.Answer < 0 || q.Answer >= q.Options.Count)) problems.Add($"Question {q.Id} has no valid answer.");
@@ -456,12 +534,12 @@ public static class Course
         return list;
     }
 
-    public static HashSet<int> DoneLessons() => Events.Where(e => e.Kind == "lessonDone" && e.Lesson >= 0).Select(e => e.Lesson).ToHashSet();
+    public static HashSet<int> DoneLessons() => CE.Where(e => e.Kind == "lessonDone" && e.Lesson >= 0).Select(e => e.Lesson).ToHashSet();
 
     public static string Today => DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     /// <summary>True once any device has finished a lesson today.</summary>
-    public static bool DoneToday() => Events.Any(e => e.Kind == "lessonDone" && e.Day == Today);
+    public static bool DoneToday() => CE.Any(e => e.Kind == "lessonDone" && e.Day == Today);
 
     /// <summary>The next lesson to do (the first one not finished), or null if none is imported.</summary>
     public static LessonRef? NextLesson()
@@ -485,8 +563,37 @@ public static class Course
     private static int? FirstPart(PackLesson l, int from, int to)
     {
         if (l.Parts.Count == 0) return null;
-        int i = BookReader.Find(Book, l.Parts[0].Start, from, to, preferHeading: true);
+        int i = FindPart(l, 0, from, to);
         return i < 0 ? null : i;
+    }
+
+    private static readonly HashSet<string> Stop = new() { "the", "and", "for", "from", "with", "into", "of", "a", "an", "to", "in", "on" };
+
+    /// <summary>
+    /// Where a lesson part starts: its heading as written, else a heading with all the title's main words
+    /// (so "Lists, councils and criteria" matches "Lists, Councils, and Criteria"), else the earliest
+    /// passage one of the part's questions points to.
+    /// </summary>
+    public static int FindPart(PackLesson l, int part, int from, int to)
+    {
+        if (part < 0 || part >= l.Parts.Count) return -1;
+        var p = l.Parts[part];
+        int exact = BookReader.Find(Book, p.Start.Length > 0 ? p.Start : p.Title, from, to, preferHeading: true);
+        if (exact >= 0 && Book[exact].Heading > 0) return exact;
+        var words = BookReader.Normalize(p.Title.Length > 0 ? p.Title : p.Start)
+            .Split(new[] { ' ', ',', '.', ':', ';', '"', '\'', '(', ')', '-' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length >= 3 && !Stop.Contains(w)).ToList();
+        if (words.Count > 0)
+            for (int k = Math.Max(0, from); k < Math.Min(to, Book.Count); k++)
+                if (Book[k].Heading > 0 && Book[k].Text.Length < 200)
+                {
+                    string t = BookReader.Normalize(Book[k].Text);
+                    if (words.All(w => t.Contains(w))) return k;
+                }
+        if (exact >= 0) return exact;
+        var refs = l.AllQuestions.SelectMany(q => q.Refs).Where(r => r.Part == part)
+                    .Select(r => BookReader.Find(Book, r.Find, from, to)).Where(x => x >= 0).ToList();
+        return refs.Count > 0 ? refs.Min() : -1;
     }
 
     /// <summary>Where an answer is: the paragraph index for a reference, searched within the lesson's chapter.</summary>
@@ -497,7 +604,7 @@ public static class Course
         int from = cs;
         if (r.Part >= 0 && r.Part < lesson.Lesson.Parts.Count)
         {
-            int p = BookReader.Find(Book, lesson.Lesson.Parts[r.Part].Start, cs, ce, preferHeading: true);
+            int p = FindPart(lesson.Lesson, r.Part, cs, ce);
             if (p >= 0) from = p;
         }
         int i = BookReader.Find(Book, r.Find, from, ce);
@@ -509,13 +616,13 @@ public static class Course
     public static HashSet<string> Hidden()
     {
         var set = new HashSet<string>();
-        foreach (var e in Events)
+        foreach (var e in CE)
             if (e.Kind == "hide") set.Add(e.Question);
             else if (e.Kind == "unhide") set.Remove(e.Question);
         return set;
     }
 
-    public static IEnumerable<string> Flagged() => Events.Where(e => e.Kind == "flag").Select(e => e.Question).Distinct();
+    public static IEnumerable<string> Flagged() => CE.Where(e => e.Kind == "flag").Select(e => e.Question).Distinct();
 
     /// <summary>A question's review state, worked out from every answer on every device, in time order.</summary>
     public record QState(DateTime Due, int Streak, bool Misconception, int Seen);
@@ -526,7 +633,7 @@ public static class Course
         int streak = 0, seen = 0;
         bool miscon = false;
         int[] gaps = { 1, 3, 7, 14, 30, 60, 120 };
-        foreach (var e in Events.Where(e => e.Kind == "answer" && e.Question == questionId))
+        foreach (var e in CE.Where(e => e.Kind == "answer" && e.Question == questionId))
         {
             seen++;
             var day = DateTime.TryParse(e.Day, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : e.At.ToLocalTime().Date;
@@ -539,7 +646,7 @@ public static class Course
     /// <summary>A concept's stage: Learned once answered right (and sure) on three separate days; Retired after a long run.</summary>
     public static ConceptStage StageOf(string concept)
     {
-        var right = Events.Where(e => e.Kind == "answer" && e.Concept == concept);
+        var right = CE.Where(e => e.Kind == "answer" && e.Concept == concept);
         if (!right.Any()) return ConceptStage.New;
         int days = right.Where(e => e.Correct && e.Sure).Select(e => e.Day).Distinct().Count();
         return days >= 6 ? ConceptStage.Retired : days >= 3 ? ConceptStage.Learned : ConceptStage.Learning;
@@ -566,7 +673,7 @@ public static class Course
     /// <summary>Days in a row with a finished lesson, ending today or yesterday.</summary>
     public static int Streak()
     {
-        var days = Events.Where(e => e.Kind == "lessonDone").Select(e => e.Day).ToHashSet();
+        var days = CE.Where(e => e.Kind == "lessonDone").Select(e => e.Day).ToHashSet();
         var d = DateTime.Today;
         if (!days.Contains(Fmt(d))) d = d.AddDays(-1);
         int n = 0;
@@ -578,7 +685,7 @@ public static class Course
 
     /// <summary>Concepts missed most, for the course page.</summary>
     public static List<(string Concept, int Missed)> WeakSpots(int count) =>
-        Events.Where(e => e.Kind == "answer" && !e.Correct && e.Concept.Length > 0)
+        CE.Where(e => e.Kind == "answer" && !e.Correct && e.Concept.Length > 0)
               .GroupBy(e => e.Concept).Select(g => (g.Key, g.Count()))
               .Where(x => StageOf(x.Key) < ConceptStage.Learned)
               .OrderByDescending(x => x.Item2).Take(count).ToList();
@@ -590,7 +697,7 @@ public static class Course
     public static List<Highlight> Highlights()
     {
         var map = new Dictionary<string, Highlight>();
-        foreach (var e in Events)
+        foreach (var e in CE)
         {
             if (e.Kind == "highlight") map[e.Question] = new Highlight(e.Question, e.Chapter, e.Para, e.Quote, e.Color, e.Note, e.At);
             else if (e.Kind == "highlightNote" && map.TryGetValue(e.Question, out var h)) map[e.Question] = h with { Note = e.Note };
@@ -610,7 +717,7 @@ public static class Course
     public static string ExportMarkdown()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# " + Config.Title).AppendLine();
+        sb.AppendLine("# " + Current.Title).AppendLine();
         sb.AppendLine($"Highlights and notes, exported {DateTime.Now:d MMMM yyyy}.").AppendLine();
         foreach (var chapter in Highlights().GroupBy(h => h.Chapter).OrderBy(g => g.Key))
         {
@@ -629,14 +736,14 @@ public static class Course
         return sb.ToString();
     }
 
-    public static string ExportPath => Path.Combine(Dir, $"{Safe(Config.Id)}-notes.md");
+    public static string ExportPath => Path.Combine(Dir, $"{Safe(Current.Id)}-notes.md");
 
     // ---------- Unit exams and the final exam ----------
 
     public record Exam(string Key, string Title, List<(LessonRef Lesson, PackQuestion Q)> Questions);
 
-    public static HashSet<string> ExamsPassed() => Events.Where(e => e.Kind == "examDone" && e.Correct).Select(e => e.Note).ToHashSet();
-    public static HashSet<string> ExamsTaken() => Events.Where(e => e.Kind == "examDone").Select(e => e.Note).ToHashSet();
+    public static HashSet<string> ExamsPassed() => CE.Where(e => e.Kind == "examDone" && e.Correct).Select(e => e.Note).ToHashSet();
+    public static HashSet<string> ExamsTaken() => CE.Where(e => e.Kind == "examDone").Select(e => e.Note).ToHashSet();
 
     /// <summary>The book is finished once its final exam is passed; its questions then join All-books practice.</summary>
     public static bool Finished => ExamsPassed().Contains("final");
@@ -647,16 +754,16 @@ public static class Course
         var lessons = Lessons();
         var done = DoneLessons();
         int prev = 0;
-        for (int u = 0; u < Config.UnitEnds.Count; u++)
+        for (int u = 0; u < Current.UnitEnds.Count; u++)
         {
-            int last = Config.UnitEnds[u];
+            int last = Current.UnitEnds[u];
             var unit = lessons.Where(l => l.Pack.Chapter > prev && l.Pack.Chapter <= last).ToList();
             bool complete = Enumerable.Range(prev + 1, Math.Max(0, last - prev)).All(c => Packs.ContainsKey(c)) && unit.Count > 0 && unit.All(l => done.Contains(l.Index));
             string key = $"unit{u + 1}";
             if (complete && !ExamsPassed().Contains(key)) return new Exam(key, $"Unit exam {u + 1}: chapters {prev + 1}–{last}", ExamQuestions(unit, 20));
             prev = last;
         }
-        bool all = Enumerable.Range(1, Config.Chapters).All(c => Packs.ContainsKey(c)) && lessons.Count > 0 && lessons.All(l => done.Contains(l.Index));
+        bool all = Enumerable.Range(1, Current.Chapters).All(c => Packs.ContainsKey(c)) && lessons.Count > 0 && lessons.All(l => done.Contains(l.Index));
         if (all && !ExamsPassed().Contains("final")) return new Exam("final", "Final exam: the whole book", ExamQuestions(lessons, 40));
         return null;
     }

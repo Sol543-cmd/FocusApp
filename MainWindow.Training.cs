@@ -20,7 +20,6 @@ public partial class MainWindow
 {
     private readonly DispatcherTimer _trainingTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private LessonWindow? _lessonWindow;
-    private Window? _coursePage;
     private string _trainingPromptKey = "";
     private DateTime _trainingSnoozeUntil = DateTime.MinValue;
 
@@ -245,259 +244,420 @@ public partial class MainWindow
         catch (Exception ex) { Log.Error("EndTrainingBlocking", ex); }
     }
 
-    // ---------- The course page ----------
+    // ---------- The Training page (in the main window) ----------
 
     private Action? _refreshCoursePage;
+    private string _trainingView = "library"; // library, book or settings
 
+    /// <summary>Opens the Training page (from the tray menu or anywhere else).</summary>
     private void OpenCoursePage()
     {
-        if (_coursePage != null) { _coursePage.Activate(); return; }
-        var body = new StackPanel { Margin = new Thickness(28, 22, 28, 28), MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left };
-        var window = new Window
-        {
-            Title = "Training", Width = 960, Height = 820, Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
-            WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = IsVisible ? this : null, AllowDrop = true
-        };
-        window.SetResourceReference(BackgroundProperty, "Panel");
-        window.SetResourceReference(ForegroundProperty, "Text");
-        _coursePage = window;
+        if (NavTraining.IsChecked == true) RefreshTraining();
+        else NavTraining.IsChecked = true;
+    }
 
-        TextBlock T(string text, double size = 14, bool bold = false, string? brush = null, double top = 0)
-        {
-            var t = new TextBlock { Text = text, FontSize = size, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, top, 0, 0) };
-            if (brush != null) t.SetResourceReference(TextBlock.ForegroundProperty, brush);
-            return t;
-        }
-        Border Card(UIElement child, double top = 14)
-        {
-            var b = new Border { Child = child, CornerRadius = new CornerRadius(12), Padding = new Thickness(18, 14, 18, 16), Margin = new Thickness(0, top, 0, 0) };
-            b.SetResourceReference(Border.BackgroundProperty, "Panel2");
-            return b;
-        }
-        Button B(string text, Action click, bool primary = false)
-        {
-            var b = new Button { Content = text, Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(0, 0, 10, 0) };
-            if (primary) b.SetResourceReference(StyleProperty, "PrimaryButton");
-            b.Click += (_, _) => click();
-            return b;
-        }
-        Button L(string text, Action click)
-        {
-            var b = new Button { Content = text, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
-            b.SetResourceReference(StyleProperty, "LinkButton");
-            b.Click += (_, _) => click();
-            return b;
-        }
+    private TextBlock TT(string text, double size = 14, bool bold = false, string? brush = null, double top = 0)
+    {
+        var t = new TextBlock { Text = text, FontSize = size, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, top, 0, 0) };
+        if (brush != null) t.SetResourceReference(TextBlock.ForegroundProperty, brush);
+        return t;
+    }
 
-        void ImportPack(string path)
+    private Border TCard(UIElement child, double top = 14)
+    {
+        var b = new Border { Child = child, CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 16, 20, 18), Margin = new Thickness(0, top, 0, 0) };
+        b.SetResourceReference(Border.BackgroundProperty, "Panel");
+        return b;
+    }
+
+    private Button TButton(string text, Action click, bool primary = false)
+    {
+        var b = new Button { Content = text, Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(0, 0, 10, 0) };
+        if (primary) b.SetResourceReference(StyleProperty, "PrimaryButton");
+        b.Click += (_, _) => click();
+        return b;
+    }
+
+    private Button TLink(string text, Action click)
+    {
+        var b = new Button { Content = text, Margin = new Thickness(0, 0, 18, 0), VerticalAlignment = VerticalAlignment.Center };
+        b.SetResourceReference(StyleProperty, "LinkButton");
+        b.Click += (_, _) => click();
+        return b;
+    }
+
+    /// <summary>A header row: an optional back link, the title, and the gear for Training settings.</summary>
+    private DockPanel TrainingHeader(string title, string? subtitle, bool back, bool gear)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        if (gear)
         {
-            try
+            var g = new Button { Content = "\uE713", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 18, Padding = new Thickness(10, 8, 10, 8),
+                                 ToolTip = "Training settings: lesson times, block lists, All-books practice", VerticalAlignment = VerticalAlignment.Top };
+            g.SetResourceReference(StyleProperty, "IconButton");
+            g.Click += (_, _) => { _trainingView = "settings"; RefreshTraining(); };
+            DockPanel.SetDock(g, Dock.Right);
+            row.Children.Add(g);
+        }
+        var left = new StackPanel();
+        if (back)
+        {
+            var b = TLink("← All books", () => { _trainingView = "library"; RefreshTraining(); });
+            b.HorizontalAlignment = HorizontalAlignment.Left;
+            b.Margin = new Thickness(0, 0, 0, 8);
+            left.Children.Add(b);
+        }
+        var h = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap };
+        h.SetResourceReference(StyleProperty, "Heading");
+        left.Children.Add(h);
+        if (subtitle != null) left.Children.Add(TT(subtitle, 14, brush: "Muted", top: 4));
+        row.Children.Add(left);
+        return row;
+    }
+
+    private void RefreshTraining()
+    {
+        if (TrainingHost == null) return;
+        TrainingHost.Children.Clear();
+        _refreshCoursePage = () => { if (NavTraining.IsChecked == true) RefreshTraining(); };
+        if (_trainingView == "settings") BuildTrainingSettings();
+        else if (_trainingView == "book" && Course.HasBook) BuildBookPage();
+        else BuildLibrary();
+    }
+
+    // ----- The library: a calm board of your books -----
+
+    private void BuildLibrary()
+    {
+        _trainingView = "library";
+        TrainingHost.Children.Add(TrainingHeader("Training", "Your books. Open one to see its lessons, chapters and notes.", back: false, gear: true));
+        var board = new WrapPanel { Margin = new Thickness(0, 18, 0, 0) };
+        foreach (var c in Course.Config.Courses.OrderByDescending(c => c.Id == Course.Current.Id).ThenBy(c => c.Title))
+        {
+            bool open = c.Id == Course.Current.Id;
+            var panel = new StackPanel();
+            panel.Children.Add(TT(c.Title, 17, bold: true));
+            string status;
+            double progress = 0;
+            if (open)
             {
-                var pack = ChapterPack.Read(path);
-                var problems = Course.Check(pack, out string summary);
-                string text = summary + "\n\n" + (problems.Count == 0
-                    ? "✓ Every lesson's start was found in your book.\n✓ Every question has an answer and a link to its passage.\n\nAdd it to the course?"
-                    : "Problems found:\n• " + string.Join("\n• ", problems.Take(12)) + (problems.Count > 12 ? $"\n…and {problems.Count - 12} more" : "") +
-                      "\n\nAdd it anyway? Questions whose passage wasn't found just won't have a working Show where link.");
-                if (!Ask(text, "Check chapter pack", defaultNo: problems.Count > 0)) return;
-                Course.AddPack(path, pack);
+                var lessons = Course.Lessons();
+                int done = Course.DoneLessons().Count;
+                progress = lessons.Count == 0 ? 0 : (double)done / lessons.Count;
+                var next = Course.NextLesson();
+                status = Course.Finished ? "Finished" : next != null ? $"Chapter {next.Pack.Chapter} of {c.Chapters} · {done} of {lessons.Count} imported lessons done" :
+                         Course.Packs.Count == 0 ? "No chapter packs yet" : "Waiting for the next chapter pack";
             }
-            catch (Exception ex) { Info("That chapter pack couldn't be read:\n\n" + ex.Message, "Training"); }
-        }
-
-        void Refresh()
-        {
-            body.Children.Clear();
-            var cfg = Course.Config;
-            var title = T("Training", 26, bold: true);
-            body.Children.Add(title);
-            body.Children.Add(T(cfg.Title, 15, brush: "Muted", top: 2));
-
-            // Book file
-            var bookRow = new DockPanel();
-            var choose = B(Course.Book.Count == 0 ? "Choose book file…" : "Replace…", () =>
+            else status = c.BookFileName.Length > 0 ? "Open to see progress" : "No book file yet";
+            panel.Children.Add(TT(status, 13, brush: "Muted", top: 6));
+            var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 14, 0, 0) };
+            track.SetResourceReference(Border.BackgroundProperty, "Panel2");
+            var fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Width = 228 * Math.Clamp(progress, 0, 1) };
+            fill.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
+            var bar = new Grid(); bar.Children.Add(track); bar.Children.Add(fill);
+            panel.Children.Add(bar);
+            if (open)
             {
-                var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Word documents (*.docx)|*.docx", Title = "Choose your book's Word file" };
-                if (dlg.ShowDialog(window) != true) return;
-                try { int n = Course.ImportBook(dlg.FileName); Info($"Done: {n:N0} paragraphs read from {Path.GetFileName(dlg.FileName)}.", "Training"); }
-                catch (Exception ex) { Info("That file couldn't be read:\n\n" + ex.Message, "Training"); }
-                Refresh();
-            }, primary: Course.Book.Count == 0);
-            DockPanel.SetDock(choose, Dock.Right);
-            bookRow.Children.Add(choose);
-            var bookText = new StackPanel();
-            bookText.Children.Add(T("Book file", 14, bold: true));
-            bookText.Children.Add(T(Course.Book.Count == 0 ? "Not chosen yet. The reading always comes from your own Word file, word for word."
-                                                            : $"{cfg.BookFileName} · {Course.Book.Count:N0} paragraphs", 13, brush: "Muted", top: 2));
-            bookRow.Children.Add(bookText);
-            body.Children.Add(Card(bookRow, 18));
-
-            // Next lesson
-            var next = Course.NextLesson();
-            var nextPanel = new StackPanel();
-            bool doneToday = Course.DoneToday();
-            nextPanel.Children.Add(T(doneToday ? "Today's lesson is done" : "Next lesson", 13, brush: "Muted"));
-            nextPanel.Children.Add(T(next == null ? (Course.Packs.Count == 0 ? "Import the chapter 1 pack to begin." : "Every imported lesson is done. Import the next chapter pack.")
-                                                  : $"Chapter {next.Pack.Chapter}: {next.Pack.Title}  ·  {next.Lesson.Title}", 18, bold: true, top: 4));
-            var times = TrainingTimes();
-            nextPanel.Children.Add(T($"Streak: {Course.Streak()} day{(Course.Streak() == 1 ? "" : "s")}  ·  Lessons done: {Course.DoneLessons().Count} of {Course.Lessons().Count} imported" +
-                                     (times.Count > 0 ? $"  ·  Comes up at {string.Join(", ", times.Select(t => DateTime.Today.Add(t).ToString("t")))}" : ""), 13, brush: "Muted", top: 6));
-            var startRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
-            if (next != null) startRow.Children.Add(B("Start lesson", () => StartLesson(required: false), primary: true));
-            startRow.Children.Add(B("Import chapter pack…", () =>
-            {
-                var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Chapter packs (*.focuspack)|*.focuspack|All files|*.*", Title = "Import a chapter pack" };
-                if (dlg.ShowDialog(window) == true) ImportPack(dlg.FileName);
-            }));
-            nextPanel.Children.Add(startRow);
-            var more = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
-            more.Children.Add(L("Highlights and notes", () => OpenNotesWindow(window)));
-            more.Children.Add(L("Export notes to Markdown…", () => ExportNotes(window)));
-            more.Children.Add(L("All-books practice", StartAllBooks));
-            nextPanel.Children.Add(more);
-            if (Course.ExamDue() is Course.Exam due)
-                nextPanel.Children.Add(T($"Next up: {due.Title} ({due.Questions.Count} questions) instead of a reading lesson.", 13, bold: true, top: 8));
-            nextPanel.Children.Add(T("Or drag a .focuspack file onto this window.", 12, brush: "Muted", top: 8));
-            body.Children.Add(Card(nextPanel));
-
-            // Chapter strip
-            var strip = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-            var done = Course.DoneLessons();
-            var lessons = Course.Lessons();
-            for (int ch = 1; ch <= Math.Max(cfg.Chapters, Course.Packs.Keys.DefaultIfEmpty(0).Max()); ch++)
-            {
-                string state, brush;
-                var mine = lessons.Where(l => l.Pack.Chapter == ch).ToList();
-                if (!Course.Packs.ContainsKey(ch)) { state = "no pack yet"; brush = "Line"; }
-                else if (mine.Count > 0 && mine.All(l => done.Contains(l.Index))) { state = "finished"; brush = "FocusBrush"; }
-                else if (mine.Any(l => done.Contains(l.Index))) { state = "in progress"; brush = "BreakBrush"; }
-                else { state = "ready"; brush = "Panel"; }
-                var box = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(7), Margin = new Thickness(0, 0, 6, 6), BorderThickness = new Thickness(1),
-                                       ToolTip = Course.Packs.TryGetValue(ch, out var pk) ? $"Chapter {ch}: {pk.Title} ({state})" : $"Chapter {ch} ({state})",
-                                       Child = new TextBlock { Text = ch.ToString(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 } };
-                box.SetResourceReference(Border.BackgroundProperty, brush);
-                box.SetResourceReference(Border.BorderBrushProperty, "Line");
-                strip.Children.Add(box);
+                var badge = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 2, 9, 2), Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Left,
+                                         Child = TT(Course.Finished ? "Finished" : Course.DoneToday() ? "Today's lesson done" : "Daily lessons", 11.5, bold: true, brush: "FocusBrush") };
+                badge.SetResourceReference(Border.BackgroundProperty, "FocusTint");
+                panel.Children.Add(badge);
             }
-            var stripPanel = new StackPanel();
-            stripPanel.Children.Add(T("Chapters", 14, bold: true));
-            stripPanel.Children.Add(strip);
-            stripPanel.Children.Add(T("Gray: no pack yet · Plain: ready · Amber: in progress · Filled: finished", 12, brush: "Muted", top: 2));
-            body.Children.Add(Card(stripPanel));
-
-            // Weak spots
-            var weak = Course.WeakSpots(5);
-            if (weak.Count > 0)
+            var card = new Border { Child = panel, Width = 268, MinHeight = 150, CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 18, 20, 18),
+                                    Margin = new Thickness(0, 0, 14, 14), Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(1) };
+            card.SetResourceReference(Border.BackgroundProperty, "Panel");
+            card.SetResourceReference(Border.BorderBrushProperty, open ? "FocusBrush" : "Line");
+            string id = c.Id;
+            card.MouseLeftButtonUp += (_, _) =>
             {
-                var wp = new StackPanel();
-                wp.Children.Add(T("Weak spots", 14, bold: true));
-                foreach (var (concept, missed) in weak) wp.Children.Add(T($"{concept}  ·  missed {missed}×", 13, top: 4));
-                body.Children.Add(Card(wp));
-            }
-
-            // Times
-            var tp = new StackPanel();
-            tp.Children.Add(T("Lesson times (also on the practice timelines in Settings, Greek practice)", 14, bold: true));
-            tp.Children.Add(T("The first two pop up and can wait for the next time. At the last one the lesson opens and can't be closed until it's finished; quitting Focus moves it to tomorrow. A lesson never interrupts a meeting or lunch, and the first two wait for a break between focus sessions.", 12, brush: "Muted", top: 2));
-            var timeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            var boxes = new List<TextBox>();
-            for (int i = 0; i < 3; i++)
-            {
-                var tb = new TextBox { Width = 90, Padding = new Thickness(6, 4, 6, 4), Margin = new Thickness(0, 0, 10, 0),
-                                       Text = i < times.Count ? DateTime.Today.Add(times[i]).ToString("t") : "", ToolTip = i == 2 ? "Required" : "Optional pop-up" };
-                boxes.Add(tb);
-                timeRow.Children.Add(tb);
-            }
-            timeRow.Children.Add(B("Save times", () =>
-            {
-                var parsed = new List<string>();
-                foreach (var tb in boxes)
+                if (id != Course.Current.Id)
                 {
-                    if (tb.Text.Trim().Length == 0) continue;
-                    if (!TryParseTime(tb.Text, out var t)) { Info($"\"{tb.Text}\" isn't a time. Use something like 7:00 AM.", "Training"); return; }
-                    parsed.Add(t.ToString(@"hh\:mm", CultureInfo.InvariantCulture));
+                    if (!Ask($"Open \"{c.Title}\"? Its lessons become your daily lessons instead of \"{Course.Current.Title}\".", "Training")) return;
+                    Course.Open(id);
                 }
-                cfg.Times = parsed.Distinct().OrderBy(x => x).ToList();
-                Course.SaveConfig();
-            }));
-            tp.Children.Add(timeRow);
-            var onCheck = new CheckBox { Content = "Lessons pop up at these times", IsChecked = cfg.On, Margin = new Thickness(0, 10, 0, 0) };
-            onCheck.Checked += (_, _) => { cfg.On = true; Course.SaveConfig(); };
-            onCheck.Unchecked += (_, _) => { cfg.On = false; Course.SaveConfig(); };
-            tp.Children.Add(onCheck);
-            body.Children.Add(Card(tp));
+                _trainingView = "book";
+                RefreshTraining();
+            };
+            board.Children.Add(card);
+        }
+        // Add a book
+        var add = new Border { Width = 268, MinHeight = 150, CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 0, 14, 14), Cursor = System.Windows.Input.Cursors.Hand,
+                               BorderThickness = new Thickness(1.5), Background = Brushes.Transparent };
+        add.SetResourceReference(Border.BorderBrushProperty, "Line");
+        var addText = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        addText.Children.Add(TT("+", 28, brush: "Muted"));
+        addText.Children.Add(TT("Add a book", 14, bold: true, brush: "Muted"));
+        ((TextBlock)addText.Children[0]).HorizontalAlignment = HorizontalAlignment.Center;
+        add.Child = addText;
+        add.MouseLeftButtonUp += (_, _) => AddBook();
+        board.Children.Add(add);
+        TrainingHost.Children.Add(board);
+    }
 
-            // Exams and All-books practice
-            var ep = new StackPanel();
-            ep.Children.Add(T("Exams and All-books practice", 14, bold: true));
-            ep.Children.Add(T("A unit exam follows the last chapter of each part of the book, and a final exam the whole book. Enter the chapters where each part ends (for example 3, 9, 18). Passing the final finishes the book; its questions then join All-books practice.", 12, brush: "Muted", top: 2));
-            var unitRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            var units = new TextBox { Width = 200, Padding = new Thickness(6, 4, 6, 4), Text = string.Join(", ", cfg.UnitEnds), Margin = new Thickness(0, 0, 10, 0) };
-            unitRow.Children.Add(units);
-            unitRow.Children.Add(B("Save", () =>
-            {
-                var list = new List<int>();
-                foreach (var part in units.Text.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries))
-                    if (int.TryParse(part, out int n) && n >= 1 && n <= cfg.Chapters) list.Add(n); else { Info($"\"{part}\" isn't a chapter number from 1 to {cfg.Chapters}.", "Training"); return; }
-                cfg.UnitEnds = list.Distinct().OrderBy(n => n).ToList();
-                Course.SaveConfig();
-            }));
-            ep.Children.Add(unitRow);
-            var passed = Course.ExamsPassed();
-            if (passed.Count > 0) ep.Children.Add(T("Passed: " + string.Join(", ", passed.OrderBy(x => x)), 12, brush: "Muted", top: 6));
-            var abAuto = new CheckBox { Content = "All-books practice pops up by itself at its times (set them on the practice timelines)", IsChecked = cfg.AllBooksAuto, Margin = new Thickness(0, 10, 0, 0) };
-            abAuto.Checked += (_, _) => { cfg.AllBooksAuto = true; Course.SaveConfig(); };
-            abAuto.Unchecked += (_, _) => { cfg.AllBooksAuto = false; Course.SaveConfig(); };
-            ep.Children.Add(abAuto);
-            ep.Children.Add(T(Course.Finished ? "All-books practice is ready." : "All-books practice starts once you've passed this book's final exam.", 12, brush: "Muted", top: 4));
-            body.Children.Add(Card(ep));
+    private void AddBook()
+    {
+        var box = new TextBox { Margin = new Thickness(20, 8, 20, 12), Padding = new Thickness(6, 4, 6, 4) };
+        var ok = new Button { Content = "Next: choose its Word file", IsDefault = true, Padding = new Thickness(16, 6, 16, 6), Margin = new Thickness(20, 0, 20, 20), HorizontalAlignment = HorizontalAlignment.Right };
+        ok.SetResourceReference(StyleProperty, "PrimaryButton");
+        var sp = new StackPanel();
+        sp.Children.Add(new TextBlock { Text = "The book's title (and author, if you like)", Margin = new Thickness(20, 20, 20, 0) });
+        sp.Children.Add(box); sp.Children.Add(ok);
+        var dlg = new Window { Title = "Add a book", Width = 460, SizeToContent = SizeToContent.Height, Content = sp, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize };
+        dlg.SetResourceReference(BackgroundProperty, "Panel");
+        dlg.SetResourceReference(ForegroundProperty, "Text");
+        ok.Click += (_, _) => { if (box.Text.Trim().Length > 0) dlg.DialogResult = true; };
+        dlg.Loaded += (_, _) => box.Focus();
+        if (dlg.ShowDialog() != true) return;
+        Course.AddCourse(box.Text.Trim());
+        _trainingView = "book";
+        ChooseBookFile();
+        RefreshTraining();
+    }
 
-            // Block lists
-            var bp = new StackPanel();
-            bp.Children.Add(T("Block lists during lessons", 14, bold: true));
-            bp.Children.Add(T("These switch on when a lesson starts (apps and any Freedom web blocking in them) and off when it ends.", 12, brush: "Muted", top: 2));
-            var bl = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-            foreach (var list in BlockLists.All.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase))
+    private void ChooseBookFile()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Word documents (*.docx)|*.docx", Title = "Choose the book's Word file" };
+        if (dlg.ShowDialog(this) != true) return;
+        try { int n = Course.ImportBook(dlg.FileName); Info($"Done: {n:N0} paragraphs read from {Path.GetFileName(dlg.FileName)}.", "Training"); }
+        catch (Exception ex) { Info("That file couldn't be read:\n\n" + ex.Message, "Training"); }
+        RefreshTraining();
+    }
+
+    private void ImportPack(string path)
+    {
+        try
+        {
+            var pack = ChapterPack.Read(path);
+            if (pack.Course.Length > 0 && pack.Course != Course.Current.Id &&
+                !Ask($"This pack was made for \"{pack.Book}\". Add it to \"{Course.Current.Title}\" anyway?", "Check chapter pack", defaultNo: true)) return;
+            var problems = Course.Check(pack, out string summary);
+            if (problems.Count == 0)
             {
-                var c = new CheckBox { Content = list.Name, IsChecked = cfg.BlockListIds.Contains(list.Id), Margin = new Thickness(0, 4, 18, 4) };
-                string id = list.Id;
-                c.Checked += (_, _) => { if (!cfg.BlockListIds.Contains(id)) cfg.BlockListIds.Add(id); Course.SaveConfig(); };
-                c.Unchecked += (_, _) => { cfg.BlockListIds.Remove(id); Course.SaveConfig(); };
-                bl.Children.Add(c);
+                if (!Ask(summary + "\n\n✓ Every lesson's start was found in your book.\n✓ Every question has an answer and a link to its passage.\n\nAdd it to the course?", "Check chapter pack")) return;
             }
-            if (BlockLists.All.Count == 0) bl.Children.Add(T("No block lists yet (Block lists in the sidebar).", 13, brush: "Muted"));
-            bp.Children.Add(bl);
-            body.Children.Add(Card(bp));
+            else if (!Ask(summary + "\n\nProblems found:\n• " + string.Join("\n• ", problems.Take(12)) + (problems.Count > 12 ? $"\n…and {problems.Count - 12} more" : "") +
+                          "\n\nAdd it anyway? Questions whose passage wasn't found just won't have a working Show where link.", "Check chapter pack", defaultNo: true)) return;
+            Course.AddPack(path, pack);
+            RefreshTraining();
+        }
+        catch (Exception ex) { Info("That chapter pack couldn't be read:\n\n" + ex.Message, "Training"); }
+    }
 
-            // Hidden and flagged
-            var hidden = Course.Hidden().ToList();
-            var flagged = Course.Flagged().ToList();
-            var hp = new StackPanel();
-            hp.Children.Add(T("Hidden and flagged questions", 14, bold: true));
-            hp.Children.Add(T($"{hidden.Count} hidden · {flagged.Count} flagged" + (flagged.Count > 0 ? $" ({string.Join(", ", flagged.Take(8))}{(flagged.Count > 8 ? "…" : "")}): ask Claude to fix these in their chapter packs." : ""), 13, brush: "Muted", top: 2));
-            var all = Course.Packs.Values.SelectMany(p => p.Lessons).SelectMany(l => l.AllQuestions).ToDictionary(q => q.Id, q => q, StringComparer.Ordinal);
-            foreach (var id in hidden.Take(30))
-            {
-                var row = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
-                string qid = id;
-                var restore = L("Restore", () => Course.Add(new TrainingEvent { Kind = "unhide", Question = qid }));
-                DockPanel.SetDock(restore, Dock.Right);
-                row.Children.Add(restore);
-                string text = all.TryGetValue(id, out var q) ? (q.Kind == "card" ? q.Front : q.Prompt) : id;
-                row.Children.Add(T(text, 13));
-                hp.Children.Add(row);
-            }
-            body.Children.Add(Card(hp));
+    private void TrainingPanel_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
+        foreach (var f in files.Where(f => f.EndsWith(".focuspack", StringComparison.OrdinalIgnoreCase))) ImportPack(f);
+    }
+
+    // ----- One book -----
+
+    private void BuildBookPage()
+    {
+        var info = Course.Current;
+        TrainingHost.Children.Add(TrainingHeader(info.Title, info.BookFileName.Length > 0 ? $"{info.BookFileName} · {Course.Book.Count:N0} paragraphs" : "No Word file yet", back: true, gear: true));
+
+        // Next lesson
+        var next = Course.NextLesson();
+        var exam = Course.ExamDue();
+        var np = new StackPanel();
+        np.Children.Add(TT(Course.DoneToday() ? "Today's lesson is done" : "Next lesson", 13, brush: "Muted"));
+        string headline = exam != null ? $"{exam.Title} · {exam.Questions.Count} questions"
+                        : next != null ? $"Chapter {next.Pack.Chapter}: {next.Pack.Title}  ·  {next.Lesson.Title}"
+                        : Course.Book.Count == 0 ? "Choose the book's Word file to begin."
+                        : Course.Packs.Count == 0 ? "Import the chapter 1 pack to begin." : "Every imported lesson is done. Import the next chapter pack.";
+        np.Children.Add(TT(headline, 19, bold: true, top: 4));
+        var times = TrainingTimes();
+        np.Children.Add(TT($"Streak {Course.Streak()} · {Course.DoneLessons().Count} of {Course.Lessons().Count} imported lessons done" +
+                           (times.Count > 0 ? $" · comes up at {string.Join(", ", times.Select(t => DateTime.Today.Add(t).ToString("t")))}" : ""), 13, brush: "Muted", top: 6));
+        var row = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
+        if (next != null || exam != null) row.Children.Add(TButton(exam != null ? "Start exam" : "Start lesson", () => StartLesson(required: false), primary: true));
+        row.Children.Add(TButton("Import chapter pack…", () =>
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Chapter packs (*.focuspack)|*.focuspack|All files|*.*", Title = "Import a chapter pack" };
+            if (dlg.ShowDialog(this) == true) ImportPack(dlg.FileName);
+        }));
+        row.Children.Add(TButton(Course.Book.Count == 0 ? "Choose Word file…" : "Replace Word file…", ChooseBookFile));
+        np.Children.Add(row);
+        var links = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+        links.Children.Add(TLink("Highlights and notes", () => OpenNotesWindow(this)));
+        links.Children.Add(TLink("Export notes to Markdown…", () => ExportNotes(this)));
+        links.Children.Add(TLink("All-books practice", StartAllBooks));
+        np.Children.Add(links);
+        np.Children.Add(TT("You can also drag a .focuspack file onto this page.", 12, brush: "Muted", top: 10));
+        TrainingHost.Children.Add(TCard(np, 18));
+
+        // Chapters
+        var strip = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+        var done = Course.DoneLessons();
+        var lessonsAll = Course.Lessons();
+        for (int ch = 1; ch <= Math.Max(info.Chapters, Course.Packs.Keys.DefaultIfEmpty(0).Max()); ch++)
+        {
+            string state, brush;
+            var mine = lessonsAll.Where(l => l.Pack.Chapter == ch).ToList();
+            if (!Course.Packs.ContainsKey(ch)) { state = "no pack yet"; brush = "Panel2"; }
+            else if (mine.Count > 0 && mine.All(l => done.Contains(l.Index))) { state = "finished"; brush = "FocusBrush"; }
+            else if (mine.Any(l => done.Contains(l.Index))) { state = "in progress"; brush = "BreakBrush"; }
+            else { state = "ready"; brush = "FocusTint"; }
+            var box = new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 0, 6, 6),
+                                   ToolTip = Course.Packs.TryGetValue(ch, out var pk) ? $"Chapter {ch}: {pk.Title} ({state})" : $"Chapter {ch} ({state})",
+                                   Child = new TextBlock { Text = ch.ToString(), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 } };
+            box.SetResourceReference(Border.BackgroundProperty, brush);
+            strip.Children.Add(box);
+        }
+        var cp = new StackPanel();
+        cp.Children.Add(TT("Chapters", 15, bold: true));
+        cp.Children.Add(strip);
+        cp.Children.Add(TT("Shaded: no pack yet · Tinted: ready · Amber: in progress · Filled: finished", 12, brush: "Muted", top: 4));
+        TrainingHost.Children.Add(TCard(cp));
+
+        var weak = Course.WeakSpots(5);
+        if (weak.Count > 0)
+        {
+            var wp = new StackPanel();
+            wp.Children.Add(TT("Weak spots", 15, bold: true));
+            foreach (var (concept, missed) in weak) wp.Children.Add(TT($"{concept}  ·  missed {missed}×", 13, top: 4));
+            TrainingHost.Children.Add(TCard(wp));
         }
 
-        window.Drop += (_, e) =>
+        // Exams (this book)
+        var ep = new StackPanel();
+        ep.Children.Add(TT("Exams", 15, bold: true));
+        ep.Children.Add(TT("A unit exam follows the last chapter of each part of the book, and a final exam the whole book. Enter the chapters where each part ends, for example 3, 10, 19. Passing the final finishes the book; its questions then join All-books practice.", 12, brush: "Muted", top: 2));
+        var unitRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        var units = new TextBox { Width = 200, Padding = new Thickness(6, 4, 6, 4), Text = string.Join(", ", info.UnitEnds), Margin = new Thickness(0, 0, 10, 0), VerticalContentAlignment = VerticalAlignment.Center };
+        unitRow.Children.Add(units);
+        unitRow.Children.Add(TButton("Save", () =>
         {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
-                foreach (var f in files.Where(f => f.EndsWith(".focuspack", StringComparison.OrdinalIgnoreCase))) ImportPack(f);
-        };
-        _refreshCoursePage = () => { if (_coursePage != null) Refresh(); };
-        window.Closed += (_, _) => { _coursePage = null; _refreshCoursePage = null; };
-        Refresh();
-        window.Show();
+            var list = new List<int>();
+            foreach (var part in units.Text.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                if (int.TryParse(part, out int n) && n >= 1 && n <= info.Chapters) list.Add(n); else { Info($"\"{part}\" isn't a chapter number from 1 to {info.Chapters}.", "Training"); return; }
+            info.UnitEnds = list.Distinct().OrderBy(n => n).ToList();
+            Course.SaveConfig();
+        }));
+        ep.Children.Add(unitRow);
+        var passed = Course.ExamsPassed();
+        if (passed.Count > 0) ep.Children.Add(TT("Passed: " + string.Join(", ", passed.OrderBy(x => x)), 12, brush: "Muted", top: 6));
+        TrainingHost.Children.Add(TCard(ep));
+
+        // Hidden and flagged
+        var hidden = Course.Hidden().ToList();
+        var flagged = Course.Flagged().ToList();
+        var hp = new StackPanel();
+        hp.Children.Add(TT("Hidden and flagged questions", 15, bold: true));
+        hp.Children.Add(TT($"{hidden.Count} hidden · {flagged.Count} flagged" + (flagged.Count > 0 ? $" ({string.Join(", ", flagged.Take(8))}{(flagged.Count > 8 ? "…" : "")}): ask Claude to fix these in their chapter packs." : ""), 13, brush: "Muted", top: 2));
+        var all = Course.Packs.Values.SelectMany(p => p.Lessons).SelectMany(l => l.AllQuestions).GroupBy(q => q.Id).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var id in hidden.Take(30))
+        {
+            var r = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+            string qid = id;
+            var restore = TLink("Restore", () => Course.Add(new TrainingEvent { Kind = "unhide", Question = qid }));
+            DockPanel.SetDock(restore, Dock.Right);
+            r.Children.Add(restore);
+            r.Children.Add(TT(all.TryGetValue(id, out var q) ? (q.Kind == "card" ? q.Front : q.Prompt) : id, 13));
+            hp.Children.Add(r);
+        }
+        TrainingHost.Children.Add(TCard(hp));
+
+        var remove = TLink("Remove this book from the library…", () =>
+        {
+            if (!Ask($"Remove \"{info.Title}\" from your library? Its files and your progress stay in the training folder, so adding it again later keeps everything.", "Training", defaultNo: true)) return;
+            Course.RemoveCourse(info.Id);
+            _trainingView = "library";
+            RefreshTraining();
+        });
+        remove.Margin = new Thickness(0, 18, 0, 0);
+        remove.HorizontalAlignment = HorizontalAlignment.Left;
+        TrainingHost.Children.Add(remove);
+    }
+
+    // ----- Settings for all of Training (behind the gear) -----
+
+    private void BuildTrainingSettings()
+    {
+        var cfg = Course.Config;
+        var head = TrainingHeader("Training settings", "These apply to every book.", back: false, gear: false);
+        var back = TLink("← Back", () => { _trainingView = Course.HasBook && Course.Config.Courses.Count > 0 ? "book" : "library"; RefreshTraining(); });
+        back.HorizontalAlignment = HorizontalAlignment.Left;
+        back.Margin = new Thickness(0, 0, 0, 8);
+        TrainingHost.Children.Add(back);
+        TrainingHost.Children.Add(head);
+
+        // Lesson times
+        var times = TrainingTimes();
+        var tp = new StackPanel();
+        tp.Children.Add(TT("Lesson times", 15, bold: true));
+        tp.Children.Add(TT("The first two pop up and can wait for the next time. At the last one the lesson opens and can't be closed until it's finished; quitting Focus moves it to tomorrow. Lessons never interrupt a meeting or lunch, and the first two wait for a break. These also show on the practice timelines (Settings, Greek practice).", 12, brush: "Muted", top: 2));
+        var timeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        var boxes = new List<TextBox>();
+        for (int i = 0; i < 3; i++)
+        {
+            var tb = new TextBox { Width = 90, Padding = new Thickness(6, 4, 6, 4), Margin = new Thickness(0, 0, 10, 0), Text = i < times.Count ? DateTime.Today.Add(times[i]).ToString("t") : "", ToolTip = i == 2 ? "Required" : "Optional pop-up" };
+            boxes.Add(tb);
+            timeRow.Children.Add(tb);
+        }
+        timeRow.Children.Add(TButton("Save times", () =>
+        {
+            var parsed = new List<string>();
+            foreach (var tb in boxes)
+            {
+                if (tb.Text.Trim().Length == 0) continue;
+                if (!TryParseTime(tb.Text, out var t)) { Info($"\"{tb.Text}\" isn't a time. Use something like 7:00 AM.", "Training"); return; }
+                parsed.Add(t.ToString(@"hh\:mm", CultureInfo.InvariantCulture));
+            }
+            cfg.Times = parsed.Distinct().OrderBy(x => x).ToList();
+            Course.SaveConfig();
+        }));
+        tp.Children.Add(timeRow);
+        var onCheck = new CheckBox { Content = "Lessons pop up at these times", IsChecked = cfg.On, Margin = new Thickness(0, 12, 0, 0) };
+        onCheck.Checked += (_, _) => { cfg.On = true; Course.SaveConfig(); };
+        onCheck.Unchecked += (_, _) => { cfg.On = false; Course.SaveConfig(); };
+        tp.Children.Add(onCheck);
+        TrainingHost.Children.Add(TCard(tp, 18));
+
+        // Block lists
+        var bp = new StackPanel();
+        bp.Children.Add(TT("Block lists during lessons", 15, bold: true));
+        bp.Children.Add(TT("These switch on when a lesson starts (apps and any Freedom web blocking in them) and off when it ends.", 12, brush: "Muted", top: 2));
+        var bl = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        foreach (var list in BlockLists.All.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var c = new CheckBox { Content = list.Name, IsChecked = cfg.BlockListIds.Contains(list.Id), Margin = new Thickness(0, 4, 18, 4) };
+            string id = list.Id;
+            c.Checked += (_, _) => { if (!cfg.BlockListIds.Contains(id)) cfg.BlockListIds.Add(id); Course.SaveConfig(); };
+            c.Unchecked += (_, _) => { cfg.BlockListIds.Remove(id); Course.SaveConfig(); };
+            bl.Children.Add(c);
+        }
+        if (BlockLists.All.Count == 0) bl.Children.Add(TT("No block lists yet (Block lists in the sidebar).", 13, brush: "Muted"));
+        bp.Children.Add(bl);
+        TrainingHost.Children.Add(TCard(bp));
+
+        // Reading and review
+        var rp = new StackPanel();
+        rp.Children.Add(TT("Reading and review", 15, bold: true));
+        var page = new CheckBox { Content = "Read in page view (turn pages like a book)", IsChecked = cfg.PageView, Margin = new Thickness(0, 10, 0, 0) };
+        page.Checked += (_, _) => { cfg.PageView = true; Course.SaveConfig(); };
+        page.Unchecked += (_, _) => { cfg.PageView = false; Course.SaveConfig(); };
+        rp.Children.Add(page);
+        var capRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        capRow.Children.Add(TT("Review questions per lesson, at most", 13));
+        var cap = new TextBox { Width = 50, Margin = new Thickness(10, 0, 10, 0), Padding = new Thickness(6, 2, 6, 2), Text = cfg.ReviewCap.ToString() };
+        cap.LostFocus += (_, _) => { if (int.TryParse(cap.Text, out int n) && n >= 0 && n <= 50) { cfg.ReviewCap = n; Course.SaveConfig(); } else cap.Text = cfg.ReviewCap.ToString(); };
+        capRow.Children.Add(cap);
+        rp.Children.Add(capRow);
+        TrainingHost.Children.Add(TCard(rp));
+
+        // All-books practice
+        var ap = new StackPanel();
+        ap.Children.Add(TT("All-books practice", 15, bold: true));
+        ap.Children.Add(TT("Short rounds of questions from books you've finished. Set its times on the practice timelines.", 12, brush: "Muted", top: 2));
+        var auto = new CheckBox { Content = "Pop up by itself at its times", IsChecked = cfg.AllBooksAuto, Margin = new Thickness(0, 10, 0, 0) };
+        auto.Checked += (_, _) => { cfg.AllBooksAuto = true; Course.SaveConfig(); };
+        auto.Unchecked += (_, _) => { cfg.AllBooksAuto = false; Course.SaveConfig(); };
+        ap.Children.Add(auto);
+        var tl = TLink("Open the practice timelines", OpenPracticeTimelines);
+        tl.Margin = new Thickness(0, 10, 0, 0);
+        tl.HorizontalAlignment = HorizontalAlignment.Left;
+        ap.Children.Add(tl);
+        TrainingHost.Children.Add(TCard(ap));
     }
 }
