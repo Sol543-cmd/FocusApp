@@ -655,8 +655,20 @@ public class BlockList
     /// <summary>"block" blocks the sites above; "allow" blocks every site except them.</summary>
     public string SitesMode { get; set; } = "block";
 
+    /// <summary>Freedom blocklists (Freedom's ids) to turn on during focus sessions that use this list.</summary>
+    public List<string> FreedomBlocklistIds { get; set; } = new();
+
     [JsonIgnore]
-    public string Summary => Apps.Count switch { 0 => "No apps yet", 1 => "1 app", _ => $"{Apps.Count} apps" };
+    public string Summary
+    {
+        get
+        {
+            string apps = Apps.Count switch { 0 => "", 1 => "1 app", _ => $"{Apps.Count} apps" };
+            string freedom = FreedomBlocklistIds.Count switch { 0 => "", 1 => "1 Freedom list", _ => $"{FreedomBlocklistIds.Count} Freedom lists" };
+            string both = string.Join(" · ", new[] { apps, freedom }.Where(t => t.Length > 0));
+            return both.Length > 0 ? both : "Empty";
+        }
+    }
 }
 
 /// <summary>All block lists, shared across the app and saved to blocklists.json.</summary>

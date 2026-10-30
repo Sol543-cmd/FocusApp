@@ -145,7 +145,7 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | MainWindow.xaml.cs       | Main window: tray icon, quitting, running sessions, layouts    |
 | MainWindow.Plan.cs       | Day plan timeline, editing blocks, copy and paste              |
 | MainWindow.Picker.cs     | The "block apps" and "block list" pickers                      |
-| MainWindow.Lists.cs      | The Block lists tab                                            |
+| MainWindow.Lists.cs      | The Block lists tab: apps and Freedom web blocking in each list, deleting lists |
 | MainWindow.Session.cs    | Pomodoro, quick focus, short breaks, settings, nudges, focus time |
 | AutoPlanner.cs           | Fills a day around meetings, the break and lunch (plain arithmetic, no AI) |
 | PlanReflow.cs            | Keeps fixed times in place while you drag, resize or delete blocks |
@@ -197,7 +197,7 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | Fonts\*.ttf             | Cormorant Garamond SemiBold for the numeral badge (SIL Open Font License, OFL.txt) |
 | DatePopup.cs             | The small pop-up calendar on date fields                       |
 | FreedomService.cs        | Freedom (freedom.to): signing in, reading your blocklists and devices, starting a session |
-| MainWindow.Freedom.cs    | The Freedom window, and starting Freedom with each focus session |
+| MainWindow.Freedom.cs    | The Freedom window, and starting Freedom for each focus session whose block lists include Freedom blocklists |
 | MainWindow.Timelines.cs  | Practice timelines: your own round times for Words, Alphabet and Concepts |
 | ScriptureLinks.cs        | Finds Scripture references and opens them in Logos (book names and abbreviations are listed here) |
 | Updater.cs               | Checks GitHub Releases and downloads FocusSetup.exe            |

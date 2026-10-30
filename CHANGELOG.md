@@ -3,6 +3,20 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.4.0
+
+- Block lists can now include Freedom web blocking: each list has a Freedom web blocking section with
+  your Freedom blocklists (exactly as Freedom has them; Sync gets them again). When a focus session that
+  uses the list starts, Freedom turns those blocklists on for exactly that session's length. With a whole
+  day planned, Freedom starts again at each focus session after a break.
+- Block lists page redesigned: list cards with what each list holds, a delete button on every card, and
+  the editor in two clear sections (Apps, Freedom web blocking). Freedom's connection and devices are at
+  the bottom left (Freedom…).
+- Deleting a block list now works while a day is running; only the list blocking the current session
+  waits until that session ends.
+- Freedom window: devices are listed first; the old "start with every focus session" option now reads
+  "Also start the blocklists ticked below with every focus session".
+
 ## 1.3.0
 
 - Freedom: connect your Freedom account in Settings, Focus sessions, Open Freedom (or Freedom… in the

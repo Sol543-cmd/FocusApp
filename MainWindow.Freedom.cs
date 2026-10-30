@@ -23,41 +23,67 @@ public partial class MainWindow
     private void SetUpFreedom()
     {
         FreedomService.Load();
-        FreedomService.Changed += () => Dispatcher.BeginInvoke(new Action(() => { UpdateFreedomSummary(); _refreshFreedomWindow?.Invoke(); }));
+        FreedomService.Changed += () => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            UpdateFreedomSummary();
+            UpdateListsFreedomStatus();
+            _refreshFreedomWindow?.Invoke();
+            if (ListsPanel.Visibility == Visibility.Visible && !FreedomListsHost.IsKeyboardFocusWithin) FillFreedomChoices();
+        }));
         _runner.BlockStarted += FreedomBlockStarted;
         _freedomSyncTimer.Tick += async (_, _) => await SyncFreedomQuietly();
         _freedomSyncTimer.Start();
         _tray.ContextMenuStrip?.Items.Insert(1, new System.Windows.Forms.ToolStripMenuItem("Freedom…", null, (_, _) => { ShowFromTray(); OpenFreedomWindow(); }));
         UpdateFreedomSummary();
+        UpdateListsFreedomStatus();
         Dispatcher.BeginInvoke(new Action(async () => await SyncFreedomQuietly()), DispatcherPriority.ApplicationIdle);
     }
 
     private async Task SyncFreedomQuietly()
     {
         if (!FreedomService.SignedIn) return;
-        try { await FreedomService.SyncAsync(); }
+        try { await FreedomService.SyncAsync(); PruneFreedomFromLists(); }
         catch (Exception ex) { Log.Write("Freedom sync: " + ex.Message); }
     }
 
-    /// <summary>A focus session started: start Freedom for the same length, with the ticked blocklists and devices.</summary>
+    private HashSet<string> _freedomLastLists = new();
+
+    /// <summary>The Freedom blocklists a focus session asks for: those in its block lists, plus any set to run with every focus session.</summary>
+    private HashSet<string> FreedomListsFor(PlanBlock block)
+    {
+        var ids = new HashSet<string>();
+        foreach (var id in block.BlockListIds)
+            if (BlockLists.Find(id) is BlockList list) ids.UnionWith(list.FreedomBlocklistIds);
+        if (FreedomService.Data.StartWithFocus) ids.UnionWith(FreedomService.Data.BlocklistIds);
+        return ids;
+    }
+
+    /// <summary>
+    /// A focus session started (the first of the day, or the next one after a break): start Freedom for exactly
+    /// the session's length with the Freedom blocklists its block lists include.
+    /// </summary>
     private async void FreedomBlockStarted(PlanBlock block)
     {
-        if (!block.IsFocus || _resuming) return;
-        var data = FreedomService.Data;
-        if (!data.StartWithFocus || !FreedomService.SignedIn) return;
+        if (!block.IsFocus || _resuming || !FreedomService.SignedIn) return;
+        if (FreedomListsFor(block).Count == 0) return;
         int minutes = (int)Math.Ceiling(_runner.Remaining.TotalMinutes);
         if (minutes < 1) return;
-        // Freedom is already blocking until at least the end of this session (back-to-back sessions).
-        if (data.LastEndUtc > DateTime.UtcNow.AddMinutes(minutes)) return;
+        var data = FreedomService.Data;
         try
         {
-            await FreedomService.SyncAsync(); // a list deleted in Freedom since the last sync isn't sent
-            if (data.BlocklistIds.Count == 0 || data.DeviceIds.Count == 0)
+            await FreedomService.SyncAsync(); // lists deleted in Freedom since the last sync aren't sent
+            PruneFreedomFromLists();
+            var lists = FreedomListsFor(block);
+            if (lists.Count == 0) return;
+            // Back-to-back sessions with the same lists: Freedom is already on long enough.
+            if (lists.SetEquals(_freedomLastLists) && data.LastEndUtc > DateTime.UtcNow.AddMinutes(minutes)) return;
+            if (data.DeviceIds.Count == 0)
             {
-                _toast.ShowMessage("Freedom didn't start", "No Freedom blocklist or device is ticked any more. Open Freedom from the tray menu to choose.");
+                _toast.ShowMessage("Freedom didn't start", "No Freedom device is chosen. Open Freedom… on the Block lists page and tick the devices to block on.", "Open Freedom", OpenFreedomWindow);
                 return;
             }
-            await FreedomService.StartAsync(data.BlocklistIds, data.DeviceIds, minutes);
+            await FreedomService.StartAsync(lists, data.DeviceIds, minutes);
+            _freedomLastLists = lists;
         }
         catch (Exception ex)
         {
@@ -72,9 +98,7 @@ public partial class MainWindow
         var d = FreedomService.Data;
         summary.Text = !FreedomService.SignedIn
             ? "Not connected. Connect to start your Freedom blocklists with each focus session."
-            : d.StartWithFocus
-                ? $"Starts with each focus session: {Plural(d.BlocklistIds.Count, "blocklist")} on {Plural(d.DeviceIds.Count, "device")}."
-                : $"Connected as {d.Email}. Not starting with focus sessions.";
+            : $"Connected as {d.Email}, blocking on {Plural(d.DeviceIds.Count, "device")}. Add Freedom blocklists to a block list on the Block lists page.";
     }
 
     private static string Plural(int n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
@@ -172,12 +196,12 @@ public partial class MainWindow
             links.Children.Add(Link("Disconnect", () => { FreedomService.SignOut(); Say("Disconnected from Freedom."); }));
             body.Children.Add(links);
 
-            var auto = new CheckBox { Content = "Start Freedom with every focus session", IsChecked = d.StartWithFocus, Margin = new Thickness(0, 18, 0, 0), FontWeight = FontWeights.SemiBold };
+            var auto = new CheckBox { Content = "Also start the blocklists ticked below with every focus session", IsChecked = d.StartWithFocus, Margin = new Thickness(0, 18, 0, 0), FontWeight = FontWeights.SemiBold };
             auto.Checked += (_, _) => { d.StartWithFocus = true; FreedomService.Save(); };
             auto.Unchecked += (_, _) => { d.StartWithFocus = false; FreedomService.Save(); };
             body.Children.Add(auto);
-            body.Children.Add(Caption("Freedom runs for the length of the session, on the devices and with the blocklists ticked below. " +
-                                      "Back-to-back sessions extend it. Breaks aren't blocked by Freedom.", 4));
+            body.Children.Add(Caption("Usually you'll add Freedom blocklists to a block list instead (Block lists page): Freedom then runs for each focus " +
+                                      "session that uses that list, starting again after every break. This option adds the blocklists below to every focus session.", 4));
 
             void AddChecks(string heading, List<FreedomItem> items, List<string> chosen, string empty)
             {
@@ -192,8 +216,8 @@ public partial class MainWindow
                     body.Children.Add(check);
                 }
             }
-            AddChecks("Blocklists", d.Blocklists, d.BlocklistIds, "No blocklists in Freedom yet. Make one in the Freedom dashboard, then Sync Freedom.");
-            AddChecks("Devices", d.Devices, d.DeviceIds, "No devices in Freedom yet.");
+            AddChecks("Devices to block on", d.Devices, d.DeviceIds, "No devices in Freedom yet.");
+            AddChecks("Blocklists for Start now (and the option above)", d.Blocklists, d.BlocklistIds, "No blocklists in Freedom yet. Make one in the Freedom dashboard, then Sync Freedom.");
 
             body.Children.Add(Sub("Start a session now"));
             var row = new StackPanel { Orientation = Orientation.Horizontal };
