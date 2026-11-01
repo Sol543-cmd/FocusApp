@@ -45,6 +45,18 @@ public class PackPart
     [JsonPropertyName("watch")] public List<string> Watch { get; set; } = new();
 }
 
+/// <summary>A dated event for the timeline review. Year: negative for BCE (−167 = 167 BCE). Within: years either way that still count as right.</summary>
+public class PackEvent
+{
+    [JsonPropertyName("text")] public string Text { get; set; } = "";
+    [JsonPropertyName("year")] public int Year { get; set; }
+    [JsonPropertyName("within")] public int Within { get; set; } = 10;
+    [JsonPropertyName("note")] public string Note { get; set; } = "";
+    [JsonPropertyName("find")] public string Find { get; set; } = "";
+
+    public static string Label(int year) => year < 0 ? $"{-year} BCE" : $"{Math.Max(1, year)} CE";
+}
+
 public class PackLesson
 {
     [JsonPropertyName("title")] public string Title { get; set; } = "";
@@ -55,6 +67,7 @@ public class PackLesson
     [JsonPropertyName("cards")] public List<PackQuestion> Cards { get; set; } = new();
     [JsonPropertyName("quiz")] public List<PackQuestion> Quiz { get; set; } = new();
     [JsonPropertyName("endsChapter")] public bool EndsChapter { get; set; }
+    [JsonPropertyName("timeline")] public List<PackEvent> Timeline { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<PackQuestion> AllQuestions => Warmup.Concat(Practice).Concat(Cards).Concat(Quiz);
 }
@@ -321,6 +334,14 @@ public class CourseConfig
     public double ReadingSize { get; set; } = 17;
     /// <summary>The reading's background: theme (follows Focus), paper, sepia, white, sage, gray, slate or night.</summary>
     public string ReadingBg { get; set; } = "theme";
+    /// <summary>scroll, page (one column of pages) or two (two columns, like an open book).</summary>
+    public string ReadingLayout { get; set; } = "";
+    public double ReadingSpacing { get; set; } = 1.65;
+    /// <summary>The text column's width in pixels (Narrow 620, Normal 760, Wide 940).</summary>
+    public int ReadingWidth { get; set; } = 760;
+    public bool ReadingJustify { get; set; }
+    /// <summary>Whether the reading settings panel is open beside the text.</summary>
+    public bool ReadingPanelOpen { get; set; } = true;
 
     // ----- Evening card review: a short round of the day's hardest memory cards -----
     public bool CardReviewOn { get; set; } = true;
@@ -576,6 +597,29 @@ public static class Course
     /// <summary>True when the next lesson was started (here or on another device) but isn't finished.</summary>
     public static bool InProgress(LessonRef? lesson) => lesson != null && !DoneLessons().Contains(lesson.Index) && StepsDone(lesson.Index).Count > 0;
 
+    // ---------- Thumbs up / down and Prioritize ----------
+
+    /// <summary>+1 thumbs up (see it more), −1 thumbs down (see it less), 0 none. The latest vote wins.</summary>
+    public static int VoteOf(string questionId) => CE.LastOrDefault(e => e.Kind == "vote" && e.Question == questionId)?.Grade ?? 0;
+    public static void Vote(string questionId, int vote) => Add(new TrainingEvent { Kind = "vote", Question = questionId, Grade = vote });
+    public static bool IsPrioritized(string questionId) => (CE.LastOrDefault(e => e.Kind == "priority" && e.Question == questionId)?.Grade ?? 0) > 0;
+    public static void SetPriority(string questionId, bool on) => Add(new TrainingEvent { Kind = "priority", Question = questionId, Grade = on ? 1 : 0 });
+
+    // ---------- Timeline review ----------
+
+    /// <summary>The dated events for a lesson's timeline: this lesson's plus every finished lesson's (latest misses first), at most <paramref name="max"/>.</summary>
+    public static List<(LessonRef Lesson, PackEvent E)> TimelineFor(LessonRef lesson, int max = 8)
+    {
+        var done = DoneLessons();
+        var mine = lesson.Lesson.Timeline.Select(e => (lesson, e)).ToList();
+        var earlier = Lessons().Where(l => l.Index != lesson.Index && done.Contains(l.Index)).SelectMany(l => l.Lesson.Timeline.Select(e => (l, e)))
+            .OrderByDescending(x => TimelineMisses(x.e.Text)).ThenBy(_ => Guid.NewGuid()).ToList();
+        return mine.Concat(earlier).Take(Math.Max(mine.Count, max)).ToList();
+    }
+
+    public static int TimelineMisses(string text) =>
+        CE.Count(e => e.Kind == "timeline" && e.Question == text && !e.Correct) - CE.Count(e => e.Kind == "timeline" && e.Question == text && e.Correct);
+
     // ---------- Evening card review ----------
 
     public static bool CardReviewDoneToday() => CE.Any(e => e.Kind == "cardReviewDone" && e.Day == Today);
@@ -598,8 +642,8 @@ public static class Course
                 int misses = answers.Count(a => a.Grade == 0 || (a.Grade < 0 && !a.Correct));
                 var last = answers[^1];
                 int lastGrade = last.Grade >= 0 ? last.Grade : last.Correct ? 1 : 0;
-                if (lastGrade == 2 && misses == 0) continue;
-                list.Add((l, q, misses * 2 + (lastGrade == 0 ? 2 : lastGrade == 1 ? 1 : 0)));
+                if (lastGrade == 2 && misses == 0 && !IsPrioritized(q.Id) && VoteOf(q.Id) <= 0) continue;
+                list.Add((l, q, misses * 2 + (lastGrade == 0 ? 2 : lastGrade == 1 ? 1 : 0) + (IsPrioritized(q.Id) ? 100 : 0) + VoteOf(q.Id) * 100));
             }
         return list.OrderByDescending(x => x.Score).Take(Math.Max(1, max)).Select(x => (x.Item1, x.Item2)).ToList();
     }
@@ -689,10 +733,12 @@ public static class Course
         int streak = 0, seen = 0;
         bool miscon = false;
         int[] gaps = { 1, 3, 7, 14, 30, 60, 120 };
+        DateTime last = DateTime.MinValue;
         foreach (var e in CE.Where(e => e.Kind == "answer" && e.Question == questionId))
         {
             seen++;
             var day = DateTime.TryParse(e.Day, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : e.At.ToLocalTime().Date;
+            last = day;
             if (e.Grade == 0) { streak = 0; miscon = false; due = day.AddDays(1); }
             else if (e.Grade == 2)
             {
@@ -702,6 +748,13 @@ public static class Course
             }
             else if (e.Grade == 1 || (e.Correct && e.Sure)) { streak++; miscon = false; due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)]); }
             else { streak = 0; miscon = !e.Correct && e.Sure; due = day.AddDays(1); }
+        }
+        // Thumbs up brings it back sooner (half the gap), thumbs down later (double); it always stays in the schedule.
+        int vote = VoteOf(questionId);
+        if (vote != 0 && last != DateTime.MinValue && due > last)
+        {
+            int gap = (due - last).Days;
+            due = last.AddDays(vote > 0 ? Math.Max(1, gap / 2) : gap * 2);
         }
         return new QState(due, streak, miscon, seen);
     }

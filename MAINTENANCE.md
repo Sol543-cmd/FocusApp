@@ -205,6 +205,7 @@ like `FocusBrush` (focus sessions), `BreakBrush` (breaks), or `MeetingBrush` (me
 | MainWindow.Freedom.cs    | The Freedom window, and starting Freedom for each focus session whose block lists include Freedom blocklists |
 | MainWindow.Timelines.cs  | Practice timelines: your own round times for Words, Alphabet and Concepts |
 | Training.cs              | The book course: chapter packs, reading your Word file, the per-device progress logs, review scheduling |
+| LessonWindow.Timeline.cs | The timeline step of a lesson (drag events onto dated marks) |
 | LessonWindow.cs          | The lesson player: warm-up, reading (font, background, Kindle-style pages, highlight pop-up), review, practice, memory cards (✕ ✓✓ ✓), chapter quiz, saved progress, the evening card review |
 | MainWindow.Training.cs   | The Training page, the three daily lesson times, block lists during lessons |
 | ScriptureLinks.cs        | Finds Scripture references and opens them in Logos (book names and abbreviations are listed here) |

@@ -1123,12 +1123,11 @@
                                         <DockPanel>
                                             <CheckBox x:Name="Check" DockPanel.Dock="Left" Style="{StaticResource TaskCheck}" VerticalAlignment="Top" Margin="0,2,10,0" Click="ResolveBinTask_Click" ToolTip="Finish this task"/>
                                             <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource IconButton}" FontSize="12" Click="DeleteBinTask_Click" ToolTip="Delete task (Delete)" VerticalAlignment="Center"/>
-                                            <!-- Add to today / Add to tomorrow: shown while the cursor is over the task -->
-                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding DataContext.TodayVisibility, RelativeSource={RelativeSource AncestorType=Window}}">
-                                                <StackPanel x:Name="DayBtns" Orientation="Horizontal">
-                                                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/></Style></StackPanel.Style>
-                                                    <Button x:Name="AddTodayBtn" Content="Today" Style="{StaticResource LinkButton}" FontSize="12" Padding="6,2" Margin="0" Click="AddToToday_Click" ToolTip="Add to today" VerticalAlignment="Center"/>
-                                                    <Button x:Name="AddTomorrowBtn" Content="Tomorrow" Style="{StaticResource LinkButton}" FontSize="12" Padding="6,2" Margin="0,0,4,0" Click="AddToTomorrow_Click" ToolTip="Add to tomorrow" VerticalAlignment="Center"/>
+                                            <!-- Today / Tomorrow: small tags on every task (one already set for that day hides) -->
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <StackPanel x:Name="DayBtns" Orientation="Horizontal" Margin="6,0,4,0">
+                                                    <Button x:Name="AddTodayBtn" Content="Today" Style="{StaticResource DayTag}" Click="AddToToday_Click" ToolTip="Add to today"/>
+                                                    <Button x:Name="AddTomorrowBtn" Content="Tomorrow" Style="{StaticResource DayTag}" Click="AddToTomorrow_Click" ToolTip="Add to tomorrow"/>
                                                 </StackPanel>
                                             </StackPanel>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">
@@ -1151,9 +1150,6 @@
                                         <DataTrigger Binding="{Binding IsLow}" Value="True">
                                             <Setter TargetName="Check" Property="BorderBrush" Value="{DynamicResource PriorityLow}"/>
                                         </DataTrigger>
-                                        <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="DayBtns" Property="Visibility" Value="Visible"/>
-                                        </Trigger>
                                         <DataTrigger Binding="{Binding IsSetForToday}" Value="True">
                                             <Setter TargetName="AddTodayBtn" Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>

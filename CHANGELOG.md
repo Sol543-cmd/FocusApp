@@ -3,6 +3,35 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.3
+
+Includes 1.7.2 (never released separately):
+
+
+- Reading, redesigned: a reading progress bar with time left, the lesson's parts as buttons that jump to each part,
+  and a reading-settings panel beside the text (folds away with Aa): layout (scroll, pages or two columns), font,
+  size, background, line spacing, width and alignment. In page layouts, arrows beside the page turn it too.
+- Answers, cleaner: the other choices fade, and one card holds the verdict, when it comes back, the explanation,
+  See it in the book and ··· (Hide, Flag). Enter goes on.
+- Thumbs up and thumbs down beside every question and memory card: up brings it back sooner (and first in the
+  evening card review), down later. It always stays in the spaced-repetition schedule.
+- Timeline in every lesson: drag events onto a dated line; a bubble shows the year under the pointer; nudge the
+  selected card a year at a time with ‹ › or the arrow keys (good on a touchscreen); Finished shows what was right,
+  with arrows to the real dates for the rest. Chapter packs carry the dated events (chapter 2's updated pack has them).
+- The book's page is now a dashboard: today's lesson with its stages, book progress, the evening review, four
+  numbers, and each chapter's progress.
+
+- Tasks: small Today and Tomorrow tags on every task (not just on hover), to add it to that day in one click.
+- Reading: Scripture references in the book's text link to Logos.
+- Page view: only the strip beside the middle of the page turns it, not the top near the window buttons or the
+  page bar at the bottom.
+- Memory cards: the instructions under the card are gone.
+- Lessons always run in this order: warm-up, reading, practice (this lesson's questions), memory cards (this
+  lesson's), the chapter quiz when a chapter ends, then review (cards first, then multiple choice, from every lesson
+  of the book done so far). The evening card review comes later in the day.
+- Extra lessons any time (an evening, a weekend): Do an extra lesson on the Training page starts the next one with
+  no questions asked; it counts, and the next weekday offers the one after it.
+
 ## 1.7.1
 
 - One schedule for practice: Words, Alphabet and Concepts each come up at the times on their own row of Practice

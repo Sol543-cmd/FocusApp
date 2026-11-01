@@ -24,7 +24,7 @@ namespace FocusApp;
 /// computer). In required mode (the day's last time) it can't be closed until finished; quitting Focus is the only way out.
 /// The same window runs exams, All-books practice rounds and the evening card review.
 /// </summary>
-public class LessonWindow : Window
+public partial class LessonWindow : Window
 {
     private sealed record Step(string Key, Action Show);
 
@@ -212,12 +212,6 @@ public class LessonWindow : Window
             for (int i = 0; i < warm.Count; i++) { var q = warm[i]; int n = i; _steps.Add(new("warm:" + q.Id, () => ShowMc(q, _lesson, $"Warm-up {n + 1} of {warm.Count}", scored: false, key: "warm:" + q.Id))); }
             _steps.Add(new("reading", Reading));
         }
-        var review = Course.DueReview(Course.Config.ReviewCap).Where(x => !_stepsDone.Contains("review:" + x.Q.Id)).ToList();
-        for (int i = 0; i < review.Count; i++)
-        {
-            var (rl, rq) = review[i]; int n = i; string key = "review:" + rq.Id;
-            _steps.Add(new(key, () => { if (rq.Kind == "card") ShowCard(rq, rl, $"Review {n + 1} of {review.Count}", key); else ShowMc(rq, rl, $"Review {n + 1} of {review.Count}", scored: true, key: key); }));
-        }
         var practice = l.Practice.Where(q => !hidden.Contains(q.Id) && !_stepsDone.Contains("practice:" + q.Id)).ToList();
         for (int i = 0; i < practice.Count; i++) { var q = practice[i]; int n = i; _steps.Add(new("practice:" + q.Id, () => ShowMc(q, _lesson, $"Practice {n + 1} of {practice.Count}", scored: true, key: "practice:" + q.Id))); }
         var cards = l.Cards.Where(q => !hidden.Contains(q.Id) && !_stepsDone.Contains("card:" + q.Id)).ToList();
@@ -230,6 +224,20 @@ public class LessonWindow : Window
                 var q = quiz[i]; string label = $"Chapter quiz {i + 1} of {quiz.Count}"; string key = "quiz:" + q.Id;
                 _steps.Add(new(key, () => { if (q.Kind == "order") ShowOrder(q, label, key); else ShowMc(q, _lesson, label, scored: true, key: key); }));
             }
+        }
+        // Timeline: drag this lesson's dated events (and earlier lessons') onto a dated line.
+        if (!_stepsDone.Contains("timeline"))
+        {
+            var tl = Course.TimelineFor(_lesson);
+            if (tl.Count >= 2) _steps.Add(new("timeline", () => ShowTimeline(tl)));
+        }
+        // Review: due questions from every lesson of this book done so far: memory cards first, then multiple choice.
+        var review = Course.DueReview(Course.Config.ReviewCap).Where(x => !_stepsDone.Contains("review:" + x.Q.Id))
+                           .OrderBy(x => x.Q.Kind == "card" ? 0 : 1).ToList();
+        for (int i = 0; i < review.Count; i++)
+        {
+            var (rl, rq) = review[i]; int n = i; string key = "review:" + rq.Id;
+            _steps.Add(new(key, () => { if (rq.Kind == "card") ShowCard(rq, rl, $"Review {n + 1} of {review.Count}", key); else ShowMc(rq, rl, $"Review {n + 1} of {review.Count}", scored: true, key: key); }));
         }
         _steps.Add(new("finish", Finish));
     }
@@ -249,6 +257,7 @@ public class LessonWindow : Window
         if (_step >= _steps.Count) return;
         _keys = null;
         RestorePage();
+        _page.MaxWidth = 760;
         _page.Children.Clear();
         _scroll.ScrollToTop();
         _steps[_step].Show();
@@ -289,32 +298,62 @@ public class LessonWindow : Window
 
     private void SetStep(string text) => _stepLabel.Text = text;
 
-    /// <summary>"Show where this is in the text", Hide and Flag, under an answer.</summary>
+    /// <summary>Under an answer: See it in the book and ··· (Hide, Flag).</summary>
     private WrapPanel AnswerLinks(PackQuestion q, Course.LessonRef lesson)
     {
-        var row = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
+        var row = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+        Button Chip(string text, string? tip = null)
+        {
+            var b = new Button { Content = text, Padding = new Thickness(11, 4, 11, 5), Margin = new Thickness(0, 0, 8, 6), FontSize = 13, ToolTip = tip };
+            return b;
+        }
         foreach (var r in q.Refs.Take(4))
         {
             var rr = r;
-            row.Children.Add(Link(q.Refs.Count > 1 && r.Label != null ? $"Show where: {r.Label}" : "Show where this is in the text", () => ShowWhere(lesson, rr)));
+            var see = Chip(q.Refs.Count > 1 && r.Label != null ? $"See it in the book: {r.Label}" : "See it in the book", "Opens the reading at this passage");
+            see.Click += (_, _) => ShowWhere(lesson, rr);
+            row.Children.Add(see);
         }
-        Button? hide = null;
-        hide = Link("Hide", () =>
-        {
-            Course.Add(new TrainingEvent { Kind = "hide", Question = q.Id, Concept = q.Concept });
-            hide!.Content = "Hidden"; hide.IsEnabled = false;
-        });
-        hide.ToolTip = "Never show this question again (restore it from the course page)";
-        row.Children.Add(hide);
-        Button? flag = null;
-        flag = Link("Flag", () =>
-        {
-            Course.Add(new TrainingEvent { Kind = "flag", Question = q.Id, Concept = q.Concept });
-            flag!.Content = "Flagged"; flag.IsEnabled = false;
-        });
-        flag.ToolTip = "Mark this question as badly written, to fix in its chapter pack";
-        row.Children.Add(flag);
+        var more = Chip("···", "Hide or flag this question");
+        var menu = new ContextMenu();
+        var hide = new MenuItem { Header = "Hide (never show it again)" };
+        hide.Click += (_, _) => { Course.Add(new TrainingEvent { Kind = "hide", Question = q.Id, Concept = q.Concept }); hide.IsEnabled = false; hide.Header = "Hidden"; };
+        var flag = new MenuItem { Header = "Flag as badly written" };
+        flag.Click += (_, _) => { Course.Add(new TrainingEvent { Kind = "flag", Question = q.Id, Concept = q.Concept }); flag.IsEnabled = false; flag.Header = "Flagged"; };
+        menu.Items.Add(hide); menu.Items.Add(flag);
+        more.Click += (_, _) => { menu.PlacementTarget = more; menu.IsOpen = true; };
+        row.Children.Add(more);
         return row;
+    }
+
+    /// <summary>Thumbs up (see it more often) and thumbs down (less often): bumps it within spaced repetition, never out of it.</summary>
+    private static StackPanel Thumbs(PackQuestion q)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
+        var up = new Button { Content = "\uE8E1", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, Width = 34, Height = 32, Margin = new Thickness(0, 0, 4, 0), ToolTip = "See this more often in reviews (and first in the evening review)" };
+        var down = new Button { Content = "\uE8E0", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, Width = 34, Height = 32, ToolTip = "See this less often in reviews" };
+        void Show()
+        {
+            int v = Course.VoteOf(q.Id);
+            foreach (var (b, on) in new[] { (up, v > 0), (down, v < 0) })
+            {
+                b.BorderThickness = new Thickness(on ? 2 : 1);
+                if (on) b.SetResourceReference(Control.BorderBrushProperty, "FocusBrush"); else b.ClearValue(Control.BorderBrushProperty);
+                b.Opacity = on || v == 0 ? 1 : 0.55;
+            }
+        }
+        up.Click += (_, _) => { Course.Vote(q.Id, Course.VoteOf(q.Id) > 0 ? 0 : 1); Show(); };
+        down.Click += (_, _) => { Course.Vote(q.Id, Course.VoteOf(q.Id) < 0 ? 0 : -1); Show(); };
+        Show();
+        row.Children.Add(up); row.Children.Add(down);
+        return row;
+    }
+
+    /// <summary>"back in 3 days" for a question just answered.</summary>
+    private static string BackIn(string questionId)
+    {
+        int days = (Course.StateOf(questionId).Due.Date - DateTime.Today).Days;
+        return days <= 1 ? "back tomorrow" : $"back in {days} days";
     }
 
     // ---------- Intro ----------
@@ -379,48 +418,143 @@ public class LessonWindow : Window
             return;
         }
 
-        // The reading fills the window and scrolls on its own (scroll bar and mouse wheel).
-        var grid = new Grid { MaxWidth = 900, Margin = new Thickness(28, 8, 28, 12) };
+        // The reading fills the window: a progress bar, the parts, the text (with its own scroll bar or pages),
+        // and a reading-settings panel that folds away to the Aa button.
+        var cfg = Course.Config;
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var head = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
-        var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var mode = new CheckBox { Content = "Page view", IsChecked = Course.Config.PageView, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0), ToolTip = "Turn pages like a book instead of scrolling" };
-        tools.Children.Add(mode);
-        var holder = new Border { CornerRadius = new CornerRadius(10), ClipToBounds = true };
+        // Progress bar
+        var track = new Grid { Height = 4 };
+        track.SetResourceReference(Panel.BackgroundProperty, "Panel2");
+        var fill = new Border { HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+        fill.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
+        track.Children.Add(fill);
+        Grid.SetColumnSpan(track, 2);
+        grid.Children.Add(track);
+
+        // Title, parts, progress and Aa
+        var head = new DockPanel { Margin = new Thickness(28, 12, 28, 12) };
+        var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var progressText = new TextBlock { FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        progressText.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        right.Children.Add(progressText);
+        var aa = new System.Windows.Controls.Primitives.ToggleButton { Content = "Aa", FontFamily = new FontFamily("Georgia"), FontSize = 15, Padding = new Thickness(12, 4, 12, 5), IsChecked = cfg.ReadingPanelOpen, ToolTip = "Reading settings" };
+        right.Children.Add(aa);
+        DockPanel.SetDock(right, Dock.Right);
+        head.Children.Add(right);
+        var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0), MinWidth = 220 };
+        titles.Children.Add(Text("Reading", 12, brush: "Muted"));
+        titles.Children.Add(Text(_lesson.Lesson.Title, 15, bold: true));
+        DockPanel.SetDock(titles, Dock.Left);
+        head.Children.Add(titles);
+        var parts = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        head.Children.Add(parts);
+        Grid.SetRow(head, 1); Grid.SetColumnSpan(head, 2);
+        grid.Children.Add(head);
+
+        // The text
+        var holder = new Border { CornerRadius = new CornerRadius(12), ClipToBounds = true, Margin = new Thickness(0, 0, 0, 0) };
+        var center = new DockPanel { Margin = new Thickness(20, 0, 20, 0) };
+        Button Arrow(string glyph, string tip) { var b = new Button { Content = glyph, FontSize = 22, Width = 44, Height = 72, Margin = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = tip }; return b; }
+        var prev = Arrow("‹", "Previous page"); var nextBtn = Arrow("›", "Next page");
+        DockPanel.SetDock(prev, Dock.Left); DockPanel.SetDock(nextBtn, Dock.Right);
+        center.Children.Add(prev); center.Children.Add(nextBtn); center.Children.Add(holder);
+        Grid.SetRow(center, 2);
+        grid.Children.Add(center);
+
+        // The settings panel (folds away to Aa)
+        var side = new DockPanel { Width = 300, LastChildFill = false };
+        side.SetResourceReference(Panel.BackgroundProperty, "Panel");
+        var finished = Primary("I've finished reading", () => { MarkDone("reading"); Next(); });
+        finished.HorizontalAlignment = HorizontalAlignment.Stretch; finished.Margin = new Thickness(20, 10, 20, 20);
+        DockPanel.SetDock(finished, Dock.Bottom);
+        side.Children.Add(finished);
+        var sideScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var sideBody = new StackPanel { Margin = new Thickness(20, 18, 20, 10) };
+        sideBody.Children.Add(Text("Reading settings", 15, bold: true));
+        sideScroll.Content = sideBody;
+        DockPanel.SetDock(sideScroll, Dock.Top);
+        side.Children.Add(sideScroll);
+        Grid.SetRow(side, 2); Grid.SetColumn(side, 1);
+        grid.Children.Add(side);
+        // With the panel folded away, "I've finished reading" sits under the text instead.
+        var finishedBelow = Primary("I've finished reading", () => { MarkDone("reading"); Next(); });
+        finishedBelow.Margin = new Thickness(0, 10, 0, 14); finishedBelow.HorizontalAlignment = HorizontalAlignment.Center;
+        DockPanel.SetDock(finishedBelow, Dock.Bottom);
+        center.Children.Insert(0, finishedBelow);
+        void ShowPanel() { bool open = aa.IsChecked == true; side.Visibility = open ? Visibility.Visible : Visibility.Collapsed; finishedBelow.Visibility = open ? Visibility.Collapsed : Visibility.Visible; }
+        aa.Checked += (_, _) => { cfg.ReadingPanelOpen = true; Course.SaveConfig(); ShowPanel(); };
+        aa.Unchecked += (_, _) => { cfg.ReadingPanelOpen = false; Course.SaveConfig(); ShowPanel(); };
+        ShowPanel();
+
         var map = new Dictionary<Paragraph, int>();
+        int totalWords = 0;
+        for (int i = start; i < end && i < Course.Book.Count; i++) totalWords += Course.Book[i].Runs.Sum(r => r.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
+        FrameworkElement? viewer = null;
+        void ShowProgress(double fraction)
+        {
+            fraction = Math.Clamp(fraction, 0, 1);
+            fill.Width = track.ActualWidth * fraction;
+            int minutes = (int)Math.Ceiling(totalWords * (1 - fraction) / 230.0);
+            progressText.Text = $"{fraction:P0} · {(minutes <= 0 ? "done" : $"about {minutes} min left")}";
+        }
         void Build()
         {
             map.Clear();
-            var viewer = BuildReading(start, end, Course.Config.PageView, map, -1, out _);
+            string layout = Layout();
+            viewer = BuildReading(start, end, layout != "scroll", map, -1, out _);
             AttachSelectionPopup(viewer, map, _lesson.Pack.Chapter);
             holder.Child = viewer;
-            viewer.Loaded += (_, _) => viewer.Focus();
+            holder.MaxWidth = layout == "two" ? Math.Max(cfg.ReadingWidth, 760) * 1.6 : cfg.ReadingWidth + 80;
+            prev.Visibility = nextBtn.Visibility = layout == "scroll" ? Visibility.Collapsed : Visibility.Visible;
+            if (viewer is FlowDocumentPageViewer pv)
+            {
+                pv.PageViewsChanged += (_, _) => ShowProgress(pv.PageCount <= 1 ? 1 : (pv.MasterPageNumber - 1) / (double)(pv.PageCount - 1));
+            }
+            viewer.Loaded += (_, _) =>
+            {
+                viewer.Focus();
+                if (viewer is FlowDocumentScrollViewer sv && FindChild<ScrollViewer>(sv) is ScrollViewer inner)
+                    inner.ScrollChanged += (_, _) => ShowProgress(inner.ScrollableHeight <= 0 ? 1 : inner.VerticalOffset / inner.ScrollableHeight);
+                ShowProgress(0);
+            };
+            // Parts: click one to jump to it.
+            parts.Children.Clear();
+            for (int pi = 0; pi < _lesson.Lesson.Parts.Count; pi++)
+            {
+                int at = Course.FindPart(_lesson.Lesson, pi, start, end);
+                var target = map.FirstOrDefault(kv => kv.Value == at).Key;
+                var pill = new Button { Content = $"{pi + 1} · {_lesson.Lesson.Parts[pi].Title}", Padding = new Thickness(11, 4, 11, 5), Margin = new Thickness(0, 2, 6, 2), FontSize = 12.5, IsEnabled = target != null, ToolTip = "Go to this part" };
+                pill.Click += (_, _) => target?.BringIntoView();
+                parts.Children.Add(pill);
+            }
         }
-        tools.Children.Add(AppearanceButton(Build));
-        DockPanel.SetDock(tools, Dock.Right);
-        head.Children.Add(tools);
-        var titles = new StackPanel();
-        titles.Children.Add(Text("Reading", 24, bold: true));
-        string parts = _lesson.Lesson.Parts.Count > 0 ? "Parts: " + string.Join(" · ", _lesson.Lesson.Parts.Select(p => p.Title)) + ".  " : "";
-        titles.Children.Add(Text(parts + "Select text to highlight it or add a note.", 13, brush: "Muted", top: 4));
-        head.Children.Add(titles);
-        Grid.SetRow(head, 0);
-        grid.Children.Add(head);
-        Grid.SetRow(holder, 1);
-        grid.Children.Add(holder);
-        var done = Primary("I've finished reading", () => { MarkDone("reading"); Next(); });
-        done.Margin = new Thickness(0, 12, 0, 0);
-        Grid.SetRow(done, 2);
-        grid.Children.Add(done);
-
+        prev.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToPreviousPage) pv.PreviousPage(); };
+        nextBtn.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToNextPage) pv.NextPage(); };
+        sideBody.Children.Add(AppearancePanel(Build, full: true));
+        track.SizeChanged += (_, _) => { if (viewer is FlowDocumentScrollViewer sv && FindChild<ScrollViewer>(sv) is ScrollViewer inner) ShowProgress(inner.ScrollableHeight <= 0 ? 1 : inner.VerticalOffset / inner.ScrollableHeight); };
         Build();
-        mode.Checked += (_, _) => { Course.Config.PageView = true; Course.SaveConfig(); Build(); };
-        mode.Unchecked += (_, _) => { Course.Config.PageView = false; Course.SaveConfig(); Build(); };
         _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled; // the reading itself scrolls
         _scroll.Content = grid;
+    }
+
+    /// <summary>The reading's layout: scroll, page or two (columns).</summary>
+    private static string Layout() => Course.Config.ReadingLayout is "scroll" or "page" or "two" ? Course.Config.ReadingLayout : Course.Config.PageView ? "page" : "scroll";
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var c = VisualTreeHelper.GetChild(parent, i);
+            if (c is T t) return t;
+            if (FindChild<T>(c) is T deeper) return deeper;
+        }
+        return null;
     }
 
     private static readonly Dictionary<string, Color> HighlightColors = new()
@@ -464,8 +598,9 @@ public class LessonWindow : Window
         double size = Math.Clamp(cfg.ReadingSize, 11, 34);
         var docu = new FlowDocument
         {
-            PagePadding = new Thickness(40, 28, 40, 48), FontSize = size, LineHeight = Math.Round(size * 1.65),
-            TextAlignment = TextAlignment.Left, ColumnWidth = 2000, IsOptimalParagraphEnabled = false
+            PagePadding = new Thickness(44, 32, 44, 48), FontSize = size, LineHeight = Math.Round(size * Math.Clamp(cfg.ReadingSpacing, 1.2, 2.4)),
+            TextAlignment = cfg.ReadingJustify ? TextAlignment.Justify : TextAlignment.Left, IsOptimalParagraphEnabled = cfg.ReadingJustify, IsHyphenationEnabled = cfg.ReadingJustify,
+            ColumnWidth = Layout() == "two" ? Math.Max(300, cfg.ReadingWidth * 0.62) : 4000, ColumnGap = 48, ColumnRuleWidth = 0
         };
         try { docu.FontFamily = new FontFamily((cfg.ReadingFont.Length > 0 ? cfg.ReadingFont + ", " : "") + "Georgia, Cambria, Segoe UI"); }
         catch { docu.FontFamily = new FontFamily("Georgia, Cambria, Segoe UI"); }
@@ -498,11 +633,14 @@ public class LessonWindow : Window
                 }
                 foreach (var r in bp.Runs)
                 {
-                    Inline run = new Run(r.Text);
-                    if (r.Super) { run.BaselineAlignment = BaselineAlignment.Superscript; run.FontSize = Math.Round(size * 0.65); }
-                    if (r.Italic) run = new Italic(run);
-                    if (r.Bold) run = new Bold(run);
-                    p.Inlines.Add(run);
+                    foreach (var piece in WithScriptureLinks(r.Text))
+                    {
+                        Inline run = piece;
+                        if (r.Super) { run.BaselineAlignment = BaselineAlignment.Superscript; run.FontSize = Math.Round(size * 0.65); }
+                        if (r.Italic) run = new Italic(run);
+                        if (r.Bold) run = new Bold(run);
+                        p.Inlines.Add(run);
+                    }
                 }
                 if (i == mark) target = p;
                 foreach (var h in highlights[i]) ApplyHighlight(p, h.Quote, h.Color, h.Note);
@@ -541,7 +679,9 @@ public class LessonWindow : Window
     /// </summary>
     private static FlowDocumentPageViewer KindlePages(FlowDocumentPageViewer pages)
     {
-        const double edge = 0.25; // the outer quarter on each side turns the page
+        const double edge = 0.16; // the outer strip on each side turns the page
+        // Only beside the page's middle: not near the top (window buttons above) or the page bar at the bottom.
+        bool TurnZone(Point p) => p.Y > Math.Max(60, pages.ActualHeight * 0.12) && p.Y < pages.ActualHeight - 70;
         Point down = default;
         bool pressed = false;
         pages.ToolTip = "Click or tap the left or right side of the page to turn it (or use the arrow keys)";
@@ -553,7 +693,7 @@ public class LessonWindow : Window
             var up = e.GetPosition(pages);
             if (Math.Abs(up.X - down.X) > 6 || Math.Abs(up.Y - down.Y) > 6) return;   // a drag selects text instead
             if (pages.Selection != null && !pages.Selection.IsEmpty) return;
-            if (up.Y > pages.ActualHeight - 48) return;                               // the page bar at the bottom
+            if (!TurnZone(up)) return;
             double w = Math.Max(1, pages.ActualWidth);
             if (up.X < w * edge) { if (pages.CanGoToPreviousPage) pages.PreviousPage(); e.Handled = true; }
             else if (up.X > w * (1 - edge)) { if (pages.CanGoToNextPage) pages.NextPage(); e.Handled = true; }
@@ -562,7 +702,7 @@ public class LessonWindow : Window
         {
             var at = e.GetPosition(pages);
             double w = Math.Max(1, pages.ActualWidth);
-            bool side = at.Y < pages.ActualHeight - 48 && (at.X < w * edge || at.X > w * (1 - edge));
+            bool side = TurnZone(at) && (at.X < w * edge || at.X > w * (1 - edge));
             pages.Cursor = side ? Cursors.Hand : null;
         };
         pages.PreviewKeyDown += (_, e) =>
@@ -577,6 +717,23 @@ public class LessonWindow : Window
             e.Handled = true;
         };
         return pages;
+    }
+
+    /// <summary>Text with its Scripture references (Deut 6:4–9, Rom 13) as links that open in Logos.</summary>
+    private static IEnumerable<Inline> WithScriptureLinks(string text)
+    {
+        int at = 0;
+        foreach (var (start, length, logos) in ScriptureLinks.Find(text))
+        {
+            if (start > at) yield return new Run(text[at..start]);
+            var link = new Hyperlink(new Run(text.Substring(start, length))) { ToolTip = "Open in Logos", Cursor = Cursors.Hand, TextDecorations = null };
+            link.SetResourceReference(TextElement.ForegroundProperty, "FocusBrush");
+            string target = logos;
+            link.PreviewMouseLeftButtonUp += (_, e) => { e.Handled = true; ScriptureLinks.Open(target); };
+            yield return link;
+            at = start + length;
+        }
+        if (at < text.Length) yield return new Run(text[at..]);
     }
 
     /// <summary>The "Aa" button above the reading: font, size and background, changed on the spot.</summary>
@@ -596,10 +753,38 @@ public class LessonWindow : Window
     }
 
     /// <summary>Font, size and background controls (also on the Training settings page). <paramref name="changed"/> runs after each change.</summary>
-    public static FrameworkElement AppearancePanel(Action changed)
+    public static FrameworkElement AppearancePanel(Action changed, bool full = false)
     {
         var cfg = Course.Config;
         var panel = new StackPanel();
+        // Choices shown as a row of buttons; the chosen one is outlined.
+        void Choice(string label, double top, (string Text, bool On, Action Pick)[] options)
+        {
+            panel.Children.Add(new TextBlock { Text = label, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, top, 0, 6) });
+            var row = new UniformGrid { Rows = 1 };
+            var buttons = new List<Button>();
+            foreach (var (text, on, pick) in options)
+            {
+                var b = new Button { Content = text, Padding = new Thickness(6, 5, 6, 5), Margin = new Thickness(0, 0, 4, 0), FontSize = 12.5, BorderThickness = new Thickness(on ? 2 : 1) };
+                if (on) b.SetResourceReference(Control.BorderBrushProperty, "FocusBrush");
+                b.Click += (_, _) =>
+                {
+                    foreach (var o in buttons) { o.BorderThickness = new Thickness(1); o.ClearValue(Control.BorderBrushProperty); }
+                    b.BorderThickness = new Thickness(2); b.SetResourceReference(Control.BorderBrushProperty, "FocusBrush");
+                    pick(); Course.SaveConfig(); changed();
+                };
+                buttons.Add(b); row.Children.Add(b);
+            }
+            panel.Children.Add(row);
+        }
+        if (full)
+        {
+            string layout = Layout();
+            Choice("Layout", 12, new (string, bool, Action)[] {
+                ("Scroll", layout == "scroll", () => { cfg.ReadingLayout = "scroll"; cfg.PageView = false; }),
+                ("Pages", layout == "page", () => { cfg.ReadingLayout = "page"; cfg.PageView = true; }),
+                ("2 columns", layout == "two", () => { cfg.ReadingLayout = "two"; cfg.PageView = true; }) });
+        }
         TextBlock Label(string t, double top) { var l = new TextBlock { Text = t, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, top, 0, 6) }; return l; }
 
         // Font: your favorites first, then every font on this PC.
@@ -671,6 +856,17 @@ public class LessonWindow : Window
         var hint = new TextBlock { Text = "F follows Focus's light or dark theme.", FontSize = 11.5, Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         panel.Children.Add(hint);
+        Choice("Line spacing", 14, new (string, bool, Action)[] {
+            ("Compact", cfg.ReadingSpacing < 1.5, () => cfg.ReadingSpacing = 1.4),
+            ("Normal", cfg.ReadingSpacing >= 1.5 && cfg.ReadingSpacing < 1.8, () => cfg.ReadingSpacing = 1.65),
+            ("Airy", cfg.ReadingSpacing >= 1.8, () => cfg.ReadingSpacing = 1.95) });
+        Choice("Width", 14, new (string, bool, Action)[] {
+            ("Narrow", cfg.ReadingWidth < 700, () => cfg.ReadingWidth = 620),
+            ("Normal", cfg.ReadingWidth >= 700 && cfg.ReadingWidth < 860, () => cfg.ReadingWidth = 760),
+            ("Wide", cfg.ReadingWidth >= 860, () => cfg.ReadingWidth = 940) });
+        Choice("Alignment", 14, new (string, bool, Action)[] {
+            ("Left", !cfg.ReadingJustify, () => cfg.ReadingJustify = false),
+            ("Justified", cfg.ReadingJustify, () => cfg.ReadingJustify = true) });
         return panel;
     }
 
@@ -971,7 +1167,10 @@ public class LessonWindow : Window
     {
         SetStep(label);
         _page.Children.Add(Text(label, 13, brush: "Muted"));
-        _page.Children.Add(Text(q.Prompt, 21, bold: true, top: 8));
+        var promptRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
+        if (scored) { var th = Thumbs(q); th.Margin = new Thickness(16, 2, 0, 0); DockPanel.SetDock(th, Dock.Right); promptRow.Children.Add(th); }
+        promptRow.Children.Add(Text(q.Prompt, 23, bold: true));
+        _page.Children.Add(promptRow);
         int chosen = -1;
         bool answered = false;
         var options = new List<Border>();
@@ -996,22 +1195,40 @@ public class LessonWindow : Window
             bool right = chosen == q.Answer;
             for (int k = 0; k < options.Count; k++)
             {
-                if (k == q.Answer) { options[k].SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); options[k].BorderThickness = new Thickness(3); }
-                else if (k == chosen) { options[k].SetResourceReference(Border.BorderBrushProperty, "PriorityHigh"); options[k].BorderThickness = new Thickness(3); }
+                options[k].Cursor = null;
+                if (k == q.Answer) { options[k].SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); options[k].BorderThickness = new Thickness(2); options[k].SetResourceReference(Border.BackgroundProperty, "FocusTint"); }
+                else if (k == chosen) { options[k].SetResourceReference(Border.BorderBrushProperty, "PriorityHigh"); options[k].BorderThickness = new Thickness(2); }
+                else options[k].Opacity = 0.5;
             }
             if (scored)
             {
                 _asked++; if (right && sure) _right++;
                 Course.Add(new TrainingEvent { Kind = "answer", Question = q.Id, Concept = q.Concept, Correct = right, Sure = sure });
-                string verdict = right ? (sure ? "Right." : "Right, but you were guessing, so it comes back soon.")
-                                       : (sure ? "Not quite, and you were sure: this one comes back first." : "Not quite.");
-                feedback.Children.Add(Text((right ? "✓ " : "✗ ") + verdict, 17, bold: true, brush: right ? "FocusBrush" : "PriorityHigh", top: 16));
+                string verdict = right ? (sure ? "Right, and you were sure" : "Right, but you were guessing")
+                                       : (sure ? "Not quite, and you were sure" : "Not quite");
+                var line = new WrapPanel();
+                line.Children.Add(Text(verdict, 16, bold: true, brush: right ? "FocusBrush" : "PriorityHigh"));
+                var when = Text("  ·  " + BackIn(q.Id), 13.5, brush: "Muted"); when.VerticalAlignment = VerticalAlignment.Center;
+                line.Children.Add(when);
+                feedback.Children.Add(line);
             }
-            else feedback.Children.Add(Text($"The answer: {q.Options[q.Answer]}. Watch for it in the reading.", 16, bold: true, top: 16));
+            else feedback.Children.Add(Text($"The answer: {q.Options[q.Answer]}. Watch for it in the reading.", 16, bold: true));
             MarkDone(key);
-            if (q.Why.Length > 0) feedback.Children.Add(Text(q.Why, 16, top: 8));
+            if (q.Why.Length > 0) feedback.Children.Add(Text(q.Why, 15.5, top: 8));
             if (scored) feedback.Children.Add(AnswerLinks(q, lesson));
-            feedback.Children.Add(Primary("Next", Next));
+            var card = new Border { Child = new StackPanel(), CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 16, 20, 12), Margin = new Thickness(0, 14, 0, 0), BorderThickness = new Thickness(1) };
+            card.SetResourceReference(Border.BackgroundProperty, "Panel");
+            card.SetResourceReference(Border.BorderBrushProperty, "Line");
+            var items = feedback.Children.Cast<UIElement>().ToList();
+            feedback.Children.Clear();
+            foreach (var it in items) ((StackPanel)card.Child).Children.Add(it);
+            feedback.Children.Add(card);
+            var nextRow = new StackPanel { Orientation = Orientation.Horizontal };
+            nextRow.Children.Add(Primary("Next", Next));
+            var enter = Text("or press Enter", 13, brush: "Muted"); enter.VerticalAlignment = VerticalAlignment.Bottom; enter.Margin = new Thickness(0, 0, 0, 10);
+            nextRow.Children.Add(enter);
+            feedback.Children.Add(nextRow);
+            _keys = k => { if (k == Key.Enter) Next(); };
         }
 
         for (int i = 0; i < q.Options.Count; i++)
@@ -1027,7 +1244,7 @@ public class LessonWindow : Window
             options.Add(b);
             choices.Children.Add(b);
         }
-        var sure = new Button { Content = "Sure", Padding = new Thickness(22, 8, 22, 8), Margin = new Thickness(0, 0, 10, 0), ToolTip = "Double-clicking an answer does the same" };
+        var sure = new Button { Content = "I'm sure", Padding = new Thickness(22, 8, 22, 8), Margin = new Thickness(0, 0, 10, 0), ToolTip = "Double-clicking an answer does the same" };
         sure.SetResourceReference(StyleProperty, "PrimaryButton");
         sure.Click += (_, _) => Answer(true);
         var guess = new Button { Content = "Guessing", Padding = new Thickness(22, 8, 22, 8) };
@@ -1038,7 +1255,7 @@ public class LessonWindow : Window
         _page.Children.Add(choices);
         _page.Children.Add(sureRow);
         _page.Children.Add(feedback);
-        if (scored) _page.Children.Add(Text("Pick an answer, then Sure or Guessing (or double-click the answer if you're sure).", 13, brush: "Muted", top: 12));
+        if (scored) _page.Children.Add(Text("Double-click an answer if you're sure.", 13, brush: "Muted", top: 12));
     }
 
     // ---------- Memory cards ----------
@@ -1084,8 +1301,12 @@ public class LessonWindow : Window
         var side = new TextBlock { Text = "Question · click to flip", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 10) };
         side.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         var inner = new DockPanel();
-        DockPanel.SetDock(side, Dock.Top);
-        inner.Children.Add(side);
+        var topRow = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+        var th = Thumbs(q); DockPanel.SetDock(th, Dock.Right); topRow.Children.Add(th);
+        side.Margin = new Thickness(0); side.VerticalAlignment = VerticalAlignment.Center;
+        topRow.Children.Add(side);
+        DockPanel.SetDock(topRow, Dock.Top);
+        inner.Children.Add(topRow);
         inner.Children.Add(face);
         var card = new Border { Child = inner, MinHeight = 240, Padding = new Thickness(36, 22, 36, 30), Margin = new Thickness(0, 12, 0, 0), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(2), Cursor = Cursors.Hand };
         card.SetResourceReference(Border.BackgroundProperty, "Panel");
@@ -1129,16 +1350,18 @@ public class LessonWindow : Window
         _page.Children.Add(card);
         _page.Children.Add(grades);
         _page.Children.Add(links);
-        var help = Text("Click the card (or press Space) to flip it. ✕ again in this lesson · ✓✓ know it well · ✓ know it.", 13, brush: "Muted", top: 18);
-        help.TextAlignment = TextAlignment.Center;
-        _page.Children.Add(help);
     }
 
-    /// <summary>Where a card marked ✕ goes: after the other cards, before the chapter quiz and the end.</summary>
+    /// <summary>Where a card marked ✕ goes: after the other cards, before the chapter quiz, the review and the end.</summary>
     private int RequeueIndex()
     {
+        bool inReview = _step >= 0 && _step < _steps.Count && _steps[_step].Key.StartsWith("review:", StringComparison.Ordinal);
         for (int i = _step + 1; i < _steps.Count; i++)
-            if (_steps[i].Key == "finish" || _steps[i].Key.StartsWith("quiz:", StringComparison.Ordinal)) return i;
+        {
+            string k = _steps[i].Key;
+            if (k == "finish") return i;
+            if (!inReview && (k == "timeline" || k.StartsWith("quiz:", StringComparison.Ordinal) || k.StartsWith("review:", StringComparison.Ordinal))) return i;
+        }
         return _steps.Count;
     }
 

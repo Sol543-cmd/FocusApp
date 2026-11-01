@@ -138,6 +138,29 @@
         </Style>
 
         <!-- Small text-style button, used for "Block apps" on each session -->
+        <!-- The small Today / Tomorrow tags on task rows -->
+        <Style x:Key="DayTag" TargetType="Button">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Tag" Background="Transparent" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="8,1,8,2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Tag" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource FocusBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="LinkButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
