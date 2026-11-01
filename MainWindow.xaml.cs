@@ -436,6 +436,7 @@ public partial class MainWindow : Window
     private void Nav_Checked(object sender, RoutedEventArgs e)
     {
         if (SettingsPanel == null) return; // still loading
+        if (sender is RadioButton page && !ReferenceEquals(page, NavSettings)) _pageBeforeSettings = page; // where Done in Settings goes back to
         PlanPanel.Visibility = NavPlan.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ListsPanel.Visibility = NavLists.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         TrainingPanel.Visibility = NavTraining.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;

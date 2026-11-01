@@ -248,4 +248,15 @@ public partial class MainWindow
         AutoSaveSettings();
         ShowSettingsStatus($"{label} settings reset");
     }
+
+    // ---------- Done (the footer under the settings pages) ----------
+
+    private RadioButton? _pageBeforeSettings;
+
+    /// <summary>Done: everything's already saved, so this just goes back to the page you were on.</summary>
+    private void SettingsDone_Click(object sender, RoutedEventArgs e)
+    {
+        FlushSettings();
+        (_pageBeforeSettings ?? NavDashboard).IsChecked = true;
+    }
 }

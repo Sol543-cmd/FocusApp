@@ -42,6 +42,8 @@ public partial class LessonWindow : Window
     private readonly TextBlock _stepLabel = new() { FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
     private readonly Grid _readingLayer = new() { Visibility = Visibility.Collapsed };
     private readonly Button _closeButton = new() { Padding = new Thickness(14, 5, 14, 5) };
+    private FrameworkElement? _windowBar;   // the lesson's title, step and close button (hidden while reading without distractions)
+    private static bool _barsHintShown;     // "Click the middle of the page to bring the bars back" (once per run of Focus)
 
     private readonly string? _examKey;
     private readonly List<(Course.LessonRef Lesson, PackQuestion Q)>? _questionsOnly;
@@ -104,6 +106,7 @@ public partial class LessonWindow : Window
         FontSize = 16;
 
         var top = new DockPanel { Margin = new Thickness(24, 14, 24, 10) };
+        _windowBar = top;
         _closeButton.IsEnabled = !required;
         _closeButton.Content = required ? "Required today" : TrackProgress ? "Finish later" : "Close";
         _closeButton.ToolTip = required ? "Today's last lesson time: finish the lesson to close it (or quit Focus, which moves it to tomorrow)."
@@ -447,13 +450,19 @@ public partial class LessonWindow : Window
         right.Children.Add(aa);
         DockPanel.SetDock(right, Dock.Right);
         head.Children.Add(right);
+        // Contents, like Kindle: a button at the top left opens the lesson's parts in a panel over the page.
+        var contentsButton = new System.Windows.Controls.Primitives.ToggleButton
+        {
+            Content = "\u2630", FontSize = 17, Padding = new Thickness(11, 3, 11, 5), Margin = new Thickness(0, 0, 14, 0),
+            VerticalAlignment = VerticalAlignment.Center, ToolTip = "Contents"
+        };
+        DockPanel.SetDock(contentsButton, Dock.Left);
+        head.Children.Add(contentsButton);
         var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0), MinWidth = 220 };
         titles.Children.Add(Text("Reading", 12, brush: "Muted"));
         titles.Children.Add(Text(_lesson.Lesson.Title, 15, bold: true));
         DockPanel.SetDock(titles, Dock.Left);
         head.Children.Add(titles);
-        var parts = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        head.Children.Add(parts);
         Grid.SetRow(head, 1); Grid.SetColumnSpan(head, 2);
         grid.Children.Add(head);
 
@@ -492,6 +501,92 @@ public partial class LessonWindow : Window
         aa.Unchecked += (_, _) => { cfg.ReadingPanelOpen = false; Course.SaveConfig(); ShowPanel(); };
         ShowPanel();
 
+        // The contents panel: slides over the page from the left; click a part to go there, click outside (or Esc) to close.
+        var contentsLayer = new Grid { Visibility = Visibility.Collapsed };
+        var backdrop = new Border { Background = new SolidColorBrush(Color.FromArgb(0x40, 0, 0, 0)) };
+        backdrop.MouseLeftButtonUp += (_, _) => contentsButton.IsChecked = false;
+        contentsLayer.Children.Add(backdrop);
+        var contentsPanel = new Border { Width = 320, HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(18, 18, 14, 18) };
+        contentsPanel.SetResourceReference(Border.BackgroundProperty, "Panel");
+        var contentsStack = new StackPanel();
+        contentsPanel.Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = contentsStack };
+        contentsLayer.Children.Add(contentsPanel);
+        Grid.SetRow(contentsLayer, 2); Grid.SetColumnSpan(contentsLayer, 2);
+        Panel.SetZIndex(contentsLayer, 10);
+        grid.Children.Add(contentsLayer);
+        contentsButton.Checked += (_, _) => contentsLayer.Visibility = Visibility.Visible;
+        contentsButton.Unchecked += (_, _) => contentsLayer.Visibility = Visibility.Collapsed;
+
+        // Reading without distractions: a click in the middle of the page hides everything but the text; another brings it back.
+        bool bare = false;
+        void SetBare(bool on)
+        {
+            bare = on;
+            var show = on ? Visibility.Collapsed : Visibility.Visible;
+            head.Visibility = show;
+            track.Visibility = show;
+            if (_windowBar != null) _windowBar.Visibility = show;
+            if (on)
+            {
+                contentsButton.IsChecked = false;
+                side.Visibility = Visibility.Collapsed;
+                finishedBelow.Visibility = Visibility.Collapsed;
+                prev.Visibility = nextBtn.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                ShowPanel();
+                prev.Visibility = nextBtn.Visibility = Layout() == "scroll" ? Visibility.Collapsed : Visibility.Visible;
+            }
+            if (on && !_barsHintShown)
+            {
+                _barsHintShown = true;
+                var hintBox = new Border
+                {
+                    CornerRadius = new CornerRadius(14), Padding = new Thickness(14, 6, 14, 7), HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 18), IsHitTestVisible = false,
+                    Child = Text("Click the middle of the page (or press Esc) to bring the bars back", 13)
+                };
+                hintBox.SetResourceReference(Border.BackgroundProperty, "Panel2");
+                Grid.SetRow(hintBox, 2); Grid.SetColumnSpan(hintBox, 2); Panel.SetZIndex(hintBox, 11);
+                grid.Children.Add(hintBox);
+                var hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                hintTimer.Tick += (_, _) => { hintTimer.Stop(); grid.Children.Remove(hintBox); };
+                hintTimer.Start();
+            }
+        }
+        grid.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            if (contentsButton.IsChecked == true) { contentsButton.IsChecked = false; e.Handled = true; }
+            else if (bare) { SetBare(false); e.Handled = true; }
+        };
+        // A plain click in the middle of the page (not a drag to select, not a link or a highlight) toggles the bars.
+        // Clicks at the left and right edges still turn the page (handled before this sees them).
+        Point pressAt = default;
+        bool pressing = false;
+        void HookMiddleClick(FrameworkElement v)
+        {
+            v.PreviewMouseLeftButtonDown += (_, e) => { pressAt = e.GetPosition(v); pressing = true; };
+            v.PreviewMouseLeftButtonUp += (_, e) =>
+            {
+                if (!pressing) return;
+                pressing = false;
+                var upAt = e.GetPosition(v);
+                if (Math.Abs(upAt.X - pressAt.X) > 6 || Math.Abs(upAt.Y - pressAt.Y) > 6) return;      // selecting text
+                double vw = Math.Max(1, v.ActualWidth);
+                if (upAt.X < vw * 0.2 || upAt.X > vw * 0.8) return;                                   // the page-turn edges
+                for (DependencyObject? d = e.OriginalSource as DependencyObject; d != null; d = LogicalTreeHelper.GetParent(d))
+                    if (d is Hyperlink) return;                                                       // a link (like Scripture to Logos)
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var sel = v is FlowDocumentPageViewer pv ? pv.Selection : (v as FlowDocumentScrollViewer)?.Selection;
+                    if (sel != null && !sel.IsEmpty) return;                                          // a highlight was picked
+                    SetBare(!bare);
+                }), DispatcherPriority.Input);
+            };
+        }
+
         var map = new Dictionary<Paragraph, int>();
         int totalWords = 0;
         for (int i = start; i < end && i < Course.Book.Count; i++) totalWords += Course.Book[i].Runs.Sum(r => r.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
@@ -523,15 +618,32 @@ public partial class LessonWindow : Window
                     inner.ScrollChanged += (_, _) => ShowProgress(inner.ScrollableHeight <= 0 ? 1 : inner.VerticalOffset / inner.ScrollableHeight);
                 ShowProgress(0);
             };
-            // Parts: click one to jump to it.
-            parts.Children.Clear();
+            HookMiddleClick(viewer);
+            // Contents: the lesson's parts; click one to go there.
+            contentsStack.Children.Clear();
+            contentsStack.Children.Add(Text("Contents", 12, brush: "Muted"));
+            contentsStack.Children.Add(Text(_lesson.Lesson.Title, 16, bold: true));
+            contentsStack.Children.Add(new Border { Height = 12 });
             for (int pi = 0; pi < _lesson.Lesson.Parts.Count; pi++)
             {
                 int at = Course.FindPart(_lesson.Lesson, pi, start, end);
                 var target = map.FirstOrDefault(kv => kv.Value == at).Key;
-                var pill = new Button { Content = $"{pi + 1} · {_lesson.Lesson.Parts[pi].Title}", Padding = new Thickness(11, 4, 11, 5), Margin = new Thickness(0, 2, 6, 2), FontSize = 12.5, IsEnabled = target != null, ToolTip = "Go to this part" };
-                pill.Click += (_, _) => target?.BringIntoView();
-                parts.Children.Add(pill);
+                var partRow = new DockPanel();
+                var partNum = Text($"{pi + 1}", 13, brush: "Muted");
+                partNum.Width = 26; partNum.VerticalAlignment = VerticalAlignment.Top;
+                DockPanel.SetDock(partNum, Dock.Left);
+                partRow.Children.Add(partNum);
+                var partName = Text(_lesson.Lesson.Parts[pi].Title, 14.5);
+                partName.TextWrapping = TextWrapping.Wrap;
+                partRow.Children.Add(partName);
+                var partItem = new Button
+                {
+                    Content = partRow, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 0, 0, 2), IsEnabled = target != null,
+                    Background = Brushes.Transparent, BorderThickness = new Thickness(0), ToolTip = "Go to this part"
+                };
+                partItem.Click += (_, _) => { contentsButton.IsChecked = false; target?.BringIntoView(); };
+                contentsStack.Children.Add(partItem);
             }
         }
         prev.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToPreviousPage) pv.PreviousPage(); };

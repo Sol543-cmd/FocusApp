@@ -581,22 +581,45 @@ public partial class MainWindow
     {
         FeatureChecks.Children.Clear();
         _featureChecks.Clear();
+        Dispatcher.BeginInvoke(new Action(UpdateFeatureCount)); // once the rows are built
         foreach (var group in Features.All.GroupBy(f => f.Area))
         {
-            var header = new TextBlock { Text = group.Key, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 6) };
+            // Each area is a section (small capitals); each feature a row: its name, what it does, and its toggle.
+            var header = new TextBlock { Text = group.Key.ToUpperInvariant() };
+            header.SetResourceReference(StyleProperty, "SettingsSection");
             FeatureChecks.Children.Add(header);
             foreach (var f in group.Where(f => f.Key is not ("greek" or "alphabet" or "concepts"))) // switched in Greek practice
             {
-                var text = new StackPanel();
-                text.Children.Add(new TextBlock { Text = f.Name });
-                var d = new TextBlock { Text = f.Description, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+                var text = new StackPanel { Margin = new Thickness(0, 0, 46, 0) };
+                text.Children.Add(new TextBlock { Text = f.Name, FontSize = 14, FontWeight = FontWeights.SemiBold });
+                var d = new TextBlock { Text = f.Description, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
                 d.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
                 text.Children.Add(d);
-                var check = new CheckBox { Content = text, IsChecked = _settings.On(f.Key), Margin = new Thickness(0, 0, 0, 8) };
+                var check = new CheckBox { Content = text, IsChecked = _settings.On(f.Key) };
+                check.Checked += (_, _) => UpdateFeatureCount();
+                check.Unchecked += (_, _) => UpdateFeatureCount();
                 _featureChecks[f.Key] = check;
-                FeatureChecks.Children.Add(check);
+                var row = new Border { Child = check };
+                row.SetResourceReference(StyleProperty, "SettingRow");
+                FeatureChecks.Children.Add(row);
             }
         }
+    }
+
+    /// <summary>"Features  8 of 12 on" in the Settings category list.</summary>
+    private void UpdateFeatureCount()
+    {
+        var nav = SettingsNav.Children.OfType<RadioButton>().FirstOrDefault(r => (string)r.Tag == "features");
+        if (nav == null) return;
+        int on = _featureChecks.Values.Count(c => c.IsChecked == true), all = _featureChecks.Count;
+        var row = new DockPanel { LastChildFill = true };
+        var count = new TextBlock { Text = $"{on} of {all} on", FontSize = 11.5, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        count.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        DockPanel.SetDock(count, Dock.Right);
+        row.Children.Add(count);
+        row.Children.Add(new TextBlock { Text = "Features", VerticalAlignment = VerticalAlignment.Center });
+        nav.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        nav.Content = row;
     }
 
     private void SaveFeatureChecks()

@@ -3,6 +3,21 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.4
+
+- Settings, redesigned: each section has a small heading in capitals, and each setting is a row with its name, what it
+  does and a toggle on the right, with a thin line between rows. Features shows how many are on ("8 of 12 on") in the
+  list of pages. At the bottom: "Changes save as you make them." and Done, which takes you back to where you were.
+  (The Save buttons on each page are gone; Reset this page stays.)
+- Toggles everywhere: every on/off choice in Focus (Settings, sessions, block lists, Pomodoro, Greek practice, Training,
+  the floating timer and dialogs) is now a toggle switch in your theme's colors. The circles you tick to finish a task
+  stay circles.
+- Reading, like Kindle: the lesson's parts moved out of the bar across the top into Contents, a button at the top left
+  that opens them in a panel over the page (click a part to go there; click outside it or press Esc to close).
+- Reading without distractions: click the middle of the page to hide everything but the text (the bars, progress,
+  arrows and settings panel); click the middle again or press Esc to bring them back. Clicking the left or right side
+  still turns the page, and selecting text, links and highlights work as before.
+
 ## 1.7.3
 
 Includes 1.7.2 (never released separately):

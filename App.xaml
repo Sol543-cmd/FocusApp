@@ -170,39 +170,72 @@
         </Style>
 
         <!-- Check boxes -->
+        <!-- Every on/off choice in Focus is a toggle switch: the label on the left, the switch on the right, in the theme's
+             accent color when on. (Task circles use their own TaskCheck style and stay circles.) -->
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="{DynamicResource Text}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Grid Background="Transparent">
+                        <Grid x:Name="Root" Background="Transparent">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border x:Name="Box" Width="18" Height="18" CornerRadius="5"
-                                    Background="{DynamicResource Panel3}" VerticalAlignment="Center">
-                                <TextBlock x:Name="Mark" Text="✓" FontSize="12" FontWeight="Bold"
-                                           Foreground="{DynamicResource OnAccent}" Visibility="Collapsed"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter x:Name="Label" Margin="0,0,14,0" VerticalAlignment="Center" RecognizesAccessKey="True">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                            <Border x:Name="Track" Grid.Column="1" Width="40" Height="22" CornerRadius="11" VerticalAlignment="Center"
+                                    Background="{DynamicResource Panel3}" BorderBrush="{DynamicResource Line}" BorderThickness="1">
+                                <Ellipse x:Name="Knob" Width="16" Height="16" Margin="2,0,0,0" HorizontalAlignment="Left"
+                                         Fill="{DynamicResource Muted}"/>
                             </Border>
-                            <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource FocusBrush}"/>
-                                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource FocusBrush}"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/>
+                                <Setter TargetName="Knob" Property="Fill" Value="{DynamicResource OnAccent}"/>
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
+                            </Trigger>
+                            <Trigger Property="Content" Value="{x:Null}">
+                                <Setter TargetName="Label" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Label" Property="Margin" Value="0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.88"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Text}"/>
-                                <Setter TargetName="Box" Property="BorderThickness" Value="1"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Settings: section headings in small capitals, and one row per setting with a thin line under it -->
+        <Style x:Key="SettingsSection" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="Margin" Value="0,30,0,4"/>
+        </Style>
+        <Style x:Key="SettingRow" TargetType="Border">
+            <Setter Property="Padding" Value="0,12,0,12"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
         </Style>
 
         <!-- Little up/down arrows on number boxes -->
