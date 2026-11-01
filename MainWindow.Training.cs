@@ -633,6 +633,8 @@ public partial class MainWindow
         var allQuestions = lessonsAll.Where(l => doneSet.Contains(l.Index)).SelectMany(l => l.Lesson.Practice.Concat(l.Lesson.Cards)).ToList();
         void Stat(string label, string value) { var sp = new StackPanel(); sp.Children.Add(TT(label, 12.5, brush: "Muted")); sp.Children.Add(TT(value, 22, bold: true, top: 2)); stats.Children.Add(Tile(sp, 16)); }
         Stat("Due for review", Course.DueReview(999).Count.ToString());
+        int waiting = Course.WaitingCards();
+        if (waiting > 0) Stat("Cards waiting to join", waiting.ToString());
         Stat("Known well", allQuestions.Count(q => Course.StateOf(q.Id).Streak >= 3).ToString());
         Stat("Streak", $"{Course.Streak()} day{(Course.Streak() == 1 ? "" : "s")}");
         Stat("Highlights and notes", Course.Highlights().Count().ToString());
@@ -816,6 +818,22 @@ public partial class MainWindow
         cap.LostFocus += (_, _) => { if (int.TryParse(cap.Text, out int n) && n >= 0 && n <= 50) { cfg.ReviewCap = n; Course.SaveConfig(); } else cap.Text = cfg.ReviewCap.ToString(); };
         capRow.Children.Add(cap);
         rp.Children.Add(capRow);
+        // The daily review time: new lessons' memory cards join the review only while it fits; the rest wait their turn.
+        var timeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        timeRow.Children.Add(TT("Daily review time, about", 13));
+        var reviewMinutes = new TextBox { Width = 50, Margin = new Thickness(10, 0, 10, 0), Padding = new Thickness(6, 2, 6, 2), Text = cfg.ReviewMinutes.ToString() };
+        reviewMinutes.LostFocus += (_, _) =>
+        {
+            if (int.TryParse(reviewMinutes.Text, out int n) && n >= 2 && n <= 60) { cfg.ReviewMinutes = n; Course.SaveConfig(); }
+            else reviewMinutes.Text = cfg.ReviewMinutes.ToString();
+        };
+        timeRow.Children.Add(reviewMinutes);
+        timeRow.Children.Add(TT("minutes", 13));
+        rp.Children.Add(timeRow);
+        var timeNote = TT("New memory cards join your review while it fits in this time; after a busy stretch they wait their turn and join a few a day. Lessons always go ahead.", 12);
+        timeNote.TextWrapping = TextWrapping.Wrap; timeNote.Margin = new Thickness(0, 4, 0, 0);
+        timeNote.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        rp.Children.Add(timeNote);
         TrainingHost.Children.Add(TCard(rp));
 
         // How the reading looks

@@ -3,6 +3,22 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.5
+
+Review that keeps up with you, so you can learn the facts thoroughly and still move on through the book:
+
+- Memory cards are the long-term facts (people, dates, places, ideas): they keep the long schedule (1, 3, 7, 14, 30,
+  60 and 120 days). Practice and quiz questions check that you understood the reading: they come back once, three
+  days later, and graduate if you get them right (wrong, and they come back the next day until you do).
+- Known for good: once a concept has been right on six separate days spread over at least 90 days, its questions leave
+  daily review; a memory card that comes through its 120-day review graduates too. After each answer you'll see
+  "learned: done with daily review" when that happens.
+- Remembered for longer than planned: answering an overdue question right gives it a longer next gap, based on how long
+  you actually remembered it, so a backlog clears itself instead of snowballing.
+- Daily review time (Training settings, about 10 minutes): new lessons' memory cards join your review only while it fits
+  in that time. After a busy stretch they wait their turn and join a few a day; lessons always go ahead. The book's page
+  shows how many are waiting. Everything you'd already learned stays in your review as it was.
+
 ## 1.7.4
 
 - Settings, redesigned: each section has a small heading in capitals, and each setting is a row with its name, what it

@@ -320,6 +320,11 @@ public class CourseConfig
     public List<string> Times { get; set; } = new() { "07:00", "13:00", "19:30" };
     public List<string> BlockListIds { get; set; } = new();
     public int ReviewCap { get; set; } = 8;
+    /// <summary>About how long a day's review should take (minutes). New lessons' memory cards join the review only while
+    /// it fits; the rest wait their turn (see Course.ReleaseCards).</summary>
+    public int ReviewMinutes { get; set; } = 10;
+    /// <summary>When the waiting room started: memory cards first answered before this are already in the review.</summary>
+    public DateTime? IntakeSinceUtc { get; set; }
     public bool On { get; set; } = true;
     /// <summary>Read in pages (like a book) instead of scrolling.</summary>
     public bool PageView { get; set; }
@@ -724,29 +729,48 @@ public static class Course
 
     public static IEnumerable<string> Flagged() => CE.Where(e => e.Kind == "flag").Select(e => e.Question).Distinct();
 
-    /// <summary>A question's review state, worked out from every answer on every device, in time order.</summary>
-    public record QState(DateTime Due, int Streak, bool Misconception, int Seen);
+    /// <summary>A question's review state, worked out from every answer on every device, in time order.
+    /// Graduated: done with daily review (a practice or quiz question right in the lesson and again a few days later; or a
+    /// memory card that has come through its 120-day review).</summary>
+    public record QState(DateTime Due, int Streak, bool Misconception, int Seen, bool Graduated = false);
 
-    public static QState StateOf(string questionId)
+    /// <summary>
+    /// Memory cards are the long-term facts (people, dates, places, ideas): they come back for months. Practice and quiz
+    /// questions check understanding of the reading: they come back once, three days later, and graduate if you get them right.
+    /// </summary>
+    public static QState StateOf(string questionId) => StateOf(questionId, IsCard(questionId));
+
+    public static QState StateOf(string questionId, bool longTerm)
     {
         DateTime due = DateTime.MinValue;
         int streak = 0, seen = 0;
         bool miscon = false;
-        int[] gaps = { 1, 3, 7, 14, 30, 60, 120 };
+        int[] gaps = longTerm ? new[] { 1, 3, 7, 14, 30, 60, 120 } : new[] { 3 };
         DateTime last = DateTime.MinValue;
         foreach (var e in CE.Where(e => e.Kind == "answer" && e.Question == questionId))
         {
             seen++;
             var day = DateTime.TryParse(e.Day, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : e.At.ToLocalTime().Date;
+            // Remembered for longer than planned (answered late, and right): the next gap builds on how long it actually lasted.
+            int lasted = last == DateTime.MinValue ? 0 : Math.Max(0, (day - last).Days);
+            bool late = due != DateTime.MinValue && day > due;
             last = day;
             if (e.Grade == 0) { streak = 0; miscon = false; due = day.AddDays(1); }
             else if (e.Grade == 2)
             {
                 // ✓✓ Know it well: a much longer gap (two weeks the first time, then months).
                 streak = Math.Max(streak + 2, 3); miscon = false;
-                due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)] * 2);
+                int g = gaps[Math.Min(streak - 1, gaps.Length - 1)] * 2;
+                if (late) g = Math.Max(g, Math.Min(lasted * 2, 365));
+                due = day.AddDays(g);
             }
-            else if (e.Grade == 1 || (e.Correct && e.Sure)) { streak++; miscon = false; due = day.AddDays(gaps[Math.Min(streak - 1, gaps.Length - 1)]); }
+            else if (e.Grade == 1 || (e.Correct && e.Sure))
+            {
+                streak++; miscon = false;
+                int g = gaps[Math.Min(streak - 1, gaps.Length - 1)];
+                if (late) g = Math.Max(g, Math.Min(lasted * 2, 365));
+                due = day.AddDays(g);
+            }
             else { streak = 0; miscon = !e.Correct && e.Sure; due = day.AddDays(1); }
         }
         // Thumbs up brings it back sooner (half the gap), thumbs down later (double); it always stays in the schedule.
@@ -756,7 +780,93 @@ public static class Course
             int gap = (due - last).Days;
             due = last.AddDays(vote > 0 ? Math.Max(1, gap / 2) : gap * 2);
         }
-        return new QState(due, streak, miscon, seen);
+        bool graduated = streak > gaps.Length; // through every gap in a row
+        return new QState(due, streak, miscon, seen, graduated);
+    }
+
+    private static HashSet<string>? _cardIds;
+    private static string _cardIdsFor = "";
+    /// <summary>Whether a question is a memory card (in any lesson of the course).</summary>
+    public static bool IsCard(string questionId)
+    {
+        string key = Current.Id + "|" + string.Join(",", Packs.Select(p => p.Key + ":" + p.Value.GetHashCode()));
+        if (_cardIds == null || _cardIdsFor != key)
+        {
+            _cardIds = Lessons().SelectMany(l => l.Lesson.Cards.Select(c => c.Id)).ToHashSet();
+            _cardIdsFor = key;
+        }
+        return _cardIds.Contains(questionId);
+    }
+
+    // ---------- The waiting room for new memory cards ----------
+
+    /// <summary>A memory card is in the review once it's been let in (or if it was first answered before the waiting room began).</summary>
+    public static bool Released(string cardId)
+    {
+        if (CE.Any(e => e.Kind == "release" && e.Question == cardId)) return true;
+        var first = CE.FirstOrDefault(e => e.Kind == "answer" && e.Question == cardId);
+        return first != null && Config.IntakeSinceUtc is DateTime since && first.At < since;
+    }
+
+    private static double SecondsFor(bool card) => card ? 12 : 25; // a memory card, or a multiple-choice question
+
+    /// <summary>
+    /// Lets waiting memory cards into the review while today's review still fits in your daily review time (oldest
+    /// lesson first). On a normal day every new card goes straight in; after a busy stretch, they join a few at a time.
+    /// </summary>
+    public static void ReleaseCards()
+    {
+        if (Config.IntakeSinceUtc == null) { Config.IntakeSinceUtc = DateTime.UtcNow; SaveConfig(); return; }
+        var hidden = Hidden();
+        var done = DoneLessons();
+        var retired = RetiredConcepts();
+        var today = DateTime.Today;
+        double load = 0;
+        var waiting = new List<string>();
+        foreach (var l in Lessons().Where(l => done.Contains(l.Index)).OrderBy(l => l.Index))
+            foreach (var (q, card) in l.Lesson.Practice.Select(pq => (pq, false)).Concat(l.Lesson.Quiz.Where(x => x.Kind == "mc").Select(pq => (pq, false)))
+                                                     .Concat(l.Lesson.Cards.Select(pq => (pq, true))))
+            {
+                if (hidden.Contains(q.Id) || (q.Concept.Length > 0 && retired.Contains(q.Concept))) continue;
+                var st = StateOf(q.Id, card);
+                if (st.Seen == 0 || st.Graduated) continue;
+                if (card && !Released(q.Id)) { waiting.Add(q.Id); continue; }
+                if (st.Due <= today) load += SecondsFor(card);
+            }
+        double room = Math.Max(1, Config.ReviewMinutes) * 60 - load;
+        foreach (var id in waiting)
+        {
+            if (room < SecondsFor(true)) break;
+            Add(new TrainingEvent { Kind = "release", Question = id });
+            room -= SecondsFor(true);
+        }
+    }
+
+    /// <summary>How many memory cards are waiting to join the review (not counting ones whose concept you know for good).</summary>
+    public static int WaitingCards()
+    {
+        var done = DoneLessons();
+        var hidden = Hidden();
+        var retired = RetiredConcepts();
+        return Lessons().Where(l => done.Contains(l.Index)).SelectMany(l => l.Lesson.Cards)
+            .Count(q => !hidden.Contains(q.Id) && !(q.Concept.Length > 0 && retired.Contains(q.Concept)) &&
+                        StateOf(q.Id, true).Seen > 0 && !Released(q.Id));
+    }
+
+    /// <summary>
+    /// Concepts you know for good: right on six separate days, spread over at least 90 days (so the long gaps that make
+    /// facts stick have happened). Their questions leave daily review.
+    /// </summary>
+    public static HashSet<string> RetiredConcepts()
+    {
+        var result = new HashSet<string>();
+        foreach (var g in CE.Where(e => e.Kind == "answer" && e.Concept.Length > 0 && e.Correct && e.Sure).GroupBy(e => e.Concept))
+        {
+            var days = g.Select(e => DateTime.TryParse(e.Day, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.Date : e.At.ToLocalTime().Date)
+                        .Distinct().OrderBy(d => d).ToList();
+            if (days.Count >= 6 && (days[^1] - days[0]).TotalDays >= 90) result.Add(g.Key);
+        }
+        return result;
     }
 
     /// <summary>A concept's stage: Learned once answered right (and sure) on three separate days; Retired after a long run.</summary>
@@ -774,12 +884,18 @@ public static class Course
         var hidden = Hidden();
         var done = DoneLessons();
         var today = DateTime.Today;
+        ReleaseCards(); // new memory cards join while today's review fits in your daily review time
+        var retired = RetiredConcepts();
         var due = new List<(LessonRef, PackQuestion, QState)>();
         foreach (var l in Lessons().Where(l => done.Contains(l.Index)))
-            foreach (var q in l.Lesson.Practice.Concat(l.Lesson.Cards).Concat(l.Lesson.Quiz.Where(x => x.Kind == "mc")))
+            foreach (var (q, card) in l.Lesson.Practice.Select(pq => (pq, false)).Concat(l.Lesson.Cards.Select(pq => (pq, true)))
+                                                     .Concat(l.Lesson.Quiz.Where(x => x.Kind == "mc").Select(pq => (pq, false))))
             {
                 if (hidden.Contains(q.Id)) continue;
-                var s = StateOf(q.Id);
+                if (q.Concept.Length > 0 && retired.Contains(q.Concept)) continue;   // known for good
+                if (card && !Released(q.Id)) continue;                                // still in the waiting room
+                var s = StateOf(q.Id, card);
+                if (s.Graduated) continue;                                            // done with daily review
                 if (s.Seen > 0 && s.Due <= today) due.Add((l, q, s));
             }
         return due.OrderByDescending(x => x.Item3.Misconception).ThenBy(x => x.Item3.Due).ThenBy(x => x.Item3.Streak)

@@ -355,7 +355,9 @@ public partial class LessonWindow : Window
     /// <summary>"back in 3 days" for a question just answered.</summary>
     private static string BackIn(string questionId)
     {
-        int days = (Course.StateOf(questionId).Due.Date - DateTime.Today).Days;
+        var st = Course.StateOf(questionId);
+        if (st.Graduated) return "learned: done with daily review";
+        int days = (st.Due.Date - DateTime.Today).Days;
         return days <= 1 ? "back tomorrow" : $"back in {days} days";
     }
 
