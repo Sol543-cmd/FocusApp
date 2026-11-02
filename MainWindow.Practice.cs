@@ -22,13 +22,13 @@ public partial class MainWindow
         bool wasBusy = false;
         chain.Tick += (_, _) =>
         {
-            bool busy = VocabWindow.IsShowing || _lessonWindow != null;
+            bool busy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null;
             if (wasBusy && !busy)
             {
                 try { CheckTraining(); if (_lessonWindow == null && !VocabWindow.IsShowing) CheckVocab(); }
                 catch (Exception ex) { Log.Error("Practice chain", ex); }
             }
-            wasBusy = VocabWindow.IsShowing || _lessonWindow != null;
+            wasBusy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null;
         };
         chain.Start();
         Concepts.Load();

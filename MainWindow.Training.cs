@@ -52,7 +52,7 @@ public partial class MainWindow
             try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.Reload", ex); }
             AdoptSharedPracticeTimes(); // timelines changed on another computer
         }
-        if (_lessonWindow != null || VocabWindow.IsShowing) return;
+        if (_lessonWindow != null || _lessonPrompt != null || VocabWindow.IsShowing) return;
         if (PracticePausedToday()) return; // weekend pause: lessons, All-books and card review only when you start them
         var now = DateTime.Now.TimeOfDay;
         if (!LessonTime(now)) CheckAllBooks(now, last: false);
@@ -89,28 +89,61 @@ public partial class MainWindow
         var times = TrainingTimes();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0) return false;
-        // Lesson times before the end of the practice day reset at it; ones after it last until midnight.
-        if (!SlotLive(DateTime.Today + times[slot], TimeSpan.FromDays(1))) return false;
+        bool last = slot == times.Count - 1;
+        // Lesson times before the end of the practice day reset at it; ones after it last until midnight. The day's last
+        // lesson time always lasts until midnight: it keeps coming back until the lesson is done.
+        if (!last && !SlotLive(DateTime.Today + times[slot], TimeSpan.FromDays(1))) return false;
         Course.ReloadEvents(); // another device may have finished today's lesson
         if (Course.DoneToday() || (Course.NextLesson() == null && Course.ExamDue() == null)) return false;
+        if (_lessonPrompt != null) return true;                              // already on screen
         if (PracticeMustWait()) return true;                                 // waits until the meeting, break or lunch is over
-        bool last = slot == times.Count - 1;
-        if (last) { StartLesson(required: true); return true; }
+        if (last)
+        {
+            // Every time Focus is running (or starts again) today: the popup, with no Later, until the lesson is done.
+            ShowLessonPrompt(required: true, next: null);
+            return true;
+        }
         string key = LessonKey(times[slot]);
         if (_trainingPromptKey == key || DateTime.Now < _trainingSnoozeUntil) return false;
         _trainingPromptKey = key;
         _lessonOfferedAt = DateTime.Now;
-        string what = Course.ExamDue()?.Title ?? Course.NextLesson()?.Lesson.Title ?? "Today's lesson";
-        bool part = Course.ExamDue() == null && Course.InProgress(Course.NextLesson());
-        _toast.ShowMessage(part ? "Finish today's lesson" : "Today's lesson is ready",
-                           part ? $"{what}: pick up where you left off. Later waits until the next lesson time." : $"{what}. Later waits until the next lesson time.",
-                           part ? "Continue" : "Start lesson", () =>
-                           {
-                               Course.ReloadEvents();
-                               if (Course.DoneToday()) { _toast.ShowMessage("Already done today", "You finished today's lesson on another device."); return; }
-                               StartLesson(required: false);
-                           });
+        ShowLessonPrompt(required: false, next: times[slot + 1]);
         return true;
+    }
+
+    private LessonPromptWindow? _lessonPrompt;
+
+    /// <summary>
+    /// The lesson popup on the screen you're working on: Start (or Continue) and, except at the last lesson time, Later.
+    /// The last one opens the lesson as required: it has to be finished, including a lesson half done earlier.
+    /// </summary>
+    private void ShowLessonPrompt(bool required, TimeSpan? next)
+    {
+        var exam = Course.ExamDue();
+        var lesson = Course.NextLesson();
+        bool part = exam == null && Course.InProgress(lesson);
+        string title = exam?.Title ?? (lesson != null ? $"{ShortTitle(Course.Current)}, {lesson.Lesson.Title}" : "Today's lesson");
+        string meta = exam != null ? "Today's lesson is a unit exam." :
+                      lesson != null ? $"Chapter {lesson.Pack.Chapter} · about 25 minutes of reading and practice, then 5 minutes of cards" + (part ? " · you've started it" : "") : "";
+        string label = required ? $"BOOK LESSON · LAST TIME TODAY · {DateTime.Now:t}" : $"BOOK LESSON · {DateTime.Now:t}";
+        string? note = required
+            ? (part ? "Today's last lesson time: finish the lesson you started. " : "Today's last lesson time. ") +
+              "This stays until the lesson is done. Quitting Focus from the tray puts it off, but it comes back each time Focus starts today."
+            : null;
+        string? laterText = required ? null : next is TimeSpan n ? $"Later · back at {DateTime.Today.Add(n):t}" : "Later";
+        LessonPromptWindow? w = null;
+        w = new LessonPromptWindow(VocabWindow.WorkingScreenBounds(), label, title, meta, part ? "Continue lesson" : "Start lesson", laterText, note,
+            start: () =>
+            {
+                w?.CloseNow();
+                Course.ReloadEvents();
+                if (Course.DoneToday()) { _toast.ShowMessage("Already done today", "You finished today's lesson on another device."); return; }
+                StartLesson(required);
+            },
+            later: required ? null : () => w?.CloseNow());
+        w.Closed += (_, _) => _lessonPrompt = null;
+        _lessonPrompt = w;
+        w.Show();
     }
 
     private void StartLesson(bool required)

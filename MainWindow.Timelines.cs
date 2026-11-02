@@ -140,7 +140,7 @@ public partial class MainWindow
     {
         MergePracticeDoneFromOtherComputers(); // a round done on another computer counts here too
         if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
-        if (_lessonWindow != null || LessonGoesFirst()) return true; // a chain: the lesson first, then the rounds, back to back
+        if (_lessonWindow != null || _lessonPrompt != null || LessonGoesFirst()) return true; // a chain: the lesson first, then the rounds, back to back
         var now = DateTime.Now;
         foreach (var p in Practices)
         {

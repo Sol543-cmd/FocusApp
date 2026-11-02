@@ -65,6 +65,9 @@ public partial class VocabWindow : Window
     }
 
     /// <summary>The screen you're working on: where the active window is, otherwise where the mouse is.</summary>
+    /// <summary>The screen you're working on (for the book lesson's popup too).</summary>
+    internal static System.Drawing.Rectangle WorkingScreenBounds() => WorkingScreen().Bounds;
+
     private static System.Windows.Forms.Screen WorkingScreen()
     {
         try

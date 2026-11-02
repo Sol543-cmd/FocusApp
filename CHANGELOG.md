@@ -3,6 +3,18 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.8
+
+The book lesson pops up like Greek practice:
+
+- At each lesson time, the lesson opens over the screen you're working on (just Focus running is enough), with Start
+  lesson (or Continue lesson, if you started it) and Later in the top right, which says when it comes back.
+- The day's last lesson time has no Later and can't be closed: it stays until you start the lesson, and Start opens the
+  lesson as required, so it has to be finished (including one you half did earlier). Quitting Focus from the tray puts
+  it off, but it comes back each time Focus starts that day until the lesson is done; the next day it simply moves to
+  the book's next planned day.
+- While the lesson popup is showing, Greek practice rounds wait, then follow it back to back.
+
 ## 1.7.7
 
 Practice timelines you can rely on:
