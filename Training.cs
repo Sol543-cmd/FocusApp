@@ -299,6 +299,9 @@ public class CourseInfo
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
     public string BookFileName { get; set; } = "";
+    /// <summary>The weekly plan: "Track A", "Track B" or "Elective", and its days (1 = Monday ... 5 = Friday).</summary>
+    public string Role { get; set; } = "";
+    public List<int> Days { get; set; } = new();
     public int Chapters { get; set; } = 24;
     /// <summary>The last chapter of each part of the book; a unit exam follows each one.</summary>
     public List<int> UnitEnds { get; set; } = new();
@@ -311,6 +314,10 @@ public class CourseConfig
     public List<CourseInfo> Courses { get; set; } = new();
     /// <summary>The book whose lessons come up each day.</summary>
     public string ActiveId { get; set; } = "";
+    /// <summary>A missed lesson: "offer" it as an optional catch-up the next weekday, or "carry" on without one.</summary>
+    public string MissedPolicy { get; set; } = "offer";
+    /// <summary>Catch-ups you let go ("courseId|yyyy-MM-dd").</summary>
+    public List<string> SkippedCatchUps { get; set; } = new();
     // From before the library (one book only); moved into Courses when first loaded.
     public string Id { get; set; } = "desilva-nt";
     public string Title { get; set; } = "deSilva, An Introduction to the New Testament";
@@ -410,6 +417,76 @@ public static class Course
     public static bool HasBook => Config.Courses.Any(c => c.Id == Current.Id);
 
     /// <summary>Opens a book from the library; its lessons become the daily ones.</summary>
+    // ---------- The weekly plan: which book each day ----------
+
+    public static readonly string[] Roles = { "Track A", "Track B", "Elective" };
+    public static string RoleOf(CourseInfo c) => Roles.Contains(c.Role) ? c.Role : "Track A";
+    private static string Ymd(DateTime d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>The book planned for a day: none at weekends; with no days planned yet, your active book takes every weekday.</summary>
+    public static CourseInfo? BookFor(DateTime day)
+    {
+        int dow = (int)day.DayOfWeek;
+        if (dow == 0 || dow == 6) return null;
+        if (Config.Courses.All(c => c.Days.Count == 0)) return Config.Courses.FirstOrDefault(c => c.Id == Current.Id) ?? Config.Courses.FirstOrDefault();
+        return Config.Courses.Where(c => c.Days.Contains(dow)).OrderBy(c => Array.IndexOf(Roles, RoleOf(c))).FirstOrDefault();
+    }
+
+    public static string DaysText(CourseInfo c)
+    {
+        var days = Config.Courses.All(x => x.Days.Count == 0) && c.Id == Current.Id ? new List<int> { 1, 2, 3, 4, 5 } : c.Days.OrderBy(d => d).ToList();
+        return days.Count == 0 ? "No days yet" : string.Join(" · ", days.Where(d => d >= 1 && d <= 5).Select(d => new[] { "", "Mon", "Tue", "Wed", "Thu", "Fri" }.ElementAt(d)));
+    }
+
+    public static bool DoneOn(string courseId, DateTime day) =>
+        Events.Any(e => CourseOf(e) == courseId && e.Kind == "lessonDone" && e.Day == Ymd(day));
+
+    public static int LessonsDone(string courseId) =>
+        Events.Where(e => CourseOf(e) == courseId && e.Kind == "lessonDone" && e.Lesson >= 0).Select(e => e.Lesson).Distinct().Count();
+
+    /// <summary>The last weekday's planned lesson, if it wasn't done and its book hasn't had a lesson since (optional catch-up).</summary>
+    public static (CourseInfo Book, DateTime Day)? MissedLesson()
+    {
+        if (Config.MissedPolicy != "offer") return null;
+        var day = DateTime.Today.AddDays(-1);
+        while (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) day = day.AddDays(-1);
+        if ((DateTime.Today - day).TotalDays > 3 || BookFor(day) is not CourseInfo book) return null;
+        if (Config.SkippedCatchUps.Contains(book.Id + "|" + Ymd(day))) return null;
+        for (var d = day; d <= DateTime.Today; d = d.AddDays(1)) if (DoneOn(book.Id, d)) return null;
+        return (book, day);
+    }
+
+    public static void SkipCatchUp(CourseInfo book, DateTime day)
+    {
+        Config.SkippedCatchUps.Add(book.Id + "|" + Ymd(day));
+        if (Config.SkippedCatchUps.Count > 60) Config.SkippedCatchUps.RemoveAt(0);
+        SaveConfig();
+    }
+
+    /// <summary>Makes today's planned book the open one (lessons, prompts and "done today" follow it).</summary>
+    public static void UseToday()
+    {
+        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) Open(c.Id);
+    }
+
+    /// <summary>Review due in each book (each opened briefly to count, then back to the one you had).</summary>
+    public static List<(CourseInfo Book, int Due)> DueByBook()
+    {
+        var result = new List<(CourseInfo, int)>();
+        var was = Current;
+        foreach (var c in Config.Courses.ToList())
+        {
+            try
+            {
+                if (c.Id != Current.Id) { Current = c; LoadCurrent(); }
+                result.Add((c, DueReview(999).Count));
+            }
+            catch (Exception ex) { Log.Error("DueByBook " + c.Id, ex); }
+        }
+        if (Current.Id != was.Id) { Current = was; LoadCurrent(); }
+        return result;
+    }
+
     public static void Open(string id)
     {
         if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;

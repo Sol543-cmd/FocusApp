@@ -61,7 +61,10 @@ public partial class MainWindow
     /// <summary>True when a lesson was offered or opened (or is waiting for a meeting or break).</summary>
     private bool LessonTime(TimeSpan now)
     {
-        if (!Course.Config.On || Course.Packs.Count == 0) return false;
+        if (!Course.Config.On) return false;
+        if (Course.BookFor(DateTime.Today) == null) return false; // weekend, or no book planned today
+        Course.UseToday();                                          // today's book from the weekly plan
+        if (Course.Packs.Count == 0) return false;
         var times = TrainingTimes();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0) return false;
@@ -387,18 +390,207 @@ public partial class MainWindow
 
     // ----- The library: a calm board of your books -----
 
+    // ---------- The Training page: today, review, this week, your books ----------
+
+    private static readonly SolidColorBrush Amber = new(Color.FromRgb(0xE8, 0xA8, 0x4A));
+
+    /// <summary>A finished mark: a solid circle with a check inside.</summary>
+    private static FrameworkElement DoneMark(double size = 18)
+    {
+        var g = new Grid { Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center };
+        var dot = new System.Windows.Shapes.Ellipse();
+        dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "FocusBrush");
+        g.Children.Add(dot);
+        var tick = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse($"M {size * 0.28},{size * 0.52} L {size * 0.44},{size * 0.68} L {size * 0.74},{size * 0.36}"),
+            StrokeThickness = Math.Max(1.6, size / 10), StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round
+        };
+        tick.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "OnAccent");
+        g.Children.Add(tick);
+        return g;
+    }
+
+    private Border Chip(string text, bool strong)
+    {
+        var b = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 2, 9, 3), Margin = new Thickness(0, 0, 6, 0), Child = TT(text, 11.5, bold: strong, brush: strong ? "FocusBrush" : "Muted") };
+        b.SetResourceReference(Border.BackgroundProperty, strong ? "FocusTint" : "Panel2");
+        return b;
+    }
+
+    private static string ShortTitle(CourseInfo c) => c.Title.Split(',')[0].Trim();
+
+    private Border PageCard(UIElement child, bool accent = false, Brush? edge = null)
+    {
+        var card = new Border { Child = child, CornerRadius = new CornerRadius(14), Padding = new Thickness(22, 20, 22, 20), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 16, 16) };
+        card.SetResourceReference(Border.BackgroundProperty, "Panel");
+        if (edge != null) card.BorderBrush = edge; else card.SetResourceReference(Border.BorderBrushProperty, accent ? "FocusBrush" : "Line");
+        return card;
+    }
+
     private void BuildLibrary()
     {
         _trainingView = "library";
-        TrainingHost.Children.Add(TrainingHeader("Training", "Your books. Open one to see its lessons, chapters and notes.", back: false, gear: true));
-        var board = new WrapPanel { Margin = new Thickness(0, 18, 0, 0) };
-        foreach (var c in Course.Config.Courses.OrderByDescending(c => c.Id == Course.Current.Id).ThenBy(c => c.Title))
+        Course.UseToday(); // the page opens on today's book
+        TrainingHost.Children.Add(TrainingHeader("Training", DateTime.Today.ToString("dddd, MMMM d"), back: false, gear: true));
+        var top = new WrapPanel { Margin = new Thickness(0, 18, 0, 0) };
+
+        // Today
+        var todayBook = Course.BookFor(DateTime.Today);
+        var tp = new StackPanel { Width = 430 };
+        if (todayBook == null)
+        {
+            tp.Children.Add(TT("TODAY", 11, brush: "Muted"));
+            tp.Children.Add(TT("Weekend: no lessons", 20, bold: true, top: 6));
+            tp.Children.Add(TT("Rest up. Your next lesson is on Monday.", 13, brush: "Muted", top: 6));
+        }
+        else
+        {
+            tp.Children.Add(TT($"TODAY · {Course.RoleOf(todayBook).ToUpperInvariant()}", 11, brush: "FocusBrush"));
+            var next = Course.NextLesson();
+            if (Course.DoneOn(todayBook.Id, DateTime.Today))
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+                row.Children.Add(DoneMark(24));
+                var t = TT("Today's lesson is done", 20, bold: true); t.Margin = new Thickness(10, 0, 0, 0); t.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(t);
+                tp.Children.Add(row);
+                tp.Children.Add(TT(ShortTitle(todayBook) + (next != null ? $" · next: {next.Lesson.Title}" : ""), 13, brush: "Muted", top: 8));
+            }
+            else if (next != null)
+            {
+                var title = TT($"{ShortTitle(todayBook)}, {next.Lesson.Title}", 20, bold: true, top: 6);
+                title.TextWrapping = TextWrapping.Wrap;
+                tp.Children.Add(title);
+                tp.Children.Add(TT($"Chapter {next.Pack.Chapter} · about 25 minutes, then 5 minutes of cards", 13, brush: "Muted", top: 6));
+                var go = new Button { Content = Course.InProgress(next) ? "Continue lesson" : "Start lesson", Padding = new Thickness(22, 9, 22, 9), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+                go.SetResourceReference(StyleProperty, "PrimaryButton");
+                go.Click += (_, _) => StartLesson(required: false);
+                tp.Children.Add(go);
+            }
+            else
+            {
+                int nextChapter = Course.Packs.Count == 0 ? 1 : Course.Packs.Keys.Max() + 1;
+                tp.Children.Add(TT($"No lesson ready: import chapter {nextChapter}", 20, bold: true, top: 6));
+                tp.Children.Add(TT($"{ShortTitle(todayBook)} needs its next chapter pack.", 13, brush: "Muted", top: 6));
+                var imp = new Button { Content = "Import chapter pack…", Padding = new Thickness(18, 8, 18, 8), Margin = new Thickness(0, 14, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+                imp.Click += (_, _) =>
+                {
+                    var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Chapter packs (*.focuspack)|*.focuspack|All files|*.*", Title = "Import a chapter pack" };
+                    if (dlg.ShowDialog(this) == true) { ImportPack(dlg.FileName); RefreshTraining(); }
+                };
+                tp.Children.Add(imp);
+            }
+        }
+        top.Children.Add(PageCard(tp, accent: todayBook != null));
+
+        // Catch-up: the last weekday's missed lesson, optional
+        if (Course.MissedLesson() is { } missed)
+        {
+            var missBook = missed.Book; var missDay = missed.Day;
+            var cp = new StackPanel { Width = 280 };
+            var label = TT("CATCH-UP · OPTIONAL", 11); label.Foreground = Amber;
+            cp.Children.Add(label);
+            var mt = TT($"{ShortTitle(missBook)}, from {missDay:dddd}", 16, bold: true, top: 6); mt.TextWrapping = TextWrapping.Wrap;
+            cp.Children.Add(mt);
+            var help = TT($"Do it now as an extra lesson, or let it go and {ShortTitle(missBook)} carries on from there next time.", 12.5, brush: "Muted", top: 6);
+            help.TextWrapping = TextWrapping.Wrap;
+            cp.Children.Add(help);
+            var btns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+            var doIt = new Button { Content = "Do it now", Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(0, 0, 8, 0) };
+            doIt.Click += (_, _) => { Course.Open(missBook.Id); StartLesson(required: false); };
+            var letGo = new Button { Content = "Let it go", Padding = new Thickness(14, 7, 14, 7) };
+            letGo.Click += (_, _) => { Course.SkipCatchUp(missBook, missDay); RefreshTraining(); };
+            btns.Children.Add(doIt); btns.Children.Add(letGo);
+            cp.Children.Add(btns);
+            top.Children.Add(PageCard(cp, edge: Amber));
+        }
+
+        // Review across all books
+        var due = Course.DueByBook();
+        int total = due.Sum(d => d.Due);
+        var rp = new StackPanel { Width = 260 };
+        rp.Children.Add(TT("REVIEW · ALL BOOKS", 11, brush: "Muted"));
+        var count = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        count.Children.Add(TT(total.ToString(), 30, bold: true));
+        var sub = TT($"due · about {Math.Max(1, (int)Math.Round(total * 0.4))} min", 13, brush: "Muted"); sub.VerticalAlignment = VerticalAlignment.Bottom; sub.Margin = new Thickness(8, 0, 0, 7);
+        count.Children.Add(sub);
+        rp.Children.Add(count);
+        var per = TT(string.Join(" · ", due.Where(d => d.Due > 0).Select(d => $"{ShortTitle(d.Book)} {d.Due}")), 12.5, brush: "Muted", top: 2);
+        per.TextWrapping = TextWrapping.Wrap;
+        if (total > 0) rp.Children.Add(per);
+        int waiting = Course.WaitingCards();
+        if (waiting > 0) rp.Children.Add(TT($"{waiting} new cards waiting to join", 12.5, brush: "Muted", top: 2));
+        var rev = new Button { Content = "Review now", Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = total > 0 };
+        rev.Click += (_, _) => StartAllBooks();
+        rp.Children.Add(rev);
+        top.Children.Add(PageCard(rp));
+        TrainingHost.Children.Add(top);
+
+        // This week
+        var monday = DateTime.Today.AddDays(-(((int)DateTime.Today.DayOfWeek + 6) % 7));
+        var week = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7, Margin = new Thickness(0, 12, 0, 0) };
+        int planned = 0, doneCount = 0;
+        for (int i = 0; i < 7; i++)
+        {
+            var d = monday.AddDays(i);
+            var book = Course.BookFor(d);
+            var cell = new StackPanel();
+            cell.Children.Add(TT(d.ToString("ddd"), 11.5, brush: "Muted"));
+            var cellBorder = new Border { CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 9, 10, 11), Margin = new Thickness(0, 0, 8, 0), BorderThickness = new Thickness(1), MinHeight = 76, Child = cell };
+            cellBorder.SetResourceReference(Border.BorderBrushProperty, "Line");
+            if (book == null)
+            {
+                cell.Children.Add(TT("Free", 13, bold: true, brush: "Muted", top: 4));
+                cellBorder.Background = Brushes.Transparent;
+            }
+            else
+            {
+                planned++;
+                cell.Children.Add(TT(ShortTitle(book), 13, bold: true, top: 4));
+                cellBorder.SetResourceReference(Border.BackgroundProperty, d == DateTime.Today ? "FocusTint" : "Panel");
+                if (d == DateTime.Today) cellBorder.SetResourceReference(Border.BorderBrushProperty, "FocusBrush");
+                bool done = Course.DoneOn(book.Id, d);
+                bool caughtUp = !done && d < DateTime.Today && Enumerable.Range(1, (DateTime.Today - d).Days).Any(k => Course.DoneOn(book.Id, d.AddDays(k)) && Course.BookFor(d.AddDays(k))?.Id != book.Id);
+                var state = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 5, 0, 0) };
+                if (done || caughtUp)
+                {
+                    doneCount++;
+                    state.Children.Add(DoneMark(16));
+                    var w = TT(done ? "Done" : "Caught up", 11.5, brush: "FocusBrush"); w.Margin = new Thickness(6, 0, 0, 0); w.VerticalAlignment = VerticalAlignment.Center;
+                    state.Children.Add(w);
+                }
+                else if (d < DateTime.Today) { var w = TT("Missed", 11.5); w.Foreground = Amber; state.Children.Add(w); cellBorder.BorderBrush = Amber; }
+                else state.Children.Add(TT(d == DateTime.Today ? "Today" : "Planned", 11.5, brush: "Muted"));
+                cell.Children.Add(state);
+            }
+            week.Children.Add(cellBorder);
+        }
+        var wp = new StackPanel();
+        var wh = new DockPanel();
+        var summary = TT($"{doneCount} of {planned} lessons done", 12.5, brush: "Muted"); DockPanel.SetDock(summary, Dock.Right);
+        wh.Children.Add(summary);
+        wh.Children.Add(TT("This week", 16, bold: true));
+        wp.Children.Add(wh);
+        wp.Children.Add(week);
+        var weekCard = PageCard(wp); weekCard.Margin = new Thickness(0, 0, 16, 16);
+        TrainingHost.Children.Add(weekCard);
+
+        // Your books
+        TrainingHost.Children.Add(TT("Your books", 16, bold: true, top: 6));
+        var board = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+        foreach (var c in Course.Config.Courses.OrderBy(x => Array.IndexOf(Course.Roles, Course.RoleOf(x))))
         {
             bool open = c.Id == Course.Current.Id;
             var panel = new StackPanel();
-            panel.Children.Add(TT(c.Title, 17, bold: true));
-            string status;
+            var chips = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            chips.Children.Add(Chip(Course.RoleOf(c), true));
+            chips.Children.Add(Chip(Course.DaysText(c), false));
+            panel.Children.Add(chips);
+            var name = TT(c.Title, 15, bold: true); name.TextWrapping = TextWrapping.Wrap;
+            panel.Children.Add(name);
             double progress = 0;
+            string status;
             if (open)
             {
                 var lessons = Course.Lessons();
@@ -408,40 +600,26 @@ public partial class MainWindow
                 status = Course.Finished ? "Finished" : next != null ? $"Chapter {next.Pack.Chapter} of {c.Chapters} · {done} of {lessons.Count} imported lessons done" :
                          Course.Packs.Count == 0 ? "No chapter packs yet" : "Waiting for the next chapter pack";
             }
-            else status = c.BookFileName.Length > 0 ? "Open to see progress" : "No book file yet";
-            panel.Children.Add(TT(status, 13, brush: "Muted", top: 6));
-            var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 14, 0, 0) };
+            else status = $"{Course.LessonsDone(c.Id)} lessons done";
+            var st = TT(status, 12.5, brush: "Muted", top: 6); st.TextWrapping = TextWrapping.Wrap;
+            panel.Children.Add(st);
+            var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 10, 0, 0) };
             track.SetResourceReference(Border.BackgroundProperty, "Panel2");
-            var fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Width = 228 * Math.Clamp(progress, 0, 1) };
+            var fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Width = 236 * Math.Clamp(progress, 0, 1) };
             fill.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
             var bar = new Grid(); bar.Children.Add(track); bar.Children.Add(fill);
             panel.Children.Add(bar);
-            if (open)
-            {
-                var badge = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 2, 9, 2), Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Left,
-                                         Child = TT(Course.Finished ? "Finished" : Course.DoneToday() ? "Today's lesson done" : "Daily lessons", 11.5, bold: true, brush: "FocusBrush") };
-                badge.SetResourceReference(Border.BackgroundProperty, "FocusTint");
-                panel.Children.Add(badge);
-            }
-            var card = new Border { Child = panel, Width = 268, MinHeight = 150, CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 18, 20, 18),
-                                    Margin = new Thickness(0, 0, 14, 14), Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(1) };
+            var after = Course.Config.Courses.SkipWhile(x => x.Id != c.Id).Skip(1).FirstOrDefault(x => Course.RoleOf(x) == Course.RoleOf(c) && x.Days.Count == 0);
+            panel.Children.Add(TT(after != null ? $"Then: {ShortTitle(after)}" : "Then: your next book", 12, brush: "Muted", top: 10));
+            var card = new Border { Child = panel, Width = 280, MinHeight = 170, CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 18, 20, 18),
+                                    Margin = new Thickness(0, 0, 16, 16), Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(1) };
             card.SetResourceReference(Border.BackgroundProperty, "Panel");
-            card.SetResourceReference(Border.BorderBrushProperty, open ? "FocusBrush" : "Line");
+            card.SetResourceReference(Border.BorderBrushProperty, "Line");
             string id = c.Id;
-            card.MouseLeftButtonUp += (_, _) =>
-            {
-                if (id != Course.Current.Id)
-                {
-                    if (!Ask($"Open \"{c.Title}\"? Its lessons become your daily lessons instead of \"{Course.Current.Title}\".", "Training")) return;
-                    Course.Open(id);
-                }
-                _trainingView = "book";
-                RefreshTraining();
-            };
+            card.MouseLeftButtonUp += (_, _) => { if (id != Course.Current.Id) Course.Open(id); _trainingView = "book"; RefreshTraining(); };
             board.Children.Add(card);
         }
-        // Add a book
-        var add = new Border { Width = 268, MinHeight = 150, CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 0, 14, 14), Cursor = System.Windows.Input.Cursors.Hand,
+        var add = new Border { Width = 280, MinHeight = 170, CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 0, 16, 16), Cursor = System.Windows.Input.Cursors.Hand,
                                BorderThickness = new Thickness(1.5), Background = Brushes.Transparent };
         add.SetResourceReference(Border.BorderBrushProperty, "Line");
         var addText = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
@@ -756,6 +934,67 @@ public partial class MainWindow
         TrainingHost.Children.Add(back);
         TrainingHost.Children.Add(head);
 
+        // Weekly plan: which book on which weekday (weekends stay free)
+        var plan = new StackPanel();
+        plan.Children.Add(TT("Weekly plan", 15, bold: true));
+        var planNote = TT("Which book you study each weekday. Weekends stay free: no lessons and no review. The order sets what comes next in each track.", 12.5, brush: "Muted", top: 4);
+        planNote.TextWrapping = TextWrapping.Wrap;
+        plan.Children.Add(planNote);
+        var books = cfg.Courses.ToList();
+        bool unplanned = books.All(c => c.Days.Count == 0);
+        foreach (var c in books)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
+            var move = new StackPanel { Orientation = Orientation.Horizontal };
+            DockPanel.SetDock(move, Dock.Right);
+            var upB = new Button { Content = "↑", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Earlier in its track" };
+            var downB = new Button { Content = "↓", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(4, 0, 0, 0), ToolTip = "Later in its track" };
+            string cid = c.Id;
+            void Move(int by)
+            {
+                int at = cfg.Courses.FindIndex(x => x.Id == cid), to = Math.Clamp(at + by, 0, cfg.Courses.Count - 1);
+                if (at < 0 || to == at) return;
+                var item = cfg.Courses[at]; cfg.Courses.RemoveAt(at); cfg.Courses.Insert(to, item);
+                Course.SaveConfig(); RefreshTraining();
+            }
+            upB.Click += (_, _) => Move(-1); downB.Click += (_, _) => Move(1);
+            move.Children.Add(upB); move.Children.Add(downB);
+            row.Children.Add(move);
+            var days = new StackPanel { Orientation = Orientation.Horizontal };
+            DockPanel.SetDock(days, Dock.Right);
+            string[] names = { "Mon", "Tue", "Wed", "Thu", "Fri" };
+            for (int d = 1; d <= 5; d++)
+            {
+                int dd = d;
+                bool on = unplanned ? c.Id == Course.Current.Id : c.Days.Contains(d);
+                var cb = new CheckBox { Content = names[d - 1], IsChecked = on, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                cb.Click += (_, _) =>
+                {
+                    // The first change turns the default (your book on every weekday) into a real plan.
+                    if (cfg.Courses.All(x => x.Days.Count == 0) && cfg.Courses.FirstOrDefault(x => x.Id == Course.Current.Id) is CourseInfo cur) cur.Days = new List<int> { 1, 2, 3, 4, 5 };
+                    if (cb.IsChecked == true) { foreach (var other in cfg.Courses) other.Days.Remove(dd); if (!c.Days.Contains(dd)) c.Days.Add(dd); } // one book a day
+                    else c.Days.Remove(dd);
+                    Course.SaveConfig(); RefreshTraining();
+                };
+                days.Children.Add(cb);
+            }
+            row.Children.Add(days);
+            var role = new ComboBox { Width = 100, Margin = new Thickness(10, 0, 0, 0), ItemsSource = Course.Roles, SelectedItem = Course.RoleOf(c), VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(role, Dock.Right);
+            role.SelectionChanged += (_, _) => { c.Role = role.SelectedItem as string ?? "Track A"; Course.SaveConfig(); };
+            row.Children.Add(role);
+            var bt = TT(c.Title, 13.5, bold: true); bt.TextTrimming = TextTrimming.CharacterEllipsis; bt.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(bt);
+            plan.Children.Add(row);
+        }
+        plan.Children.Add(TT("If you miss a lesson", 13.5, bold: true, top: 18));
+        var offer = new RadioButton { Content = "Offer it the next weekday, as an optional catch-up", GroupName = "missed", IsChecked = cfg.MissedPolicy != "carry", Margin = new Thickness(0, 6, 0, 0) };
+        var carry = new RadioButton { Content = "Just carry on: the book picks up where it left off on its next day", GroupName = "missed", IsChecked = cfg.MissedPolicy == "carry", Margin = new Thickness(0, 4, 0, 0) };
+        offer.Checked += (_, _) => { cfg.MissedPolicy = "offer"; Course.SaveConfig(); };
+        carry.Checked += (_, _) => { cfg.MissedPolicy = "carry"; Course.SaveConfig(); };
+        plan.Children.Add(offer); plan.Children.Add(carry);
+        TrainingHost.Children.Add(TCard(plan, 18));
+
         // Lesson times
         var times = TrainingTimes();
         var tp = new StackPanel();
@@ -819,17 +1058,17 @@ public partial class MainWindow
         capRow.Children.Add(cap);
         rp.Children.Add(capRow);
         // The daily review time: new lessons' memory cards join the review only while it fits; the rest wait their turn.
-        var timeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        timeRow.Children.Add(TT("Daily review time, about", 13));
+        var reviewTimeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        reviewTimeRow.Children.Add(TT("Daily review time, about", 13));
         var reviewMinutes = new TextBox { Width = 50, Margin = new Thickness(10, 0, 10, 0), Padding = new Thickness(6, 2, 6, 2), Text = cfg.ReviewMinutes.ToString() };
         reviewMinutes.LostFocus += (_, _) =>
         {
             if (int.TryParse(reviewMinutes.Text, out int n) && n >= 2 && n <= 60) { cfg.ReviewMinutes = n; Course.SaveConfig(); }
             else reviewMinutes.Text = cfg.ReviewMinutes.ToString();
         };
-        timeRow.Children.Add(reviewMinutes);
-        timeRow.Children.Add(TT("minutes", 13));
-        rp.Children.Add(timeRow);
+        reviewTimeRow.Children.Add(reviewMinutes);
+        reviewTimeRow.Children.Add(TT("minutes", 13));
+        rp.Children.Add(reviewTimeRow);
         var timeNote = TT("New memory cards join your review while it fits in this time; after a busy stretch they wait their turn and join a few a day. Lessons always go ahead.", 12);
         timeNote.TextWrapping = TextWrapping.Wrap; timeNote.Margin = new Thickness(0, 4, 0, 0);
         timeNote.SetResourceReference(TextBlock.ForegroundProperty, "Muted");

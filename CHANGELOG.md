@@ -3,6 +3,23 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.6
+
+Training follows a weekly plan, so several books can run side by side:
+
+- Weekly plan (Training settings): choose each book's weekdays and its role (Track A, Track B or Elective). Weekends stay
+  free: no lessons and no review. With one book (or before you plan), your book takes every weekday, as before. The
+  order of your books sets what comes next in each track.
+- The Training page shows Today (that day's book and lesson, or "No lesson ready: import chapter N" with an Import
+  button, or the weekend), Review across all your books (how many are due in each, and new cards waiting), This week
+  (each weekday's book; finished days marked with a solid circle and check, missed days in amber), and Your books
+  (role, days, progress and what comes next).
+- Missed a lesson? An optional Catch-up card offers it the next weekday ("Do it now" or "Let it go"); or choose "Just
+  carry on" in the plan.
+- Lesson times now offer the day's planned book.
+- Fixes 1.7.5, which didn't build: its review changes (graduating questions, retiring known concepts, credit for late
+  right answers, and the daily review time) are all in this version.
+
 ## 1.7.5
 
 Review that keeps up with you, so you can learn the facts thoroughly and still move on through the book:
