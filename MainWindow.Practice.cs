@@ -17,6 +17,20 @@ public partial class MainWindow
 
     private void SetUpPractice()
     {
+        // Chains: the moment a lesson or round closes, the next one due (at the same time) starts, back to back.
+        var chain = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        bool wasBusy = false;
+        chain.Tick += (_, _) =>
+        {
+            bool busy = VocabWindow.IsShowing || _lessonWindow != null;
+            if (wasBusy && !busy)
+            {
+                try { CheckTraining(); if (_lessonWindow == null && !VocabWindow.IsShowing) CheckVocab(); }
+                catch (Exception ex) { Log.Error("Practice chain", ex); }
+            }
+            wasBusy = VocabWindow.IsShowing || _lessonWindow != null;
+        };
+        chain.Start();
         Concepts.Load();
         ApplyExtraSettings();
     }

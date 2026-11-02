@@ -140,6 +140,7 @@ public partial class MainWindow
     {
         MergePracticeDoneFromOtherComputers(); // a round done on another computer counts here too
         if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
+        if (_lessonWindow != null || LessonGoesFirst()) return true; // a chain: the lesson first, then the rounds, back to back
         var now = DateTime.Now;
         foreach (var p in Practices)
         {
@@ -486,7 +487,12 @@ public partial class MainWindow
                                       ToolTip = "On Saturdays and Sundays nothing on these timelines pops up by itself; you can still start any of it yourself." };
         weekends.Checked += (_, _) => SetPauseWeekends(true);
         weekends.Unchecked += (_, _) => SetPauseWeekends(false);
-        var top = new StackPanel(); top.Children.Add(title); top.Children.Add(intro); top.Children.Add(weekends);
+        // Just the title (a small "?" holds the explanation) and the weekend switch.
+        var help = new TextBlock { Text = "?", FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(10, 26, 0, 0), Cursor = System.Windows.Input.Cursors.Help, ToolTip = intro.Text };
+        help.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
+        titleRow.Children.Add(title); titleRow.Children.Add(help);
+        var top = new StackPanel(); top.Children.Add(titleRow); top.Children.Add(weekends);
         DockPanel.SetDock(top, Dock.Top); DockPanel.SetDock(buttons, Dock.Bottom);
         layout.Children.Add(top); layout.Children.Add(buttons);
         layout.Children.Add(new ScrollViewer { Content = grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
@@ -504,12 +510,12 @@ public partial class MainWindow
         {
             foreach (var p in Practices) ReplaceTodaysTimes(p, work[p].Distinct().ToList(), asDefault);
             SaveSettingsQuietly();
-            SaveSharedPracticeTimes(); // your other computers use the same timelines
-            // The book lesson's three times and All-books practice times (these are always every day's).
+            // The book lesson's times, card review and All-books practice (these are always every day's).
             Course.Config.Times = work["lesson"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.CardReviewTimes = work["cardreview"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.AllBooksTimes = work["allbooks"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.SaveConfig();
+            SaveSharedPracticeTimes(); // every timeline, including these, goes to your other computers (the newest change wins)
             try { FillVocabSettings(); } catch (Exception ex) { Log.Error("Timelines.Fill", ex); } // Settings shows the new rounds a day and hours
             dirty = false;
             status.Text = asDefault ? "Saved. These are your times every day." : "Saved for today. Tomorrow goes back to your default times.";

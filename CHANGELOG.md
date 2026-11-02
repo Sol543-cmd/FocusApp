@@ -3,6 +3,20 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.7
+
+Practice timelines you can rely on:
+
+- A lesson time you move always comes up at its new time. (Lesson reminders were remembered by their place in the day,
+  so moving one that had already come up today kept it quiet.)
+- Same-time practice is a chain: when several things share a time, they come up back to back in the order of the rows
+  (the book lesson first, then Words, Alphabet and Concepts), each opening the moment you finish the one before. They
+  never open on top of each other; if you don't start the lesson within 10 minutes, the rounds go ahead.
+- Everything syncs: the book lesson, card review and All-books times now travel with the Greek timelines in the shared
+  timeline file, with the newest change winning, and every computer re-reads it within two minutes. Switching to the
+  day's book no longer rewrites the book's settings file, so an older computer can't put back old times.
+- The Practice timelines window keeps just its title and Pause on weekends; the explanation is in the "?" beside the title.
+
 ## 1.7.6
 
 Training follows a weekly plan, so several books can run side by side:

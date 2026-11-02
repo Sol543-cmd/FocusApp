@@ -50,12 +50,33 @@ public partial class MainWindow
         {
             _trainingReloadedAt = DateTime.Now;
             try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.Reload", ex); }
+            AdoptSharedPracticeTimes(); // timelines changed on another computer
         }
         if (_lessonWindow != null || VocabWindow.IsShowing) return;
         if (PracticePausedToday()) return; // weekend pause: lessons, All-books and card review only when you start them
         var now = DateTime.Now.TimeOfDay;
         if (!LessonTime(now)) CheckAllBooks(now, last: false);
         if (_lessonWindow == null) CheckCardReview(now);
+    }
+
+    private DateTime _lessonOfferedAt = DateTime.MinValue;
+
+    /// <summary>A lesson time is remembered by the time itself (moving it makes it a new time that comes up).</summary>
+    private static string LessonKey(TimeSpan t) => Course.Today + "#" + t.ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The lesson goes first in a chain: true while today's lesson is due and hasn't been offered yet, or was offered in
+    /// the last 10 minutes (time to start it). After that, waiting rounds go ahead.
+    /// </summary>
+    private bool LessonGoesFirst()
+    {
+        if (!Course.Config.On || Course.BookFor(DateTime.Today) == null || Course.Packs.Count == 0 || PracticePausedToday()) return false;
+        var times = TrainingTimes();
+        int slot = times.FindLastIndex(t => t <= DateTime.Now.TimeOfDay);
+        if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromDays(1))) return false;
+        if (Course.DoneToday() || (Course.NextLesson() == null && Course.ExamDue() == null)) return false;
+        if (_trainingPromptKey != LessonKey(times[slot])) return true;
+        return DateTime.Now - _lessonOfferedAt < TimeSpan.FromMinutes(10);
     }
 
     /// <summary>True when a lesson was offered or opened (or is waiting for a meeting or break).</summary>
@@ -75,9 +96,10 @@ public partial class MainWindow
         if (PracticeMustWait()) return true;                                 // waits until the meeting, break or lunch is over
         bool last = slot == times.Count - 1;
         if (last) { StartLesson(required: true); return true; }
-        string key = Course.Today + "#" + slot;
+        string key = LessonKey(times[slot]);
         if (_trainingPromptKey == key || DateTime.Now < _trainingSnoozeUntil) return false;
         _trainingPromptKey = key;
+        _lessonOfferedAt = DateTime.Now;
         string what = Course.ExamDue()?.Title ?? Course.NextLesson()?.Lesson.Title ?? "Today's lesson";
         bool part = Course.ExamDue() == null && Course.InProgress(Course.NextLesson());
         _toast.ShowMessage(part ? "Finish today's lesson" : "Today's lesson is ready",

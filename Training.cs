@@ -466,7 +466,8 @@ public static class Course
     /// <summary>Makes today's planned book the open one (lessons, prompts and "done today" follow it).</summary>
     public static void UseToday()
     {
-        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) Open(c.Id);
+        // Switches without saving the book's settings file (saving it here let an older computer overwrite newer settings).
+        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) { Current = c; Config.ActiveId = c.Id; LoadCurrent(); }
     }
 
     /// <summary>Review due in each book (each opened briefly to count, then back to the one you had).</summary>
