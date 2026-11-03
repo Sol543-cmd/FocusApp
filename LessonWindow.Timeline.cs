@@ -35,7 +35,7 @@ public partial class LessonWindow
         var frame = new Border { Child = canvas, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1), Margin = new Thickness(0, 18, 0, 0) };
         frame.SetResourceReference(Border.BackgroundProperty, "Panel");
         frame.SetResourceReference(Border.BorderBrushProperty, "Line");
-        const double lineY = 236, pad = 40;
+        double lineY = 236; const double pad = 40; // the line moves down when more rows of cards need room
         double Wd() => Math.Max(100, canvas.ActualWidth) - 2 * pad;
         double X(int year) => pad + (year - from) * Wd() / (to - from);
         int YearAt(double x) => Math.Clamp((int)Math.Round(from + (x - pad) / Wd() * (to - from)), from, to);
@@ -106,6 +106,29 @@ public partial class LessonWindow
         {
             canvas.Children.Clear(); ghost = null; bubble = null; dot = null;
             if (canvas.ActualWidth < 100) return;
+            // Lay the placed cards out first: as many rows as needed so none cover another, each row as tall as its
+            // tallest card (cards grow after checking), and the line low enough for them all.
+            var layout = new List<(int I, int Year, double X, int Row, Border Card, string Key, bool Right)>();
+            var rowRight = new List<double>();
+            var rowHeight = new List<double>();
+            foreach (var (i, year) in placed.OrderBy(kv => kv.Value).ToList())
+            {
+                var ev = events[i].E;
+                bool right = Math.Abs(year - ev.Year) <= ev.Within;
+                double x = X(year);
+                int row = rowRight.FindIndex(r => r < x - 80);
+                if (row < 0) { row = rowRight.Count; rowRight.Add(-1e9); rowHeight.Add(0); }
+                rowRight[row] = x + 80;
+                string key = !checkedDone ? (i == selected ? "FocusBrush" : "Line") : right ? "FocusBrush" : "BreakBrush";
+                string? sub = !checkedDone ? PackEvent.Label(year) : right ? $"{PackEvent.Label(ev.Year)} · right" : $"You: {PackEvent.Label(year)} · real: {PackEvent.Label(ev.Year)}";
+                var card = CardFor(ev.Text, key, sub, checkedDone ? (right ? "FocusBrush" : "BreakBrush") : "Muted");
+                card.Measure(new Size(150, double.PositiveInfinity));
+                rowHeight[row] = Math.Max(rowHeight[row], card.DesiredSize.Height);
+                layout.Add((i, year, x, row, card, key, right));
+            }
+            double rowsTall = rowHeight.Sum() + 10 * Math.Max(0, rowHeight.Count - 1);
+            lineY = Math.Max(236, 14 + rowsTall + 30);
+            canvas.Height = lineY + 94;
             var axis = new Rectangle { Width = Wd(), Height = 3, RadiusX = 1.5, RadiusY = 1.5 };
             axis.SetResourceReference(Shape.FillProperty, "Muted");
             Canvas.SetLeft(axis, pad); Canvas.SetTop(axis, lineY); canvas.Children.Add(axis);
@@ -121,23 +144,19 @@ public partial class LessonWindow
                 var lab = Small(text, "Text"); lab.Width = 70; lab.FontSize = 12.5;
                 Canvas.SetLeft(lab, X(y) - 35); Canvas.SetTop(lab, lineY + 16); canvas.Children.Add(lab);
             }
-            double[] rowRight = { -1e9, -1e9, -1e9 };
-            foreach (var (i, year) in placed.OrderBy(kv => kv.Value).ToList())
+            // Stems first (behind every card), then the cards on top, so no stem crosses a card's text.
+            foreach (var (_, _, sx, srow, scard, skey, _) in layout)
+            {
+                double stop = 14 + rowHeight.Take(srow).Sum() + 10 * srow;
+                var stem = new Rectangle { Width = 2, Height = Math.Max(4, lineY - stop - scard.DesiredSize.Height) };
+                stem.SetResourceReference(Shape.FillProperty, skey == "Line" ? "Muted" : skey);
+                Canvas.SetLeft(stem, sx - 1); Canvas.SetTop(stem, stop + scard.DesiredSize.Height); canvas.Children.Add(stem);
+            }
+            foreach (var (i, year, x, row, card, border, right) in layout)
             {
                 var ev = events[i].E;
-                bool right = Math.Abs(year - ev.Year) <= ev.Within;
-                double x = X(year);
-                int row = Enumerable.Range(0, 3).FirstOrDefault(r => rowRight[r] < x - 80);
-                rowRight[row] = x + 80;
-                double top = 14 + row * 64;
-                string border = !checkedDone ? (i == selected ? "FocusBrush" : "Line") : right ? "FocusBrush" : "BreakBrush";
-                string? sub = !checkedDone ? PackEvent.Label(year) : right ? $"{PackEvent.Label(ev.Year)} · right" : $"You: {PackEvent.Label(year)} · real: {PackEvent.Label(ev.Year)}";
-                var card = CardFor(ev.Text, border, sub, checkedDone ? (right ? "FocusBrush" : "BreakBrush") : "Muted");
+                double top = 14 + rowHeight.Take(row).Sum() + 10 * row;
                 Canvas.SetLeft(card, x - 75); Canvas.SetTop(card, top); canvas.Children.Add(card);
-                card.Measure(new Size(150, double.PositiveInfinity));
-                var stem = new Rectangle { Width = 2, Height = Math.Max(4, lineY - top - card.DesiredSize.Height) };
-                stem.SetResourceReference(Shape.FillProperty, border == "Line" ? "Muted" : border);
-                Canvas.SetLeft(stem, x - 1); Canvas.SetTop(stem, top + card.DesiredSize.Height); canvas.Children.Add(stem);
                 if (checkedDone && !right)
                 {
                     double rx = X(ev.Year);

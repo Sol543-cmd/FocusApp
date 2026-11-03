@@ -52,7 +52,7 @@ public partial class MainWindow
             try { Course.ReloadEvents(raiseChanged: true); } catch (Exception ex) { Log.Error("Training.Reload", ex); }
             AdoptSharedPracticeTimes(); // timelines changed on another computer
         }
-        if (_lessonWindow != null || _lessonPrompt != null || VocabWindow.IsShowing) return;
+        if (_lessonWindow != null || _lessonPrompt != null || _conceptQuiz != null || VocabWindow.IsShowing) return;
         if (PracticePausedToday()) return; // weekend pause: lessons, All-books and card review only when you start them
         var now = DateTime.Now.TimeOfDay;
         if (!LessonTime(now)) CheckAllBooks(now, last: false);
@@ -233,6 +233,16 @@ public partial class MainWindow
         if (PracticeMustWait()) return; // waits until the meeting, break or lunch is over
         _cardReviewKey = key;
         StartCardReview(quietIfNone: true);
+    }
+
+    /// <summary>Training menu > Timeline: placing events from the chapters you've done, on their own.</summary>
+    private void StartTimelinePractice()
+    {
+        if (_lessonWindow != null) { _lessonWindow.Activate(); return; }
+        Course.UseToday();
+        var events = Course.TimelineAll(8);
+        if (events.Count < 2) { Info("No timeline yet: finish a lesson that has timeline events first.", "Training"); return; }
+        OpenTrainingWindow(LessonWindow.TimelinePractice(events, _ => { }), blocking: false);
     }
 
     private void StartCardReview(bool quietIfNone)

@@ -659,9 +659,9 @@ public partial class MainWindow
         WebsiteSettings.Visibility = Visibility.Collapsed; // website blocking was removed
         VocabOptions.Visibility = V("greek");
         AlphaOptions.Visibility = V("alphabet");
-        DashGreekBtn.Visibility = V("greek");
-        DashAlphaBtn.Visibility = V("alphabet");
-        DashConceptsBtn.Visibility = V("concepts");
+        DashGreekBtn.Visibility = Visibility.Collapsed;    // Greek practice is in the dashboard's Training menu now
+        DashAlphaBtn.Visibility = Visibility.Collapsed;
+        DashConceptsBtn.Visibility = Visibility.Collapsed;
         ConceptOptions.Visibility = V("concepts");
         AutomationSettings.Visibility = _settings.On("autoWaiting") ? Visibility.Visible : Visibility.Collapsed;
         StatsCharts.Visibility = V("stats");

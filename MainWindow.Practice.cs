@@ -22,13 +22,13 @@ public partial class MainWindow
         bool wasBusy = false;
         chain.Tick += (_, _) =>
         {
-            bool busy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null;
+            bool busy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null || _conceptQuiz != null;
             if (wasBusy && !busy)
             {
                 try { CheckTraining(); if (_lessonWindow == null && !VocabWindow.IsShowing) CheckVocab(); }
                 catch (Exception ex) { Log.Error("Practice chain", ex); }
             }
-            wasBusy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null;
+            wasBusy = VocabWindow.IsShowing || _lessonWindow != null || _lessonPrompt != null || _conceptQuiz != null;
         };
         chain.Start();
         Concepts.Load();
@@ -46,19 +46,24 @@ public partial class MainWindow
 
     private void SetConceptDone(HashSet<int> done) { _settings.ConceptDone = DoneRecord(done); SaveSettingsQuietly(); }
 
+    /// <summary>
+    /// A Greek Concepts round (from the timeline, or Practice now): the concept quiz. Learn mode uses the lesson chosen in
+    /// Settings (or the most recent); the round can be switched to Review on the quiz. Later brings it back in 20 minutes.
+    /// </summary>
     private void StartConceptRound(int slot, bool keepGoing = false, Action<bool>? after = null)
     {
-        if (VocabWindow.IsShowing) return;
-        int size = Math.Clamp(_settings.ConceptCount, 2, 8);
-        var cards = Concepts.PickRound(size);
-        if (cards.Count < 2)
+        if (VocabWindow.IsShowing || _conceptQuiz != null) return;
+        var packs = ConceptQuiz.All();
+        if (packs.Count == 0)
         {
-            if (slot < 0 && after == null) Info("Add at least two questions and answers first: Settings, Greek practice, Manage concepts.", "Concepts");
+            if (slot < 0 && after == null) Info("No question packs yet: Settings, Greek practice, Question packs, then Import.", "Concept quiz");
             return;
         }
         if (slot >= 0) { var d = DoneToday(_settings.ConceptDone); d.Add(slot); SetConceptDone(d); }
-        VocabWindow.ShowOnAllScreens(cards, finished =>
+        var w = new ConceptQuizWindow(VocabWindow.WorkingScreenBounds(), ConceptQuiz.Chosen(_settings.ConceptQuizLesson), canReview: true,
+            laterText: slot >= 0 ? "Later" : "Close", finished: finished =>
         {
+            _conceptQuiz = null;
             if (!finished && slot >= 0)
             {
                 var d = DoneToday(_settings.ConceptDone); d.Remove(slot); SetConceptDone(d);
@@ -68,17 +73,23 @@ public partial class MainWindow
             else if (finished) { _conceptLaterSlot = -1; if (slot >= 0) PublishPracticeDone("concepts", slot); }
             UpdateConceptSummary();
             after?.Invoke(finished);
-        },
-        nextRound: keepGoing ? n => { int k = Math.Clamp(n, 2, 8); if (k != _settings.ConceptCount) { _settings.ConceptCount = k; SaveSettingsQuietly(); } return Concepts.PickRound(k); } : null,
-        startSize: size, deck: Concepts.Instance);
+        });
+        _conceptQuiz = w;
+        w.Show();
     }
+
+    private ConceptQuizWindow? _conceptQuiz;
+
+    /// <summary>The dashboard's Training menu: Greek Concepts opens the quiz now.</summary>
+    private void StartConceptQuiz(bool fromMenu) { if (_conceptQuiz != null) _conceptQuiz.Activate(); else StartConceptRound(-1); }
 
     private void DashConcepts_Click(object sender, RoutedEventArgs e) => StartConceptRound(-1, keepGoing: true);
     private void ConceptsPracticeNow_Click(object sender, RoutedEventArgs e) => StartConceptRound(-1, keepGoing: true);
 
     private void ManageConcepts_Click(object sender, RoutedEventArgs e)
     {
-        var w = new ConceptsWindow { Owner = this };
+        // The old typed-in concept cards are retired; the quiz uses question packs, one per lesson.
+        var w = new QuestionPacksWindow(() => _settings.ConceptQuizLesson, v => { _settings.ConceptQuizLesson = v; SaveSettingsQuietly(); UpdateConceptSummary(); }) { Owner = this };
         w.ShowDialog();
         UpdateConceptSummary();
     }
@@ -86,9 +97,10 @@ public partial class MainWindow
     private void UpdateConceptSummary()
     {
         if (ConceptSummary == null) return;
-        int n = Concepts.Cards.Count, due = Concepts.Cards.Count(c => c.Due <= DateTime.Now);
-        ConceptSummary.Text = n == 0 ? "No questions yet. Add them with Manage concepts."
-            : $"{n} question{(n == 1 ? "" : "s")}, {due} due now.";
+        var packs = ConceptQuiz.All();
+        var chosen = ConceptQuiz.Chosen(_settings.ConceptQuizLesson);
+        ConceptSummary.Text = packs.Count == 0 ? "No question packs yet. Import them with Question packs."
+            : $"{packs.Count} lesson{(packs.Count == 1 ? "" : "s")} imported · Learn mode uses Lesson {chosen?.Lesson}" + (_settings.ConceptQuizLesson.Length == 0 ? " (the most recent)" : "") + ".";
     }
 
     // ---------- Settings for all three practices (extras, Concepts) ----------

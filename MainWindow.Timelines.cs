@@ -139,7 +139,7 @@ public partial class MainWindow
     private bool TryTimelineRounds()
     {
         MergePracticeDoneFromOtherComputers(); // a round done on another computer counts here too
-        if (VocabWindow.IsShowing || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
+        if (VocabWindow.IsShowing || _conceptQuiz != null || Application.Current.Windows.OfType<FlashWindow>().Any()) return true;
         if (_lessonWindow != null || _lessonPrompt != null || LessonGoesFirst()) return true; // a chain: the lesson first, then the rounds, back to back
         var now = DateTime.Now;
         foreach (var p in Practices)

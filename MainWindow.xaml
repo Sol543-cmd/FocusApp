@@ -903,21 +903,33 @@
                             </Grid.RowDefinitions>
                             <!-- Centered over the ring (column 0), not over the ring and totals together -->
                             <!-- Focus sessions: the numeral badge (session number in a serif ring) and FOCUS SESSION or the session's name -->
-                            <StackPanel x:Name="DashHeader" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,18">
+                            <TextBlock x:Name="DashTimeLeft" Grid.ColumnSpan="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,18"/>
+                            <StackPanel x:Name="DashHeader" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,18">
                                 <Border x:Name="DashBadge" MinWidth="30" Height="30" CornerRadius="15" BorderThickness="1.5" BorderBrush="{DynamicResource FocusBrush}" Padding="4,0" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
                                     <TextBlock x:Name="DashBadgeText" FontSize="15" Foreground="{DynamicResource Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1"/>
                                 </Border>
                                 <TextBlock x:Name="DashKind" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220" Foreground="{DynamicResource FocusBrush}"/>
                             </StackPanel>
                             <TextBlock x:Name="DashName" Grid.Row="1" Style="{StaticResource SubHeading}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,14" MaxWidth="260"/>
-                            <Grid Grid.Row="2">
+                            <!-- The thermometer: a slim bar under the heading (the ring is kept hidden: the code still sets it) -->
+                            <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,2,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Border x:Name="DashThermoTrack" Height="8" CornerRadius="4" Background="{DynamicResource Panel3}" VerticalAlignment="Center"/>
+                                <Border x:Name="DashThermoFill" Height="8" CornerRadius="4" Background="{DynamicResource FocusBrush}" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center"/>
+                                <Ellipse x:Name="DashThermoKnob" Width="16" Height="16" Fill="{DynamicResource FocusBrush}" Stroke="{DynamicResource Panel}" StrokeThickness="3" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                <DockPanel Grid.Row="1" Margin="0,8,0,0">
+                                    <TextBlock x:Name="DashThermoEnd" DockPanel.Dock="Right" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="DashThermoStart" Style="{StaticResource Caption}"/>
+                                </DockPanel>
+                            </Grid>
+                            <Grid Grid.Row="2" Visibility="Collapsed">
                                 <local:RingTimer x:Name="DashTimer"/>
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="150">
                                     <TextBlock x:Name="DashMinutes" FontSize="34" FontWeight="Light" FontFamily="{StaticResource HeadingFont}" HorizontalAlignment="Center"/>
                                     <TextBlock x:Name="DashMinutesCaption" Style="{StaticResource Caption}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
-                            <StackPanel Grid.Column="1" Grid.Row="2" VerticalAlignment="Center" Margin="22,0,0,0" ToolTip="Focus hours with blocking. Only focus sessions that block at least one app count; paused time and short breaks don't.">
+                            <StackPanel Grid.Column="1" Grid.Row="2" VerticalAlignment="Center" Margin="22,0,0,0" Visibility="Collapsed" ToolTip="Focus hours with blocking. Only focus sessions that block at least one app count; paused time and short breaks don't.">
                                 <TextBlock x:Name="DashToday" FontSize="20" FontFamily="{StaticResource HeadingFont}"/>
                                 <TextBlock Text="done today" Style="{StaticResource Caption}" Margin="0,0,0,12"/>
                                 <TextBlock x:Name="DashLeft" FontSize="20" FontFamily="{StaticResource HeadingFont}"/>
@@ -959,17 +971,28 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,10">
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <RadioButton x:Name="DashTasksSession" Content="Session" GroupName="dashtasks" IsChecked="True" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="This focus session's tasks"/>
-                                        <RadioButton x:Name="DashTasksToday" Content="Today" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="Tasks picked for today, due today, overdue, or in today's sessions"/>
-                                        <RadioButton x:Name="DashTasksAll" Content="All" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked"/>
-                                        <RadioButton x:Name="DashTasksUndated" Content="Undated" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="Tasks with no due date and not picked for a day"/>
-                                        <Button x:Name="DashOverlayBtn" Content="🌡" FontFamily="Segoe UI Emoji" FontSize="12" Style="{StaticResource IconButton}" Click="DashOverlay_Click" Margin="4,0,0,0" ToolTip="Show or hide the floating timer"/>
-                                        <Button x:Name="DashConceptsBtn" Content="Q&amp;A" FontSize="11" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashConcepts_Click" Margin="4,0,0,0" ToolTip="Review your concepts (questions and answers), for as many rounds as you like"/>
-                                        <Button x:Name="DashAlphaBtn" Content="αβγ" FontSize="12" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashAlpha_Click" Margin="4,0,0,0" ToolTip="Review the Greek alphabet's sounds, for as many rounds as you like"/>
-                                        <Button x:Name="DashGreekBtn" Content="Αα" FontSize="13" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashGreek_Click" Margin="4,0,0,0" ToolTip="Review Greek words now, for as many rounds as you like"/>
+                                        <RadioButton x:Name="DashTasksSession" Visibility="Collapsed" Content="Session" GroupName="dashtasks" IsChecked="True" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="This focus session's tasks"/>
+                                        <RadioButton x:Name="DashTasksToday" Visibility="Collapsed" Content="Today" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="Tasks picked for today, due today, overdue, or in today's sessions"/>
+                                        <RadioButton x:Name="DashTasksAll" Visibility="Collapsed" Content="All" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked"/>
+                                        <RadioButton x:Name="DashTasksUndated" Visibility="Collapsed" Content="Undated" GroupName="dashtasks" Style="{StaticResource NavButton}" Checked="DashTasksView_Checked" ToolTip="Tasks with no due date and not picked for a day"/>
+                                        <Button x:Name="DashTrainingBtn" Style="{StaticResource IconButton}" Click="DashTrainingMenu_Click" Margin="4,0,0,0" ToolTip="Training" Padding="6,2">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE82D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                                <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="8" VerticalAlignment="Center" Margin="4,1,0,0"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="DashOverlayBtn" Content="&#xE8A7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" Style="{StaticResource IconButton}" Click="DashOverlay_Click" Margin="4,0,0,0" ToolTip="Show or hide the floating timer"/>
+                                        <Button x:Name="DashConceptsBtn" Visibility="Collapsed" Content="Q&amp;A" FontSize="11" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashConcepts_Click" Margin="4,0,0,0" ToolTip="Review your concepts (questions and answers), for as many rounds as you like"/>
+                                        <Button x:Name="DashAlphaBtn" Visibility="Collapsed" Content="αβγ" FontSize="12" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashAlpha_Click" Margin="4,0,0,0" ToolTip="Review the Greek alphabet's sounds, for as many rounds as you like"/>
+                                        <Button x:Name="DashGreekBtn" Visibility="Collapsed" Content="Αα" FontSize="13" FontWeight="SemiBold" Style="{StaticResource IconButton}" Click="DashGreek_Click" Margin="4,0,0,0" ToolTip="Review Greek words now, for as many rounds as you like"/>
                                         <Button x:Name="DashPrintBtn" Content="" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Style="{StaticResource IconButton}" Click="DashPrint_Click" Margin="4,0,0,0" ToolTip="Print tasks (Ctrl+P)"/>
                                     </StackPanel>
-                                    <TextBlock x:Name="DashTasksTitle" Text="Tasks for this session" Style="{StaticResource SubHeading}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <Button x:Name="DashTasksMenuBtn" Style="{StaticResource IconButton}" Click="DashTasksMenu_Click" HorizontalAlignment="Left" Padding="0,2" ToolTip="Show Session, Today, All or Undated">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="DashTasksTitle" Text="Tasks for this session" Style="{StaticResource SubHeading}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center" Margin="8,3,0,0"/>
+                                        </StackPanel>
+                                    </Button>
                                 </DockPanel>
                                 <TextBlock x:Name="DashNoTasks" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8" Text="No tasks yet. Add one below."/>
                                 <ItemsControl x:Name="DashTasksList">
@@ -1900,7 +1923,7 @@
                         </StackPanel>
                             <TextBlock x:Name="ConceptSummary" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                             <StackPanel Orientation="Horizontal">
-                                <Button Content="Manage concepts..." Click="ManageConcepts_Click" Margin="0,0,8,0"/>
+                                <Button Content="Question packs..." Click="ManageConcepts_Click" Margin="0,0,8,0" ToolTip="Import a lesson's question pack, and choose which lesson Learn mode uses"/>
                                 <Button Content="Practice now" Click="ConceptsPracticeNow_Click"/>
                             </StackPanel>
                         </StackPanel></StackPanel></StackPanel></Border>

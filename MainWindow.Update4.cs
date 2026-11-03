@@ -88,7 +88,8 @@ public partial class MainWindow
     private void ApplyBlockTasksSetting()
     {
         const bool on = true; // always shown (small, clean type); the old switch for this is gone
-        foreach (var t in new[] { Timeline, CalDay, DashDay, HomeDay }) if (t != null) t.ShowTasks = on;
+        foreach (var t in new[] { Timeline, CalDay, HomeDay }) if (t != null) t.ShowTasks = on;
+        if (DashDay != null) DashDay.ShowTasks = false; // the dashboard's day view stays uncluttered (the Day plan shows them)
         RefreshAllTimelines();
     }
 

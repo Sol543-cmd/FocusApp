@@ -3,6 +3,26 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.9
+
+- Greek Concepts is now a concept quiz, like Biblical Mastery Academy's. Learn mode asks one lesson's 10 to 12 questions
+  (from its "What to remember" section); Review mode asks 12 mixed from every lesson so far. Choose the mode on the quiz
+  at the start of each round (Learn by default). Questions can have one or several right answers ("Select the correct
+  answer(s)"). After Check: a short explanation, the lesson and section, and Open in the lesson, which shows that spot
+  in the lesson text. Rounds come up at the Greek Concepts times on your timeline. Settings, Greek practice, Question
+  packs: import a lesson's pack and choose which lesson Learn mode uses (the most recent unless you pick another). The
+  old typed-in concept cards are retired.
+- Dashboard: the ring and its numbers give way to a slim thermometer under the Roman numeral and FOCUS SESSION, with the
+  time left beside it and the start and end underneath. The tasks have one title menu (Session, Today, All, Undated),
+  and a small book icon opens Training (Greek Concepts, Greek Vocab, Greek Alphabet, Timeline, Book Concepts) over
+  everything. The pop-out button has a modern icon.
+- Timeline practice on its own (Training menu): events from the chapters you've done.
+- The timeline exercise never lets cards cover each other: as many rows as needed, the line moves down to fit, and
+  every card stays readable after checking.
+- The dashboard's day view no longer shows task names on sessions (the Day plan still does).
+- Today and Tomorrow on a task set its date, exactly like the date field.
+- The thumbs up and down buttons in practice are no longer cut off.
+
 ## 1.7.8
 
 The book lesson pops up like Greek practice:

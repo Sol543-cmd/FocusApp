@@ -48,6 +48,7 @@ public partial class LessonWindow : Window
     private readonly string? _examKey;
     private readonly List<(Course.LessonRef Lesson, PackQuestion Q)>? _questionsOnly;
     private readonly List<(Course.LessonRef Lesson, PackQuestion Q)>? _cardsOnly;
+    private readonly List<(Course.LessonRef Lesson, PackEvent E)>? _timelineOnly; // Timeline practice on its own
     private readonly TimeSpan _limit;
     private DateTime _deadline = DateTime.MaxValue;
     private readonly string _title;
@@ -84,10 +85,16 @@ public partial class LessonWindow : Window
     public static LessonWindow CardReview(List<(Course.LessonRef Lesson, PackQuestion Q)> cards, TimeSpan limit, Action<bool> finished) =>
         new(cards[0].Lesson, false, finished, "Evening card review", null, null, cards, limit);
 
+    /// <summary>Timeline practice on its own: events from the chapters you've done, placed on the line.</summary>
+    public static LessonWindow TimelinePractice(List<(Course.LessonRef Lesson, PackEvent E)> events, Action<bool> finished) =>
+        new(events[0].Lesson, false, finished, "Timeline practice", null, null, null, TimeSpan.Zero, events);
+
     private LessonWindow(Course.LessonRef lesson, bool required, Action<bool> finished, string? title,
                          List<(Course.LessonRef Lesson, PackQuestion Q)>? questions, string? examKey,
-                         List<(Course.LessonRef Lesson, PackQuestion Q)>? cards, TimeSpan limit)
+                         List<(Course.LessonRef Lesson, PackQuestion Q)>? cards, TimeSpan limit,
+                         List<(Course.LessonRef Lesson, PackEvent E)>? timeline = null)
     {
+        _timelineOnly = timeline;
         _lesson = lesson;
         _questionsOnly = questions;
         _examKey = examKey;
@@ -165,6 +172,13 @@ public partial class LessonWindow : Window
 
     private void BuildSteps()
     {
+        if (_timelineOnly != null)
+        {
+            var events = _timelineOnly;
+            _steps.Add(new("timeline", () => ShowTimeline(events)));
+            _steps.Add(new("finish", Finish));
+            return;
+        }
         if (_cardsOnly != null)
         {
             _steps.Add(new("intro", () =>
@@ -333,8 +347,8 @@ public partial class LessonWindow : Window
     private static StackPanel Thumbs(PackQuestion q)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
-        var up = new Button { Content = "\uE8E1", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, Width = 34, Height = 32, Margin = new Thickness(0, 0, 4, 0), ToolTip = "See this more often in reviews (and first in the evening review)" };
-        var down = new Button { Content = "\uE8E0", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, Width = 34, Height = 32, ToolTip = "See this less often in reviews" };
+        var up = new Button { Content = "\uE8E1", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, MinWidth = 36, MinHeight = 34, Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(0, 0, 4, 0), ToolTip = "See this more often in reviews (and first in the evening review)" };
+        var down = new Button { Content = "\uE8E0", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 14, MinWidth = 36, MinHeight = 34, Padding = new Thickness(8, 5, 8, 5), ToolTip = "See this less often in reviews" };
         void Show()
         {
             int v = Course.VoteOf(q.Id);
@@ -1540,6 +1554,13 @@ public partial class LessonWindow : Window
         _done = true;
         _closeButton.IsEnabled = true;
         _closeButton.Content = "Close";
+        if (_timelineOnly != null)
+        {
+            _page.Children.Add(Text("Timeline finished", 28, bold: true));
+            _page.Children.Add(Text("Events you placed far off come back first next time.", 16, top: 10));
+            _page.Children.Add(Primary("Close", Close));
+            return;
+        }
         if (_cardsOnly != null)
         {
             Course.Add(new TrainingEvent { Kind = "cardReviewDone", Lesson = -1 });

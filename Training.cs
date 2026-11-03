@@ -700,6 +700,14 @@ public static class Course
         return mine.Concat(earlier).Take(Math.Max(mine.Count, max)).ToList();
     }
 
+    /// <summary>Timeline events from every lesson you've done in this book, the ones you misplace most first.</summary>
+    public static List<(LessonRef Lesson, PackEvent E)> TimelineAll(int max = 8)
+    {
+        var done = DoneLessons();
+        return Lessons().Where(l => done.Contains(l.Index)).SelectMany(l => l.Lesson.Timeline.Select(e => (l, e)))
+            .OrderByDescending(x => TimelineMisses(x.e.Text)).ThenBy(_ => Guid.NewGuid()).Take(max).ToList();
+    }
+
     public static int TimelineMisses(string text) =>
         CE.Count(e => e.Kind == "timeline" && e.Question == text && !e.Correct) - CE.Count(e => e.Kind == "timeline" && e.Question == text && e.Correct);
 

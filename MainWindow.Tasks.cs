@@ -789,12 +789,16 @@ public partial class MainWindow
     private void AddToToday_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today);
     private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today.AddDays(1));
 
-    /// <summary>The Today and Tomorrow buttons on a task row: picks the task for that day (and wakes it if snoozed).</summary>
+    /// <summary>
+    /// The Today and Tomorrow buttons on a task row: set the task's date to that day, exactly as picking it in the date
+    /// field does (and wake it if snoozed). There's no separate "picked for" day.
+    /// </summary>
     private void AddToDay(object sender, DateTime day)
     {
         if ((sender as FrameworkElement)?.DataContext is not BinTask task) return;
         PushUndo();
-        task.PlannedFor = day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        task.Due = day.Date;
+        task.PlannedFor = "";
         task.SnoozedUntil = null;
         TaskBin.Save();
         RefreshTasksTab();

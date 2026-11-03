@@ -986,6 +986,8 @@ public class AppSettings
 
     public int ConceptPerDay { get; set; } = 2;
     public int ConceptCount { get; set; } = 4;
+    /// <summary>The Greek lesson the concept quiz's Learn mode uses ("" = the most recent pack).</summary>
+    public string ConceptQuizLesson { get; set; } = "";
     public string ConceptDone { get; set; } = "";
     public bool VocabAwayOn { get; set; }
     public int VocabAwayMinutes { get; set; } = 90;
