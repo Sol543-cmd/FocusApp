@@ -83,7 +83,6 @@ public partial class MainWindow
     /// <summary>The dashboard's Training menu: Greek Concepts opens the quiz now.</summary>
     private void StartConceptQuiz(bool fromMenu) { if (_conceptQuiz != null) _conceptQuiz.Activate(); else StartConceptRound(-1); }
 
-    private void DashConcepts_Click(object sender, RoutedEventArgs e) => StartConceptRound(-1, keepGoing: true);
     private void ConceptsPracticeNow_Click(object sender, RoutedEventArgs e) => StartConceptRound(-1, keepGoing: true);
 
     private void ManageConcepts_Click(object sender, RoutedEventArgs e)

@@ -68,7 +68,6 @@ public partial class MainWindow
             double total = TimeSpan.FromMinutes(cur.Minutes).TotalSeconds;
             DashTimer.AccentKey = AccentKey(cur);
             DashTimer.FractionLeft = total > 0 ? remaining.TotalSeconds / total : 0;
-            SetThermometer(1 - DashTimer.FractionLeft, DateTime.Now - (TimeSpan.FromSeconds(total) - remaining), DateTime.Now + remaining, remaining);
             DashTimer.Running = !_runner.IsPaused;
             // Focus sessions: the numeral badge, then FOCUS SESSION (or the session's own name) in spaced capitals.
             bool focus = cur.IsFocus;
@@ -108,7 +107,6 @@ public partial class MainWindow
             DashTimer.AccentKey = "FocusBrush";
             DashTimer.FractionLeft = 1;
             DashTimer.Running = false;
-            SetThermometer(0, null, null, null);
             DashKind.Text = "Nothing running";
             DashKind.FontSize = 13;
             DashBadge.Visibility = Visibility.Collapsed;

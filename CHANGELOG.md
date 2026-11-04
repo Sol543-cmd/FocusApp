@@ -3,6 +3,15 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.10
+
+- The dashboard is back to its original look: the round timer, with the Roman numeral and FOCUS SESSION above it while a
+  session runs. Extend, Pause, Skip and Stop (and Start my day) now sit to the right of the ring, where the day's totals
+  were, so the tasks get more room. The Tasks menu and the small Training menu from 1.7.9 stay.
+- The old typed-in concept cards window and the Q&A button are removed; Greek Concepts is the concept quiz (question packs).
+- Everything else from 1.7.9 stays: the concept quiz, the timeline exercise without overlapping cards, no task names in
+  the dashboard's day view, Today and Tomorrow setting the task's date, and the thumbs buttons fully visible.
+
 ## 1.7.9
 
 - Greek Concepts is now a concept quiz, like Biblical Mastery Academy's. Learn mode asks one lesson's 10 to 12 questions

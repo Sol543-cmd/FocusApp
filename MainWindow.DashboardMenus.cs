@@ -6,25 +6,10 @@ using System.Windows.Controls.Primitives;
 namespace FocusApp;
 
 /// <summary>
-/// The dashboard's simpler top: a slim thermometer under the session heading (in place of the ring and its numbers),
-/// a Tasks title menu (Session, Today, All, Undated) and a small Training menu that opens practice over everything.
+/// The dashboard's menus: a Tasks title menu (Session, Today, All, Undated) and a small Training menu that opens practice over everything.
 /// </summary>
 public partial class MainWindow
 {
-    /// <summary>Fills the thermometer: done (0 to 1), the session's start and end, and the time left beside the heading.</summary>
-    private void SetThermometer(double done, DateTime? start, DateTime? end, TimeSpan? left)
-    {
-        if (DashThermoTrack == null) return;
-        done = Math.Clamp(done, 0, 1);
-        double width = DashThermoTrack.ActualWidth;
-        DashThermoFill.Width = Math.Max(0, width * done);
-        DashThermoKnob.Margin = new Thickness(Math.Max(0, width * done - 8), 0, 0, 0);
-        DashThermoKnob.Visibility = start == null ? Visibility.Collapsed : Visibility.Visible;
-        DashThermoStart.Text = start is DateTime s ? s.ToString("t") : "";
-        DashThermoEnd.Text = end is DateTime e ? "ends " + e.ToString("t") : "";
-        DashTimeLeft.Text = left is TimeSpan l ? (l.TotalHours >= 1 ? l.ToString(@"h\:mm\:ss") : l.ToString(@"m\:ss")) : "";
-    }
-
     private void DashTasksMenu_Click(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu { PlacementTarget = DashTasksMenuBtn, Placement = PlacementMode.Bottom };

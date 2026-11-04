@@ -661,7 +661,6 @@ public partial class MainWindow
         AlphaOptions.Visibility = V("alphabet");
         DashGreekBtn.Visibility = Visibility.Collapsed;    // Greek practice is in the dashboard's Training menu now
         DashAlphaBtn.Visibility = Visibility.Collapsed;
-        DashConceptsBtn.Visibility = Visibility.Collapsed;
         ConceptOptions.Visibility = V("concepts");
         AutomationSettings.Visibility = _settings.On("autoWaiting") ? Visibility.Visible : Visibility.Collapsed;
         StatsCharts.Visibility = V("stats");
