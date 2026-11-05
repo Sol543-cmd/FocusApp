@@ -163,12 +163,12 @@ public partial class MainWindow
         var from = dayStart + TimeSpan.FromMinutes(blocks.Take(ci + 1).Sum(b => b.Minutes));
         if (!running) from = Max(from, DateTime.Now.TimeOfDay);
 
-        var wanted = CalendarService.BusyEventsOn(DateTime.Today)
-            .Where(e => !e.AllDay && e.End.TimeOfDay > from)
-            .Select(e => (Start: Max(e.Start.TimeOfDay, from), e.Title)).ToList();
+        var events = CalendarService.BusyEventsOn(DateTime.Today).Where(e => !e.AllDay && e.End.TimeOfDay > from).ToList();
+        var wanted = events.Select(e => (Start: Max(e.Start.TimeOfDay, from), e.Title, Raw: e.Start.TimeOfDay)).ToList();
         var planned = blocks.Skip(ci + 1).Where(b => b.IsMeeting && b.IsAnchored).ToList();
-        var added = wanted.Where(w => !planned.Any(p => p.AnchorStart == w.Start)).ToList();
-        var cancelled = planned.Where(p => !wanted.Any(w => w.Start == p.AnchorStart)).ToList();
+        var addedFull = wanted.Where(w => !planned.Any(p => SameMeeting(p, w.Start, w.Raw))).ToList();
+        var added = addedFull.Select(w => (w.Start, w.Title)).ToList();
+        var cancelled = planned.Where(p => !wanted.Any(w => SameMeeting(p, w.Start, w.Raw))).ToList();
         if (added.Count == 0 && cancelled.Count == 0) return;
 
         string key = string.Join("|", added.Select(a => a.Start + a.Title).Concat(cancelled.Select(c => "-" + c.AnchorStart + c.Name)));
@@ -176,17 +176,16 @@ public partial class MainWindow
         if (mode == "overlay" || _meetingAnswers.Contains(key)) return;
         if (mode == "ask")
         {
+            // Asked once per change, right away (a dialog, not only the bell).
             _meetingAnswers.Add(key);
-            string what = string.Join(", ", added.Select(a => $"{a.Title} at {DateTime.Today.Add(a.Start):t}")
-                .Concat(cancelled.Select(c => $"{c.Name} (cancelled)")));
-            Notify("meeting:" + key, added.Count > 0 ? "A new meeting in your day" : "A meeting was cancelled",
-                $"Your calendar changed: {what}. Fit it into your plan, or keep your plan as it is (the meeting shows on top).",
-                ("Fit into my plan", () =>
-                {
-                    if (_mode == RunMode.DayPlan && _runner.IsRunning) AdjustRunningDayForCalendar();
-                    else FitMeetingsIntoPlan(added, cancelled);
-                }),
-                ("Keep my plan", () => { }));
+            string what = string.Join("\n", addedFull.Select(a => $"• {a.Title}, {DateTime.Today.Add(a.Raw):t}")
+                .Concat(cancelled.Select(c => $"• {c.Name} (cancelled)")));
+            bool fit = Ask((added.Count > 0 ? "Your calendar has a new meeting today:" : "A meeting in your day was cancelled:") + $"\n\n{what}\n\n" +
+                           "Fit it into your day? Yes fits it in (the focus sessions it covers make room, and a break or lunch it overlaps moves just before or after it). " +
+                           "No keeps your plan as it is, with the meeting shown on top; you can click it later to add it.", "Your calendar changed");
+            if (!fit) return;
+            if (running) AdjustRunningDayForCalendar(only: (t, s) => addedFull.Any(a => a.Title == t && a.Raw == s));
+            else FitMeetingsIntoPlan(added, cancelled);
             return;
         }
         if (running) AdjustRunningDayForCalendar();
@@ -196,7 +195,8 @@ public partial class MainWindow
     /// <summary>For today's plan before it starts: adds meetings at their times (with a break after) and removes cancelled ones.</summary>
     private void FitMeetingsIntoPlan(List<(TimeSpan Start, string Title)> added, List<PlanBlock> cancelled)
     {
-        var events = CalendarService.BusyEventsOn(DateTime.Today);
+        var events = CalendarService.BusyEventsOn(_planDate);
+        var skipped = new List<string>();
         ApplyEdit(list =>
         {
             foreach (var gone in cancelled)
@@ -211,20 +211,11 @@ public partial class MainWindow
             {
                 var ev = events.FirstOrDefault(e => e.Title == title && Max(e.Start.TimeOfDay, start) == start);
                 var end = ev != null ? ev.End.TimeOfDay : start + TimeSpan.FromMinutes(30);
-                var starts = Starts(list, ParseDayStart());
-                bool clash = list.Select((b, i) => (b, s: starts[i]))
-                    .Any(x => x.b.IsAnchored && !IsMorningBreak(x.b) && x.s < end && x.s + TimeSpan.FromMinutes(x.b.Minutes) > start);
-                if (clash) continue;
-                list.RemoveAll(b => IsMorningBreak(b) && b.AnchorStart < end && b.AnchorStart + TimeSpan.FromMinutes(b.Minutes) > start);
-                starts = Starts(list, ParseDayStart());
-                int at = Enumerable.Range(0, list.Count).FirstOrDefault(i => starts[i] >= start, list.Count);
-                list.Insert(at, new PlanBlock { Kind = BlockKind.Meeting, Name = title, Minutes = Math.Max(1, (int)(end - start).TotalMinutes), AnchorStart = start, MeetingStart = DateTime.Today + start });
-                var nextFixed = list.Skip(at + 1).Where(b => b.IsAnchored).Select(b => b.AnchorStart!.Value).DefaultIfEmpty(TimeSpan.FromHours(24)).Min();
-                int pause = (int)Math.Min(Defaults.BreakAfterMeeting, (nextFixed - end).TotalMinutes);
-                if (pause >= 1) list.Insert(at + 1, new PlanBlock { Kind = BlockKind.Break, Name = "Break after meeting", Minutes = pause, AnchorStart = end });
+                if (!PlaceMeeting(list, ParseDayStart(), 0, start, end, ev?.Start.TimeOfDay ?? start, title, out var why)) skipped.Add($"{title} ({why})");
             }
         }, keep: null);
-        _toast.ShowMessage("Your plan was adjusted for your calendar", string.Join(", ", added.Select(a => a.Title)));
+        if (skipped.Count > 0) _toast.ShowMessage("A meeting couldn't be added", string.Join(", ", skipped) + ": it stays shown on top of your day.");
+        else _toast.ShowMessage("Your plan was adjusted for your calendar", string.Join(", ", added.Select(a => a.Title)));
     }
 
     // ---------- Filling part of the day ----------

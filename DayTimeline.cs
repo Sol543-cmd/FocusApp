@@ -52,6 +52,9 @@ public class DayTimeline : UserControl
     /// <summary>A block was right-clicked (selected for its menu, without opening anything else).</summary>
     public event Action<PlanBlock>? BlockRightClicked;
 
+    /// <summary>A calendar meeting shown on top of the plan was clicked (it offers Add to my day).</summary>
+    public event Action<CalendarEvent, FrameworkElement>? EventClicked;
+
     /// <summary>Show each focus session's tasks on its block, as a small numbered list.</summary>
     public bool ShowTasks { get; set; } = true;
 
@@ -525,6 +528,12 @@ public class DayTimeline : UserControl
         };
         card.SetResourceReference(Border.BackgroundProperty, ev.Busy ? "MeetingTint" : "Panel2");
         card.SetResourceReference(Border.BorderBrushProperty, ev.Busy ? "MeetingBrush" : "Line");
+        if (EventClicked != null && !ev.AllDay)
+        {
+            card.Cursor = System.Windows.Input.Cursors.Hand;
+            card.ToolTip += "\nClick to add it to your day";
+            card.MouseLeftButtonUp += (_, e) => { EventClicked?.Invoke(ev, card); e.Handled = true; };
+        }
         Canvas.SetLeft(card, width - laneWidth - 4);
         Canvas.SetTop(card, top);
         return card;

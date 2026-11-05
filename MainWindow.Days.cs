@@ -253,7 +253,8 @@ public partial class MainWindow
     private void Calendar_Updated()
     {
         // A running day takes in new, moved or cancelled meetings (for the part that hasn't happened yet).
-        if (_mode == RunMode.DayPlan && _runner.IsRunning) AdjustRunningDayForCalendar();
+        // Today's running or hand-made plan: new or cancelled meetings are asked about (or fitted in, or shown on top, per Settings).
+        HandleCalendarChangesForPlannedDay();
 
         // The plan on screen follows the calendar while it's still automatic (and not running).
         if (_planAutomatic && !ViewingRunningDay && _planDate >= DateTime.Today)
@@ -278,7 +279,9 @@ public partial class MainWindow
     /// and breaks around them reshape within their limits. Lunch, the set breaks, and the session
     /// happening now aren't touched.
     /// </summary>
-    private void AdjustRunningDayForCalendar()
+    /// <param name="only">Just these meetings (title, calendar start); null = every new one.</param>
+    /// <param name="cancelledToo">Also take out meetings the calendar no longer has.</param>
+    private void AdjustRunningDayForCalendar(Func<string, TimeSpan, bool>? only = null, bool cancelledToo = true)
     {
         if (_runner.ScheduleStartLocal is not DateTime dayStart || _runner.Current is not PlanBlock current) return;
         try
@@ -289,19 +292,37 @@ public partial class MainWindow
 
             // Meetings still to come, per the calendar (a meeting already under way starts when the current session ends).
             var wanted = CalendarService.BusyEventsOn(DateTime.Today)
-                .Select(e => (Start: Max(e.Start.TimeOfDay, currentEnd), End: e.End.Date > DateTime.Today ? TimeSpan.FromHours(24) : e.End.TimeOfDay, e.Title))
+                .Where(e => !e.AllDay)
+                .Select(e => (Start: Max(e.Start.TimeOfDay, currentEnd), End: e.End.Date > DateTime.Today ? TimeSpan.FromHours(24) : e.End.TimeOfDay, e.Title, Raw: e.Start.TimeOfDay))
                 .Where(m => m.End > m.Start && m.End > currentEnd)
                 .ToList();
 
             var planned = blocks.Skip(ci + 1).Where(b => b.IsMeeting && b.IsAnchored).ToList();
-            var cancelled = planned.Where(p => !wanted.Any(w => w.Start == p.AnchorStart)).ToList();
-            var added = wanted.Where(w => !planned.Any(p => p.AnchorStart == w.Start)).ToList();
+            var cancelled = !cancelledToo ? new List<PlanBlock>() : planned.Where(p => !wanted.Any(w => SameMeeting(p, w.Start, w.Raw))).ToList();
+            var added = wanted.Where(w => !planned.Any(p => SameMeeting(p, w.Start, w.Raw)) && (only == null || only(w.Title, w.Raw))).ToList();
             if (cancelled.Count == 0 && added.Count == 0) return;
+
+            // A meeting's start is non-negotiable: one that begins during the current focus session or break ends it
+            // then (or right now, if it has already begun), and the meeting starts on time. Another meeting under way
+            // isn't cut.
+            if (!current.IsMeeting && added.Count > 0)
+            {
+                var first = added.Min(m => m.Raw);
+                var cutAt = Max(first, DateTime.Now.TimeOfDay);
+                var curStart = currentEnd - TimeSpan.FromMinutes(current.Minutes);
+                if (cutAt < currentEnd)
+                {
+                    current.Minutes = Math.Max(1, (int)Math.Ceiling((cutAt - curStart).TotalMinutes));
+                    currentEnd = curStart + TimeSpan.FromMinutes(current.Minutes);
+                    added = added.Select(m => (Start: Max(m.Raw, currentEnd), m.End, m.Title, m.Raw)).ToList();
+                }
+            }
 
             var before = blocks.Select(b => (b, b.Minutes)).ToList();
             var endBefore = dayStart.TimeOfDay + TimeSpan.FromMinutes(blocks.Sum(b => b.Minutes));
             var list = blocks.ToList();
             var skipped = new List<string>();
+            var skippedNames = new List<string>();
 
             foreach (var gone in cancelled)
             {
@@ -314,43 +335,7 @@ public partial class MainWindow
 
             foreach (var m in added.OrderBy(m => m.Start))
             {
-                // A meeting during the morning break replaces it (the plan rearranges around the meeting).
-                var starts = Starts(list, dayStart.TimeOfDay);
-                var overlapping = list.Select((b, i) => (b, s: starts[i]))
-                    .Where(x => x.b.IsAnchored && x.s < m.End && x.s + TimeSpan.FromMinutes(x.b.Minutes) > m.Start)
-                    .Select(x => x.b).ToList();
-                foreach (var morningBreak in overlapping.Where(IsMorningBreak).ToList())
-                {
-                    if (list.IndexOf(morningBreak) <= list.IndexOf(current)) continue; // already happening or over
-                    list.Remove(morningBreak);
-                    overlapping.Remove(morningBreak);
-                    starts = Starts(list, dayStart.TimeOfDay);
-                }
-
-                // Lunch, Devotions and other meetings keep their times; a meeting clashing with them is left out.
-                bool clash = overlapping.Count > 0;
-                if (clash)
-                {
-                    skipped.Add(m.Title);
-                    continue;
-                }
-
-                int at = Enumerable.Range(ci + 1, Math.Max(0, list.Count - ci - 1)).FirstOrDefault(i => starts[i] >= m.Start, list.Count);
-                var meeting = new PlanBlock
-                {
-                    Kind = BlockKind.Meeting,
-                    Name = m.Title,
-                    Minutes = Math.Max(1, (int)(m.End - m.Start).TotalMinutes),
-                    AnchorStart = m.Start,
-                    MeetingStart = DateTime.Today + m.Start
-                };
-                list.Insert(at, meeting);
-
-                // The usual break after it, unless something fixed starts right away.
-                var nextFixed = list.Skip(at + 1).Where(b => b.IsAnchored).Select(b => b.AnchorStart!.Value).DefaultIfEmpty(TimeSpan.FromHours(24)).Min();
-                int pause = (int)Math.Min(Defaults.BreakAfterMeeting, (nextFixed - m.End).TotalMinutes);
-                if (pause >= 1)
-                    list.Insert(at + 1, new PlanBlock { Kind = BlockKind.Break, Name = "Break after meeting", Minutes = pause, AnchorStart = m.End });
+                if (!PlaceMeeting(list, dayStart.TimeOfDay, ci + 1, m.Start, m.End, m.Raw, m.Title, out var why)) { skipped.Add($"{m.Title} ({why})"); skippedNames.Add(m.Title); }
             }
 
             // Reshape everything after the current session, keeping it within the limits.
@@ -379,11 +364,11 @@ public partial class MainWindow
                 });
             }
 
-            string what = string.Join(", ", added.Where(a => !skipped.Contains(a.Title)).Select(a => a.Title)
+            string what = string.Join(", ", added.Where(a => !skippedNames.Contains(a.Title)).Select(a => a.Title)
                 .Concat(cancelled.Select(c => c.Name + " (cancelled)")));
             if (what.Length > 0) _toast.ShowMessage("Your day was adjusted for your calendar", what);
             if (skipped.Count > 0)
-                _toast.ShowMessage("A meeting clashes with your plan", $"{string.Join(", ", skipped)} overlaps lunch, Devotions or another meeting, so it wasn't added.");
+                _toast.ShowMessage("A meeting clashes with your plan", $"{string.Join(", ", skipped)}: it stays shown on top of your day.");
         }
         catch (Exception ex)
         {
@@ -392,6 +377,68 @@ public partial class MainWindow
     }
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
+    /// <summary>The set break and lunch: the only fixed blocks a new meeting may move or skip.</summary>
+    private static bool IsBreakOrLunch(PlanBlock b) => b.IsAnchored && (IsMorningBreak(b) || b.Name == Defaults.LunchName);
+
+    /// <summary>A planned meeting matches a calendar meeting by its place in the plan or its calendar start.</summary>
+    private static bool SameMeeting(PlanBlock p, TimeSpan start, TimeSpan rawStart) =>
+        p.AnchorStart == start || p.MeetingStart?.TimeOfDay == rawStart;
+
+    /// <summary>
+    /// Puts a calendar meeting into a plan at its time (blocks before <paramref name="firstFree"/> are left alone):
+    /// a meeting already going on when it starts makes it begin when that one ends; the set break and lunch are
+    /// skipped that day if it covers them completely, or nudged just before or after it if it only overlaps them
+    /// (the only time they move); then the usual break after it. It isn't added if it would cover another meeting
+    /// that starts during it, and <paramref name="why"/> says so.
+    /// </summary>
+    private bool PlaceMeeting(List<PlanBlock> list, TimeSpan dayStart, int firstFree, TimeSpan start, TimeSpan end, TimeSpan rawStart, string title, out string why)
+    {
+        why = "";
+        List<TimeSpan> starts() => Starts(list, dayStart);
+        var st = starts();
+        TimeSpan EndOf(int i) => st[i] + TimeSpan.FromMinutes(list[i].Minutes);
+        TimeSpan locked = firstFree <= 0 ? dayStart : EndOf(Math.Min(firstFree, list.Count) - 1);
+        start = Max(start, locked);
+
+        // 1. A meeting already under way: this one follows it (that meeting's own break after is dropped).
+        for (int i = 0; i < list.Count; i++)
+            if (list[i].IsMeeting && list[i].IsAnchored && st[i] <= start && EndOf(i) > start) start = EndOf(i);
+        if (start >= end) { why = "covered by another meeting"; return false; }
+        int after = list.FindIndex(b => b.IsAnchored && b.Name == "Break after meeting" && b.AnchorStart == start);
+        if (after >= firstFree && after >= 0) { list.RemoveAt(after); st = starts(); }
+
+        // 2. The set break and lunch: skipped if covered, nudged if only touched.
+        foreach (var b in list.Skip(firstFree).Where(IsBreakOrLunch).ToList())
+        {
+            int bi = list.IndexOf(b);
+            var bs = st[bi]; var be = bs + TimeSpan.FromMinutes(b.Minutes);
+            if (bs >= end || be <= start) continue;
+            list.Remove(b);
+            if (bs < start || be > end)
+            {
+                var len = TimeSpan.FromMinutes(b.Minutes);
+                var moved = bs < start && start - len >= locked ? start - len : end;
+                b.AnchorStart = moved;
+                st = starts();
+                int at2 = Enumerable.Range(firstFree, Math.Max(0, list.Count - firstFree)).FirstOrDefault(k => st[k] >= moved, list.Count);
+                list.Insert(at2, b);
+            }
+            st = starts();
+        }
+
+        // 3. Another meeting (or fixed block) starting during it: it stays on top instead.
+        for (int i = firstFree; i < list.Count; i++)
+            if (list[i].IsAnchored && st[i] < end && EndOf(i) > start && !(IsBreakOrLunch(list[i]) && list[i].AnchorStart == end))
+            { why = $"overlaps {list[i].Name}"; return false; }
+
+        int at = Enumerable.Range(firstFree, Math.Max(0, list.Count - firstFree)).FirstOrDefault(k => st[k] >= start, list.Count);
+        list.Insert(at, new PlanBlock { Kind = BlockKind.Meeting, Name = title, Minutes = Math.Max(1, (int)(end - start).TotalMinutes), AnchorStart = start, MeetingStart = DateTime.Today + rawStart });
+        var nextFixed = list.Skip(at + 1).Where(b => b.IsAnchored).Select(b => b.AnchorStart!.Value).DefaultIfEmpty(TimeSpan.FromHours(24)).Min();
+        int pause = (int)Math.Min(Defaults.BreakAfterMeeting, (nextFixed - end).TotalMinutes);
+        if (pause >= 1) list.Insert(at + 1, new PlanBlock { Kind = BlockKind.Break, Name = "Break after meeting", Minutes = pause, AnchorStart = end });
+        return true;
+    }
 
     private static bool IsMorningBreak(PlanBlock b) =>
         b.IsAnchored && b.Kind == BlockKind.Break && b.Name == Defaults.MorningBreakName && b.AnchorStart == Defaults.MorningBreakStart;

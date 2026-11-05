@@ -45,6 +45,7 @@ public partial class MainWindow
         Timeline.RangeEnd = Defaults.CalendarEnd;
         Timeline.ShowNowLine = true;
         Timeline.BlockClicked += OpenBlockEditor;
+        WireMeetingOverlays(); // calendar meetings shown on top: click to add them to your day
         Timeline.BlockRightClicked += block => { CloseBlockEditor(); SelectBlock(block); };
         EditorTitleBox.TextChanged += (_, _) => { if (EditorTitleBox.IsKeyboardFocused) _freshTitle = null; };
         CalTitleBox.TextChanged += (_, _) => { if (CalTitleBox.IsKeyboardFocused) _freshTitle = null; };

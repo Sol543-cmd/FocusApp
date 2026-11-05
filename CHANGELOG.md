@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.11
+
+- New meetings in today's calendar are noticed again: Focus asks right away, with a dialog, whether to fit the meeting
+  into your day or keep your plan with the meeting shown on top (Settings, Calendar sets ask, fit in or show on top).
+  This works while your day runs and on a plan you've made for today.
+- Click a meeting shown on top of your day (in the Dashboard, Day plan, Calendar or Home) and choose Add to my day.
+- Fitting a meeting in: it starts on time. A focus session or break running when it begins ends right then (or
+  at once, if the meeting has already begun). The focus sessions it covers make room and the usual break follows it. A meeting already going
+  on when it starts makes it begin when that one ends. Your set break and lunch are skipped that day if the meeting
+  covers them completely, or moved just before or after it if it only overlaps them (the only time they move).
+  Meetings that touched lunch or another meeting used to be left out without a word; now only one that would cover
+  another meeting stays on top, and Focus tells you why.
+
 ## 1.7.10
 
 - The dashboard is back to its original look: the round timer, with the Roman numeral and FOCUS SESSION above it while a
