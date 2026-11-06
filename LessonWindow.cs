@@ -230,7 +230,7 @@ public partial class LessonWindow : Window
             _steps.Add(new("reading", Reading));
         }
         var practice = l.Practice.Where(q => !hidden.Contains(q.Id) && !_stepsDone.Contains("practice:" + q.Id)).ToList();
-        for (int i = 0; i < practice.Count; i++) { var q = practice[i]; int n = i; _steps.Add(new("practice:" + q.Id, () => ShowMc(q, _lesson, $"Practice {n + 1} of {practice.Count}", scored: true, key: "practice:" + q.Id))); }
+        for (int i = 0; i < practice.Count; i++) { var q = practice[i]; int n = i; _steps.Add(new("practice:" + q.Id, () => { string lab = $"Practice {n + 1} of {practice.Count}"; if (q.Kind == "order") ShowOrder(q, lab, "practice:" + q.Id); else ShowMc(q, _lesson, lab, scored: true, key: "practice:" + q.Id); })); }
         var cards = l.Cards.Where(q => !hidden.Contains(q.Id) && !_stepsDone.Contains("card:" + q.Id)).ToList();
         for (int i = 0; i < cards.Count; i++) { var q = cards[i]; int n = i; _steps.Add(new("card:" + q.Id, () => ShowCard(q, _lesson, $"Memory card {n + 1} of {cards.Count}"))); }
         if (l.EndsChapter || l.Quiz.Count > 0)
@@ -254,7 +254,7 @@ public partial class LessonWindow : Window
         for (int i = 0; i < review.Count; i++)
         {
             var (rl, rq) = review[i]; int n = i; string key = "review:" + rq.Id;
-            _steps.Add(new(key, () => { if (rq.Kind == "card") ShowCard(rq, rl, $"Review {n + 1} of {review.Count}", key); else ShowMc(rq, rl, $"Review {n + 1} of {review.Count}", scored: true, key: key); }));
+            _steps.Add(new(key, () => { if (rq.Kind == "card") ShowCard(rq, rl, $"Review {n + 1} of {review.Count}", key); else if (rq.Kind == "order") ShowOrder(rq, $"Review {n + 1} of {review.Count}", key, rl); else ShowMc(rq, rl, $"Review {n + 1} of {review.Count}", scored: true, key: key); }));
         }
         _steps.Add(new("finish", Finish));
     }
@@ -1544,11 +1544,38 @@ public partial class LessonWindow : Window
 
     // ---------- Putting things in order ----------
 
-    private void ShowOrder(PackQuestion q, string label, string key)
+    /// <summary>The concept quiz's look for a question: a progress bar, then a card with the label, thumbs and the prompt.</summary>
+    private void AddQuestionCard(PackQuestion q, string label, bool scored)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(label, @"(\d+) of (\d+)");
+        if (m.Success)
+        {
+            int n = int.Parse(m.Groups[1].Value), of = Math.Max(1, int.Parse(m.Groups[2].Value));
+            _page.Children.Add(Text($"Progress: {n} / {of}", 14));
+            var track = new Grid { Height = 5, Margin = new Thickness(0, 8, 0, 0) };
+            var back = new Border { CornerRadius = new CornerRadius(3) }; back.SetResourceReference(Border.BackgroundProperty, "Panel2");
+            var fill = new Border { CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left };
+            fill.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
+            track.Children.Add(back); track.Children.Add(fill);
+            track.SizeChanged += (_, _) => fill.Width = track.ActualWidth * n / of;
+            _page.Children.Add(track);
+        }
+        var qcard = new StackPanel();
+        var qhead = new DockPanel();
+        if (scored) { var th = Thumbs(q); th.Margin = new Thickness(16, 0, 0, 0); DockPanel.SetDock(th, Dock.Right); qhead.Children.Add(th); }
+        qhead.Children.Add(Text(m.Success ? label.Substring(0, m.Index).Trim() + " " + m.Groups[1].Value : label, 16, bold: true, brush: "FocusBrush"));
+        qcard.Children.Add(qhead);
+        qcard.Children.Add(Text(q.Prompt, 21, top: 10));
+        var qbox = new Border { Child = qcard, Padding = new Thickness(26, 22, 26, 22), CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 22, 0, 0) };
+        qbox.SetResourceReference(Border.BackgroundProperty, "Panel");
+        _page.Children.Add(qbox);
+    }
+
+    private void ShowOrder(PackQuestion q, string label, string key, Course.LessonRef? lesson = null)
     {
         SetStep(label);
-        _page.Children.Add(Text(label, 13, brush: "Muted"));
-        _page.Children.Add(Text(q.Prompt, 21, bold: true, top: 8));
+        AddQuestionCard(q, label, scored: true);
+        _page.Children.Add(Text("Click the items in order, first to last:", 15, bold: true, top: 22));
         var picked = new List<int>();
         var pool = new WrapPanel { Margin = new Thickness(0, 16, 0, 0) };
         var chosenList = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
@@ -1582,7 +1609,8 @@ public partial class LessonWindow : Window
             feedback.Children.Add(Text(right ? "✓ Right order." : "✗ The right order:", 17, bold: true, brush: right ? "FocusBrush" : "PriorityHigh", top: 16));
             if (!right) for (int n = 0; n < q.Items.Count; n++) feedback.Children.Add(Text($"{n + 1}.  {q.Items[n]}", 16, top: 4));
             if (q.Why.Length > 0) feedback.Children.Add(Text(q.Why, 16, top: 10));
-            feedback.Children.Add(AnswerLinks(q, _lesson));
+            feedback.Children.Add(Text(BackIn(q.Id), 13.5, brush: "Muted", top: 8));
+            feedback.Children.Add(AnswerLinks(q, lesson ?? _lesson));
             feedback.Children.Add(Primary("Next", Next));
         };
         var reset = Link("Start over", () => { if (pool.Visibility == Visibility.Visible) { picked.Clear(); Redraw(); } });

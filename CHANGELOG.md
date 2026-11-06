@@ -3,6 +3,13 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.13
+
+- Fixed: "put these in order" questions in a lesson's practice set (and in reviews) showed only the prompt and no
+  items, so you couldn't go on. They now work everywhere a question can appear: practice, chapter quiz and review.
+  They also look like the other questions now: progress bar, question card, thumbs and the hide/flag menu, and they
+  show when they will come back.
+
 ## 1.7.12
 
 - Fixed: adding a second book froze Focus and let the new book take over your study days. Switching books in the
