@@ -3,6 +3,27 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.12
+
+- Fixed: adding a second book froze Focus and let the new book take over your study days. Switching books in the
+  background redrew the Training page, which switched books again, endlessly. Background switches are now silent,
+  review counts are cached, and with two or more books and no weekly plan yet, the book you've done most in keeps
+  every weekday (Track A) while the others wait for days (Track B).
+- Books practice (replacing All-books practice): multiple-choice rounds in the concept quiz's look, with Learn and
+  Review at the top right. Learn: what's due today in the day's book. Review: choose any book, then any lesson you've
+  done, or All lessons. Turn it on to pop up at its times on the practice timeline, as often as you like.
+- Book flashcards (replacing the evening card review): the flip cards, with the same Learn and Review. Each time on
+  the timeline is its own round, so it can come up in the evening or more often.
+- The multiple-choice questions in lessons and reviews have the concept quiz's look: progress bar, question card,
+  answers with round marks, green and red after you answer.
+- Today's practice: listed with times on the Training page (on by default), and optionally as small tags in the Day
+  plan and Dashboard (off by default). Both are switches in Training settings.
+- The Dashboard's Training menu lists Books practice and Book flashcards.
+- Modern, themed dropdowns, sliders and radio buttons throughout (Training settings, the reading view and
+  elsewhere); the "If you miss a lesson" choices are readable now.
+- Fixed: the font list under Aa in the reading view sometimes closed without choosing the font.
+- Timeline exercise: a close-enough answer now also shows the exact date and where you placed it.
+
 ## 1.7.11
 
 - New meetings in today's calendar are noticed again: Focus asks right away, with a dialog, whether to fit the meeting

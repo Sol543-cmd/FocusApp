@@ -120,7 +120,7 @@ public partial class LessonWindow
                 if (row < 0) { row = rowRight.Count; rowRight.Add(-1e9); rowHeight.Add(0); }
                 rowRight[row] = x + 80;
                 string key = !checkedDone ? (i == selected ? "FocusBrush" : "Line") : right ? "FocusBrush" : "BreakBrush";
-                string? sub = !checkedDone ? PackEvent.Label(year) : right ? $"{PackEvent.Label(ev.Year)} · right" : $"You: {PackEvent.Label(year)} · real: {PackEvent.Label(ev.Year)}";
+                string? sub = !checkedDone ? PackEvent.Label(year) : right ? (year == ev.Year ? $"Right · {PackEvent.Label(ev.Year)}" : $"Right · exact: {PackEvent.Label(ev.Year)} · you: {PackEvent.Label(year)}") : $"You: {PackEvent.Label(year)} · real: {PackEvent.Label(ev.Year)}";
                 var card = CardFor(ev.Text, key, sub, checkedDone ? (right ? "FocusBrush" : "BreakBrush") : "Muted");
                 card.Measure(new Size(150, double.PositiveInfinity));
                 rowHeight[row] = Math.Max(rowHeight[row], card.DesiredSize.Height);

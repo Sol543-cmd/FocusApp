@@ -206,7 +206,7 @@ public partial class MainWindow
     {
         if (_timelineWindow != null) { _timelineWindow.Activate(); return; }
 
-        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "All-books", ["cardreview"] = "Card review" };
+        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "Books practice", ["cardreview"] = "Book flashcards" };
         var rows = Practices.Concat(new[] { "lesson", "cardreview", "allbooks" }).ToArray();
         var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["cardreview"] = "PriorityNormal", ["allbooks"] = "Muted" };
         var features = new Dictionary<string, string> { ["words"] = "greek", ["alphabet"] = "alphabet", ["concepts"] = "concepts" };
@@ -265,7 +265,7 @@ public partial class MainWindow
                 bool on = practice switch
                 {
                     "lesson" => Course.Config.On && Course.Packs.Count > 0,
-                    "allbooks" => Course.Finished && Course.Config.AllBooksAuto,
+                    "allbooks" => Course.Config.AllBooksAuto && Course.Config.Courses.Count > 0,
                     "cardreview" => Course.Config.CardReviewOn && Course.Packs.Count > 0,
                     _ => _settings.On(features[practice])
                 };

@@ -35,6 +35,9 @@ public class DayTimeline : UserControl
     /// <summary>Calendar events to show too. Ones already in the plan as meetings aren't repeated.</summary>
     public IReadOnlyList<CalendarEvent>? Events { get; set; }
 
+    /// <summary>Practice rounds to mark at their times (null or empty: none).</summary>
+    public IReadOnlyList<(TimeSpan At, string Name)>? PracticeMarks { get; set; }
+
     /// <summary>Builds the right-click menu for a block (or returns null for none).</summary>
     public Func<PlanBlock, ContextMenu?>? MenuFor { get; set; }
 
@@ -234,6 +237,21 @@ public class DayTimeline : UserControl
 
         // Calendar events that aren't already in the plan (for example after 4:30, or marked "free").
         foreach (var ev in ExtraEvents()) _canvas.Children.Add(MakeEvent(ev, width));
+        // Practice rounds: a small tag at the right edge at each round's time.
+        foreach (var (at, name) in PracticeMarks ?? Array.Empty<(TimeSpan, string)>())
+        {
+            if (at < _from || at > _to) continue;
+            var tag = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(7, 0, 7, 1), Opacity = 0.92,
+                                   Child = new TextBlock { Text = $"{DateTime.Today.Add(at):h:mm}  {name}", FontSize = 10.5 }, IsHitTestVisible = false };
+            tag.SetResourceReference(Border.BackgroundProperty, "Panel");
+            tag.SetResourceReference(Border.BorderBrushProperty, "FocusBrush");
+            ((TextBlock)tag.Child).SetResourceReference(TextBlock.ForegroundProperty, "Text");
+            tag.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(tag, Math.Max(LabelWidth, width - tag.DesiredSize.Width - 6));
+            Canvas.SetTop(tag, Y(at) - tag.DesiredSize.Height / 2);
+            Panel.SetZIndex(tag, 50);
+            _canvas.Children.Add(tag);
+        }
 
         _canvas.Children.Add(_nowLine);
         _canvas.Children.Add(_nowDot);

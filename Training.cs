@@ -339,6 +339,10 @@ public class CourseConfig
     /// <summary>All-books practice: its times, and whether it pops up by itself.</summary>
     public List<string> AllBooksTimes { get; set; } = new() { "16:00" };
     public bool AllBooksAuto { get; set; } = true;
+    /// <summary>Show the day's practice rounds as small markers in the Day plan and the Dashboard's day view.</summary>
+    public bool ShowPracticeInDay { get; set; }
+    /// <summary>List today's practice rounds, with their times, on the Training page.</summary>
+    public bool ShowPracticeOnTraining { get; set; } = true;
 
     // ----- How the reading looks (Training settings, or Aa while reading) -----
     /// <summary>The reading's font (any font installed on the PC).</summary>
@@ -467,24 +471,50 @@ public static class Course
     public static void UseToday()
     {
         // Switches without saving the book's settings file (saving it here let an older computer overwrite newer settings).
-        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) { Current = c; Config.ActiveId = c.Id; LoadCurrent(); }
+        EnsureWeeklyPlan();
+        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) { Current = c; Config.ActiveId = c.Id; LoadCurrent(raise: false); }
     }
+
+    /// <summary>
+    /// With two or more books and no days planned yet, the book you've done most in keeps every weekday (Track A) and the
+    /// others wait for days (Track B), so a newly added book never takes over the one you're studying.
+    /// </summary>
+    public static void EnsureWeeklyPlan()
+    {
+        if (Config.Courses.Count < 2 || Config.Courses.Any(c => c.Days.Count > 0)) return;
+        var main = Config.Courses.OrderByDescending(c => LessonsDone(c.Id)).ThenBy(c => Config.Courses.IndexOf(c)).First();
+        main.Days = new List<int> { 1, 2, 3, 4, 5 };
+        if (main.Role.Length == 0) main.Role = "Track A";
+        foreach (var c in Config.Courses.Where(c => c != main && c.Role.Length == 0)) c.Role = "Track B";
+        SaveConfig();
+    }
+
+    /// <summary>Switches the open book without redrawing anything (for practice in another book).</summary>
+    public static void UseBookQuietly(string id)
+    {
+        if (id == Current.Id || Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;
+        Current = c; Config.ActiveId = c.Id; LoadCurrent(raise: false);
+    }
+
+    private static (DateTime At, List<(CourseInfo Book, int Due)> Counts)? _dueCache;
 
     /// <summary>Review due in each book (each opened briefly to count, then back to the one you had).</summary>
     public static List<(CourseInfo Book, int Due)> DueByBook()
     {
+        if (_dueCache is { } cache && DateTime.Now - cache.At < TimeSpan.FromMinutes(1) && cache.Counts.Count == Config.Courses.Count) return cache.Counts;
         var result = new List<(CourseInfo, int)>();
         var was = Current;
         foreach (var c in Config.Courses.ToList())
         {
             try
             {
-                if (c.Id != Current.Id) { Current = c; LoadCurrent(); }
+                if (c.Id != Current.Id) { Current = c; LoadCurrent(raise: false); }
                 result.Add((c, DueReview(999).Count));
             }
             catch (Exception ex) { Log.Error("DueByBook " + c.Id, ex); }
         }
-        if (Current.Id != was.Id) { Current = was; LoadCurrent(); }
+        if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); }
+        _dueCache = (DateTime.Now, result);
         return result;
     }
 
@@ -520,7 +550,10 @@ public static class Course
         if (Config.Courses.FirstOrDefault(c => c.Id == Config.ActiveId) is CourseInfo next) Open(next.Id);
     }
 
-    private static void LoadCurrent()
+    /// <param name="raise">Tell the app the book changed (which redraws the Training page). Background switches
+    /// (counting review, picking today's book) pass false: raising it there redrew the page, which switched books
+    /// again, endlessly, freezing Focus once a second book was added.</param>
+    private static void LoadCurrent(bool raise = true)
     {
         try
         {
@@ -535,7 +568,7 @@ public static class Course
             }
         }
         catch (Exception ex) { Log.Error("Course.LoadCurrent", ex); }
-        Changed?.Invoke();
+        if (raise) Changed?.Invoke();
     }
 
     /// <summary>Reads every device's log (others may have added to theirs through OneDrive).</summary>

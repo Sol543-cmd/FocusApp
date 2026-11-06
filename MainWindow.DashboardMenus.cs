@@ -36,7 +36,8 @@ public partial class MainWindow
         Add("Greek Vocab", () => DashGreek_Click(this, new RoutedEventArgs()));
         Add("Greek Alphabet", () => DashAlpha_Click(this, new RoutedEventArgs()));
         Add("Timeline", StartTimelinePractice);
-        Add("Book Concepts", StartAllBooks);
+        Add("Books practice", () => StartBooksPractice());
+        Add("Book flashcards", () => StartBookFlashcards());
         menu.IsOpen = true;
     }
 }

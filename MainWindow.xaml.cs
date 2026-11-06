@@ -492,6 +492,7 @@ public partial class MainWindow : Window
 
         EmptyPlanHint.Visibility = _plan.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         Timeline.Selected = _selected;
+        Timeline.PracticeMarks = Course.Config.ShowPracticeInDay && _planDate == DateTime.Today ? TodaysPracticeRounds() : null;
         Timeline.Show(_plan.ToList(), DateTime.Today + start);
         if (CalendarPanel != null && CalendarPanel.Visibility == Visibility.Visible && CalDayView.IsChecked == true &&
             _calDate.Date == _planDate)

@@ -195,7 +195,7 @@ public partial class MainWindow
     /// <summary>After you finish a book: a short round at each All-books time (if it pops up by itself), never in meetings.</summary>
     private void CheckAllBooks(TimeSpan now, bool last)
     {
-        if (!Course.Finished || !Course.Config.AllBooksAuto || _lessonWindow != null) return;
+        if (!Course.Config.AllBooksAuto || Course.Config.Courses.Count == 0 || _lessonWindow != null) return;
         var times = Course.Config.AllBooksTimes.Select(t => TimeSpan.TryParse(t, CultureInfo.InvariantCulture, out var v) ? v : (TimeSpan?)null)
                           .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
@@ -207,13 +207,8 @@ public partial class MainWindow
         StartAllBooks();
     }
 
-    private void StartAllBooks()
-    {
-        if (_lessonWindow != null) { _lessonWindow.Activate(); return; }
-        var round = Course.AllBooksRound(6);
-        if (round.Count == 0) { Info("All-books practice starts once you've finished a book (passed its final exam).", "Training"); return; }
-        OpenTrainingWindow(new LessonWindow("All-books practice", round, null, _ => { }), blocking: false);
-    }
+    /// <summary>Books practice (it replaced All-books practice): Learn by default.</summary>
+    private void StartAllBooks() => StartBooksPractice();
 
     // ---------- Evening card review ----------
 
@@ -229,7 +224,8 @@ public partial class MainWindow
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(3))) return;
         string key = Course.Today + "#cr" + slot;
-        if (_cardReviewKey == key || Course.CardReviewDoneToday()) return;
+        // Each time on the timeline is its own round (done once since that time, on any device).
+        if (_cardReviewKey == key || Course.Events.Any(e => e.Kind == "cardReviewDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
         if (PracticeMustWait()) return; // waits until the meeting, break or lunch is over
         _cardReviewKey = key;
         StartCardReview(quietIfNone: true);
@@ -245,17 +241,8 @@ public partial class MainWindow
         OpenTrainingWindow(LessonWindow.TimelinePractice(events, _ => { }), blocking: false);
     }
 
-    private void StartCardReview(bool quietIfNone)
-    {
-        if (_lessonWindow != null) { _lessonWindow.Activate(); return; }
-        var cards = Course.HardestCardsToday();
-        if (cards.Count == 0)
-        {
-            if (!quietIfNone) Info("No cards to review: there's no lesson from today yet, or you knew every card well.", "Training");
-            return;
-        }
-        OpenTrainingWindow(LessonWindow.CardReview(cards, TimeSpan.FromMinutes(Math.Clamp(Course.Config.CardReviewMinutes, 1, 30)), _ => { }), blocking: false);
-    }
+    /// <summary>Book flashcards (it replaced the evening card review): Learn by default.</summary>
+    private void StartCardReview(bool quietIfNone) => StartBookFlashcards(quiet: quietIfNone);
 
     // ---------- Highlights and notes ----------
 
@@ -642,6 +629,30 @@ public partial class MainWindow
         TrainingHost.Children.Add(weekCard);
 
         // Your books
+        // Today's practice rounds and their times (a setting)
+        if (Course.Config.ShowPracticeOnTraining)
+        {
+            var rounds = TodaysPracticeRounds();
+            var pr = new StackPanel();
+            var head = new DockPanel();
+            var tl = TLink("Practice timelines", OpenPracticeTimelines); DockPanel.SetDock(tl, Dock.Right);
+            head.Children.Add(tl);
+            head.Children.Add(TT("Today's practice", 16, bold: true));
+            pr.Children.Add(head);
+            if (rounds.Count == 0) pr.Children.Add(TT(PracticePausedToday() ? "Practice is paused today." : "No practice rounds set for today.", 13, brush: "Muted", top: 8));
+            var grid = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+            foreach (var (at, name) in rounds)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 22, 8), Width = 210 };
+                row.Children.Add(TT(DateTime.Today.Add(at).ToString("t"), 13, bold: true, brush: at <= DateTime.Now.TimeOfDay ? "Muted" : "Text"));
+                var n = TT(name, 13, brush: at <= DateTime.Now.TimeOfDay ? "Muted" : "Text"); n.Margin = new Thickness(10, 0, 0, 0);
+                row.Children.Add(n);
+                grid.Children.Add(row);
+            }
+            pr.Children.Add(grid);
+            TrainingHost.Children.Add(PageCard(pr));
+        }
+
         TrainingHost.Children.Add(TT("Your books", 16, bold: true, top: 6));
         var board = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
         foreach (var c in Course.Config.Courses.OrderBy(x => Array.IndexOf(Course.Roles, Course.RoleOf(x))))
@@ -923,7 +934,7 @@ public partial class MainWindow
         var more = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
         more.Children.Add(TLink("Highlights and notes", () => OpenNotesWindow(this)));
         more.Children.Add(TLink("Export notes to Markdown…", () => ExportNotes(this)));
-        more.Children.Add(TLink("All-books practice", StartAllBooks));
+        more.Children.Add(TLink("Books practice", StartAllBooks));
         cp.Children.Add(more);
         TrainingHost.Children.Add(TCard(cp, 20));
 
@@ -1173,10 +1184,10 @@ public partial class MainWindow
 
         // Evening card review
         var cr = new StackPanel();
-        cr.Children.Add(TT("Evening card review", 15, bold: true));
+        cr.Children.Add(TT("Book flashcards", 15, bold: true));
         var crTime = cfg.CardReviewTimes.Count > 0 && TimeSpan.TryParse(cfg.CardReviewTimes[0], CultureInfo.InvariantCulture, out var crt) ? DateTime.Today.Add(crt).ToString("t") : "no time set";
         cr.Children.Add(TT($"A short pop-up with the hardest memory cards from that day's lesson (ones you marked ✕ come first, then ✓). Comes up at {crTime}; move it with its slider on the practice timelines. Never in a meeting or focus session, and once a day across your devices.", 12, brush: "Muted", top: 2));
-        var crOn = new CheckBox { Content = "Pop up each evening", IsChecked = cfg.CardReviewOn, Margin = new Thickness(0, 10, 0, 0) };
+        var crOn = new CheckBox { Content = "Pop up at its times on the practice timeline", IsChecked = cfg.CardReviewOn, Margin = new Thickness(0, 10, 0, 0) };
         crOn.Checked += (_, _) => { cfg.CardReviewOn = true; Course.SaveConfig(); };
         crOn.Unchecked += (_, _) => { cfg.CardReviewOn = false; Course.SaveConfig(); };
         cr.Children.Add(crOn);
@@ -1194,12 +1205,18 @@ public partial class MainWindow
 
         // All-books practice
         var ap = new StackPanel();
-        ap.Children.Add(TT("All-books practice", 15, bold: true));
-        ap.Children.Add(TT("Short rounds of questions from books you've finished. Set its times on the practice timelines.", 12, brush: "Muted", top: 2));
-        var auto = new CheckBox { Content = "Pop up by itself at its times", IsChecked = cfg.AllBooksAuto, Margin = new Thickness(0, 10, 0, 0) };
+        ap.Children.Add(TT("Books practice", 15, bold: true));
+        ap.Children.Add(TT("Multiple-choice rounds in the concept quiz's style. Learn: what's due in the day's book. Review: choose any book and lesson. Add as many times a day as you like on the practice timeline.", 12, brush: "Muted", top: 2));
+        var auto = new CheckBox { Content = "Pop up at its times on the practice timeline", IsChecked = cfg.AllBooksAuto, Margin = new Thickness(0, 10, 0, 0) };
         auto.Checked += (_, _) => { cfg.AllBooksAuto = true; Course.SaveConfig(); };
         auto.Unchecked += (_, _) => { cfg.AllBooksAuto = false; Course.SaveConfig(); };
         ap.Children.Add(auto);
+        var inDay = new CheckBox { Content = "Show practice rounds in the Day plan and Dashboard", IsChecked = cfg.ShowPracticeInDay, Margin = new Thickness(0, 10, 0, 0) };
+        inDay.Click += (_, _) => { cfg.ShowPracticeInDay = inDay.IsChecked == true; Course.SaveConfig(); RefreshDayViews(); };
+        ap.Children.Add(inDay);
+        var onPage = new CheckBox { Content = "List today's practice rounds on the Training page", IsChecked = cfg.ShowPracticeOnTraining, Margin = new Thickness(0, 6, 0, 0) };
+        onPage.Click += (_, _) => { cfg.ShowPracticeOnTraining = onPage.IsChecked == true; Course.SaveConfig(); };
+        ap.Children.Add(onPage);
         var tl = TLink("Open the practice timelines", OpenPracticeTimelines);
         tl.Margin = new Thickness(0, 10, 0, 0);
         tl.HorizontalAlignment = HorizontalAlignment.Left;

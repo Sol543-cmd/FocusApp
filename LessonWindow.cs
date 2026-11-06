@@ -315,6 +315,15 @@ public partial class LessonWindow : Window
 
     private void SetStep(string text) => _stepLabel.Text = text;
 
+    /// <summary>Puts controls (Books practice's and Book flashcards' Learn and Review) at the top right, beside Close.</summary>
+    public void AddToTopBar(FrameworkElement element)
+    {
+        if (_windowBar is not DockPanel bar) return;
+        DockPanel.SetDock(element, Dock.Right);
+        element.VerticalAlignment = VerticalAlignment.Center;
+        bar.Children.Insert(1, element);
+    }
+
     /// <summary>Under an answer: See it in the book and ··· (Hide, Flag).</summary>
     private WrapPanel AnswerLinks(PackQuestion q, Course.LessonRef lesson)
     {
@@ -875,6 +884,14 @@ public partial class LessonWindow : Window
         card.SetResourceReference(Border.BorderBrushProperty, "Line");
         card.SetResourceReference(TextElement.ForegroundProperty, "Text");
         card.Child = AppearancePanel(rebuild);
+        // A dropdown's list is a popup of its own: picking from it mustn't count as a click outside (which closed
+        // this panel before the font was chosen).
+        if (card.Child is Panel inner)
+            foreach (var cb in inner.Children.OfType<ComboBox>())
+            {
+                cb.DropDownOpened += (_, _) => popup.StaysOpen = true;
+                cb.DropDownClosed += (_, _) => Dispatcher.BeginInvoke(new Action(() => popup.StaysOpen = false), System.Windows.Threading.DispatcherPriority.Input);
+            }
         popup.Child = card;
         button.Click += (_, _) => popup.IsOpen = !popup.IsOpen;
         return button;
@@ -1294,15 +1311,35 @@ public partial class LessonWindow : Window
     private void ShowMc(PackQuestion q, Course.LessonRef lesson, string label, bool scored, string? key)
     {
         SetStep(label);
-        _page.Children.Add(Text(label, 13, brush: "Muted"));
-        var promptRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
-        if (scored) { var th = Thumbs(q); th.Margin = new Thickness(16, 2, 0, 0); DockPanel.SetDock(th, Dock.Right); promptRow.Children.Add(th); }
-        promptRow.Children.Add(Text(q.Prompt, 23, bold: true));
-        _page.Children.Add(promptRow);
+        // The concept quiz's look: progress, a question card, then the choices as rows with a round mark.
+        var m = System.Text.RegularExpressions.Regex.Match(label, @"(\d+) of (\d+)");
+        if (m.Success)
+        {
+            int n = int.Parse(m.Groups[1].Value), of = Math.Max(1, int.Parse(m.Groups[2].Value));
+            _page.Children.Add(Text($"Progress: {n} / {of}", 14));
+            var track = new Grid { Height = 5, Margin = new Thickness(0, 8, 0, 0) };
+            var back = new Border { CornerRadius = new CornerRadius(3) }; back.SetResourceReference(Border.BackgroundProperty, "Panel2");
+            var fill = new Border { CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left };
+            fill.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
+            track.Children.Add(back); track.Children.Add(fill);
+            track.SizeChanged += (_, _) => fill.Width = track.ActualWidth * n / of;
+            _page.Children.Add(track);
+        }
+        var qcard = new StackPanel();
+        var qhead = new DockPanel();
+        if (scored) { var th = Thumbs(q); th.Margin = new Thickness(16, 0, 0, 0); DockPanel.SetDock(th, Dock.Right); qhead.Children.Add(th); }
+        qhead.Children.Add(Text(m.Success ? label.Substring(0, m.Index).Trim() + " " + m.Groups[1].Value : label, 16, bold: true, brush: "FocusBrush"));
+        qcard.Children.Add(qhead);
+        qcard.Children.Add(Text(q.Prompt, 21, top: 10));
+        var qbox = new Border { Child = qcard, Padding = new Thickness(26, 22, 26, 22), CornerRadius = new CornerRadius(14), Margin = new Thickness(0, 22, 0, 0) };
+        qbox.SetResourceReference(Border.BackgroundProperty, "Panel");
+        _page.Children.Add(qbox);
+        _page.Children.Add(Text("Select the correct answer:", 15, bold: true, top: 22));
+        var marks = new List<Border>();
         int chosen = -1;
         bool answered = false;
         var options = new List<Border>();
-        var choices = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
+        var choices = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
         var sureRow = new StackPanel { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 6, 0, 0) };
         var feedback = new StackPanel();
 
@@ -1310,7 +1347,12 @@ public partial class LessonWindow : Window
         {
             if (answered) return;
             chosen = i;
-            for (int k = 0; k < options.Count; k++) options[k].SetResourceReference(Border.BorderBrushProperty, k == i ? "FocusBrush" : "Line");
+            for (int k = 0; k < options.Count; k++)
+            {
+                options[k].SetResourceReference(Border.BorderBrushProperty, k == i ? "FocusBrush" : "Line");
+                if (k == i) { marks[k].SetResourceReference(Border.BackgroundProperty, "FocusBrush"); marks[k].SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); }
+                else { marks[k].Background = Brushes.Transparent; marks[k].SetResourceReference(Border.BorderBrushProperty, "Muted"); }
+            }
             sureRow.Visibility = scored ? Visibility.Visible : Visibility.Collapsed;
             if (!scored) Answer(false);
         }
@@ -1324,8 +1366,8 @@ public partial class LessonWindow : Window
             for (int k = 0; k < options.Count; k++)
             {
                 options[k].Cursor = null;
-                if (k == q.Answer) { options[k].SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); options[k].BorderThickness = new Thickness(2); options[k].SetResourceReference(Border.BackgroundProperty, "FocusTint"); }
-                else if (k == chosen) { options[k].SetResourceReference(Border.BorderBrushProperty, "PriorityHigh"); options[k].BorderThickness = new Thickness(2); }
+                if (k == q.Answer) { options[k].BorderBrush = new SolidColorBrush(Color.FromRgb(0x5C, 0xC8, 0x8A)); options[k].BorderThickness = new Thickness(2); }
+                else if (k == chosen) { options[k].BorderBrush = new SolidColorBrush(Color.FromRgb(0xE0, 0x70, 0x5F)); options[k].BorderThickness = new Thickness(2); }
                 else options[k].Opacity = 0.5;
             }
             if (scored)
@@ -1362,9 +1404,16 @@ public partial class LessonWindow : Window
         for (int i = 0; i < q.Options.Count; i++)
         {
             int idx = i;
-            var t = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 17 };
-            ScriptureLinks.SetText(t, $"{(char)('A' + i)}.  {q.Options[i]}");
-            var b = new Border { Child = t, Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, 0, 0, 10), CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2), Cursor = Cursors.Hand };
+            var t = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 17, VerticalAlignment = VerticalAlignment.Center };
+            ScriptureLinks.SetText(t, q.Options[i]);
+            var mark = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(2), Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent };
+            mark.SetResourceReference(Border.BorderBrushProperty, "Muted");
+            marks.Add(mark);
+            var optLine = new DockPanel();
+            DockPanel.SetDock(mark, Dock.Left);
+            optLine.Children.Add(mark);
+            optLine.Children.Add(t);
+            var b = new Border { Child = optLine, Padding = new Thickness(18, 14, 18, 14), Margin = new Thickness(0, 10, 0, 0), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.5), Cursor = Cursors.Hand };
             b.SetResourceReference(Border.BackgroundProperty, "Panel");
             b.SetResourceReference(Border.BorderBrushProperty, "Line");
             b.MouseLeftButtonUp += (_, _) => Mark(idx);

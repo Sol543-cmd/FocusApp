@@ -54,6 +54,7 @@ public partial class MainWindow
             else
             {
                 DashDay.Events = CalendarService.EventsOn(DateTime.Today);
+                DashDay.PracticeMarks = Course.Config.ShowPracticeInDay ? TodaysPracticeRounds() : null;
                 DashDay.Show(blocks, DateTime.Today + start);
                 if (full) DashDay.ScrollTo(DateTime.Now.TimeOfDay - TimeSpan.FromMinutes(45));
             }
