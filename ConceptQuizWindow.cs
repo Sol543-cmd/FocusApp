@@ -95,7 +95,7 @@ public sealed class ConceptQuizWindow : Window
     private void ShowQuestion()
     {
         _page.Children.Clear();
-        if (_round.Count == 0) { _page.Children.Add(T("No questions yet: import a question pack in Settings, Greek practice.", 18, top: 30)); return; }
+        if (_round.Count == 0) { _page.Children.Add(T("No questions yet: import a question pack in Training settings (the gear on the Training page), Greek practice.", 18, top: 30)); return; }
         if (_index >= _round.Count) { ShowEnd(); return; }
         var (pack, q) = _round[_index];
 

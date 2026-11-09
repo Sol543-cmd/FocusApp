@@ -125,11 +125,12 @@ public partial class MainWindow
     }
 
     private IEnumerable<StackPanel> SettingsPages() =>
-        new[] { "general", "appearance", "planning", "sessions", "alerts", "tasks", "calendar", "greek", "data", "features", "help" }
+        new[] { "general", "appearance", "planning", "sessions", "alerts", "tasks", "calendar", "data", "features", "help" }
             .Select(k => FindName("SettingsPage_" + k) as StackPanel).Where(p => p != null)!;
 
     private void ShowSettingsPage(string key)
     {
+        if (key == "greek") key = "general"; // Greek practice moved to Training settings
         foreach (var page in SettingsPages())
         {
             page.Visibility = (string)page.Tag == key ? Visibility.Visible : Visibility.Collapsed;

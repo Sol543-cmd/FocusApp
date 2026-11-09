@@ -60,7 +60,7 @@ public partial class MainWindow
                 ? LessonWindow.CardReview(round, TimeSpan.FromMinutes(Math.Clamp(Course.Config.CardReviewMinutes, 1, 60)), _ => { })
                 : new LessonWindow(title, round, null, _ => { });
             w.AddToTopBar(ModeBar(cards, review, Course.Current.Id, lesson));
-            w.Closed += (_, _) => Course.UseToday(); // back to the day's book
+            w.Closed += (_, _) => { Course.Pinned = null; Course.UseToday(); }; // back to the day's book
             OpenTrainingWindow(w, blocking: false);
         }
         catch (Exception ex) { Log.Error("Book practice", ex); Course.UseToday(); }

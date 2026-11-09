@@ -3,6 +3,37 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.14
+
+- New Training page: today's lesson with one Start button, this week's numbers (pages read, lessons done, practice
+  rounds, weeks in a row), today's practice on a line through the day with each round's exact time (rounds at the same
+  time form a small chain; done, next and required are marked), a card for each practice with Start, and your books
+  with their progress and a Go button for an extra lesson.
+- Lessons this week, under your books: drag a lesson to another day (onto a day that has one to make it two), × to
+  remove one, + Add to choose a book, ‹ › for the weeks ahead, and Back to my weekly plan. Changes apply to that week
+  only. Past days can't be changed; a lesson you remove frees that day; two computers changing the same week keep
+  the newest change for each day; a lesson put on a weekend comes up even with weekend practice paused.
+- Two lessons a day: each lesson time offers the day's next lesson. At the last time only the first lesson is
+  required; a second left undone becomes a catch-up (one at a time).
+- Once the day's lessons are done, the other lesson times disappear (no more pop-ups, and they drop off Today's
+  practice and the day views).
+- Fixed: an extra lesson in a book that isn't today's sometimes opened today's book instead. The open book no longer
+  changes in the background, and Start lesson on a book's page always uses that book.
+- Timeline practice is its own exercise with its own end page (it used to finish like a lesson). Each event is spaced
+  on its own: misplaced ones come back sooner, the further off the sooner; exact placements space out and, after four
+  in a row, are learned. Learn (the default) gives what's due plus your last two lessons' events; Review lets you
+  pick an era (Persian period, Hasmonean rule, Life of Jesus...) or a span of years. It has its own row on the
+  practice timeline and is in the Dashboard's Training menu.
+- Timeline browser: every event you've learned on one line you can zoom; click one to read its lesson's passage.
+  Open it at the end of a timeline round or from Training settings, Practice.
+- Training settings now look like Focus's Settings (a page list, small-capital headings, one row per setting, "Changes
+  save as you make them." and Done), and every Training setting is there, Greek practice included (moved from
+  Settings).
+- The reader now shows Word text boxes once, as a shaded box; captions small and muted under their picture; bulleted
+  and numbered lists; tables as grids; Word charts (bar, column, line and pie) drawn from their numbers; and Windows
+  drawings (EMF, WMF) as pictures. Choose each book's Word file again to see these (your progress isn't affected).
+- Fixed: picking a day in a date picker could freeze Focus's window until it was minimized.
+
 ## 1.7.13
 
 - Fixed: "put these in order" questions in a lesson's practice set (and in reviews) showed only the prompt and no

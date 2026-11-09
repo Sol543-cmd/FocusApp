@@ -54,7 +54,7 @@ public partial class LessonWindow : Window
     private readonly string _title;
 
     /// <summary>Progress is saved for lessons (not exams or practice rounds).</summary>
-    private bool TrackProgress => _questionsOnly == null && _cardsOnly == null;
+    private bool TrackProgress => _questionsOnly == null && _cardsOnly == null && _timelineOnly == null;
     private HashSet<string> _stepsDone = new();
     private Action<Key>? _keys;
 
@@ -316,6 +316,11 @@ public partial class LessonWindow : Window
     private void SetStep(string text) => _stepLabel.Text = text;
 
     /// <summary>Puts controls (Books practice's and Book flashcards' Learn and Review) at the top right, beside Close.</summary>
+    /// <summary>Timeline practice's end page: another round, and the timeline browser.</summary>
+    public Action? AnotherRound { get; set; }
+    public Action? BrowseTimeline { get; set; }
+    private int _exact;
+
     public void AddToTopBar(FrameworkElement element)
     {
         if (_windowBar is not DockPanel bar) return;
@@ -746,11 +751,14 @@ public partial class LessonWindow : Window
 
         var highlights = Course.Highlights().Where(h => h.Para >= start && h.Para < end).ToLookup(h => h.Para);
         Section? sidebar = null;
+        Table? table = null; int tableId = 0;
         for (int i = start; i < end && i < Course.Book.Count; i++)
         {
             var bp = Course.Book[i];
             Block block;
-            if (bp.Image != null)
+            if (bp.Chart != null)
+                block = new BlockUIContainer(ChartView(bp.Chart, themed ? null : (Color?)look.Fg)) { Margin = new Thickness(0, 8, 0, 10) };
+            else if (bp.Image != null)
             {
                 var path = System.IO.Path.Combine(Course.MediaDir, bp.Image);
                 if (!System.IO.File.Exists(path)) continue;
@@ -779,18 +787,67 @@ public partial class LessonWindow : Window
                         p.Inlines.Add(run);
                     }
                 }
+                if (bp.Caption)
+                {
+                    // A picture's caption: small and muted, close under it.
+                    p.FontSize = Math.Max(10, Math.Round(size * 0.8)); p.LineHeight = Math.Round(p.FontSize * 1.4);
+                    p.Margin = new Thickness(0, -6, 0, 16);
+                    if (themed) p.SetResourceReference(TextElement.ForegroundProperty, "Muted"); else p.Foreground = new SolidColorBrush(look.Fg) { Opacity = 0.7 };
+                }
+                if (bp.ListMark != null)
+                {
+                    // A list item: its bullet or number hangs to the left of the text.
+                    p.Margin = new Thickness(26 + 24 * bp.ListLevel, 0, 0, 6);
+                    p.TextIndent = -20;
+                    var markRun = new Run(bp.ListMark + "\u2002");
+                    if (p.Inlines.FirstInline != null) p.Inlines.InsertBefore(p.Inlines.FirstInline, markRun); else p.Inlines.Add(markRun);
+                }
                 if (i == mark) target = p;
                 foreach (var h in highlights[i]) ApplyHighlight(p, h.Quote, h.Color, h.Note);
                 map?.Add(p, i);
                 block = p;
             }
+            if (bp.TableId > 0)
+            {
+                // Tables as real grids: each paragraph goes into its row and column.
+                sidebar = null;
+                if (table == null || tableId != bp.TableId)
+                {
+                    tableId = bp.TableId;
+                    table = new Table { CellSpacing = 0, Margin = new Thickness(0, 6, 0, 18), BorderThickness = new Thickness(1) };
+                    table.SetResourceReference(Block.BorderBrushProperty, "Line");
+                    table.RowGroups.Add(new TableRowGroup());
+                    docu.Blocks.Add(table);
+                }
+                var tbRows = table.RowGroups[0].Rows;
+                while (tbRows.Count <= bp.Row) tbRows.Add(new TableRow());
+                var tbCells = tbRows[bp.Row].Cells;
+                while (tbCells.Count <= bp.Col)
+                {
+                    var tbNew = new TableCell { Padding = new Thickness(10, 7, 10, 3), BorderThickness = new Thickness(0.5) };
+                    tbNew.SetResourceReference(TableCell.BorderBrushProperty, "Line");
+                    tbCells.Add(tbNew);
+                }
+                while (table.Columns.Count <= bp.Col) table.Columns.Add(new TableColumn());
+                var tbCell = tbCells[bp.Col];
+                if (bp.Fill != null) { if (themed) tbCell.SetResourceReference(TableCell.BackgroundProperty, "Panel2"); else tbCell.Background = new SolidColorBrush(look.Side); }
+                if (block is Paragraph tbPara)
+                {
+                    tbPara.Margin = new Thickness(tbPara.Margin.Left, 0, 0, 5);
+                    if (bp.Heading == 0) { tbPara.FontSize = Math.Max(11, size - 1.5); tbPara.LineHeight = Math.Round(tbPara.FontSize * 1.45); }
+                    if (bp.Row == 0 && tbRows.Count == 1) tbPara.FontWeight = FontWeights.SemiBold;
+                }
+                tbCell.Blocks.Add(block);
+                continue;
+            }
+            table = null;
             if (bp.Sidebar)
             {
                 if (sidebar == null)
                 {
                     sidebar = new Section { Padding = new Thickness(16, 12, 16, 4), Margin = new Thickness(0, 6, 0, 16), BorderThickness = new Thickness(3, 0, 0, 0) };
                     if (themed) sidebar.SetResourceReference(TextElement.BackgroundProperty, "Panel2");
-                    else sidebar.Background = new SolidColorBrush(look.Side);
+                    else sidebar.Background = new SolidColorBrush(bp.Fill is { Length: 7 } hex && ColorConverter.ConvertFromString(hex) is Color fc ? Color.FromArgb(70, fc.R, fc.G, fc.B) : look.Side);
                     sidebar.SetResourceReference(Block.BorderBrushProperty, "FocusBrush");
                     docu.Blocks.Add(sidebar);
                 }
@@ -1633,9 +1690,17 @@ public partial class LessonWindow : Window
         _closeButton.Content = "Close";
         if (_timelineOnly != null)
         {
-            _page.Children.Add(Text("Timeline finished", 28, bold: true));
-            _page.Children.Add(Text("Events you placed far off come back first next time.", 16, top: 10));
-            _page.Children.Add(Primary("Close", Close));
+            // Timeline practice's own end: never a lesson's.
+            Course.Add(new TrainingEvent { Kind = "timelineDone", Lesson = -1 });
+            _page.Children.Add(Text("Timeline round finished", 28, bold: true));
+            _page.Children.Add(Text($"{_right} of {_asked} placed close enough{(_exact > 0 ? $", {_exact} exactly" : "")}.", 18, top: 10));
+            _page.Children.Add(Text("Events you placed far off come back soon (the further off, the sooner); ones you place exactly space out, " +
+                                    "and after four exact placements in a row they're learned.", 16, top: 12));
+            var row = new WrapPanel();
+            if (AnotherRound != null) row.Children.Add(Primary("Another round", () => { var again = AnotherRound; Close(); again(); }));
+            if (BrowseTimeline != null) row.Children.Add(Primary("Browse the timeline", () => BrowseTimeline()));
+            row.Children.Add(Primary("Close", Close));
+            _page.Children.Add(row);
             return;
         }
         if (_cardsOnly != null)
@@ -1672,5 +1737,115 @@ public partial class LessonWindow : Window
                                 (Course.Config.CardReviewOn ? "Your hardest cards come back for a few minutes this evening." : ""), 16, top: 14));
         _page.Children.Add(Text(next == null ? "That's every imported lesson. Import the next chapter pack on the course page." : $"Next time: {next.Lesson.Title}.", 16, brush: "Muted", top: 10));
         _page.Children.Add(Primary("Close", Close));
+    }
+
+    // ---------- Charts from the book ----------
+
+    private static readonly string[] ChartColors = { "#6FB5A8", "#8FA8E0", "#E0A86F", "#C79BE0", "#E08FA8", "#A8C878" };
+
+    /// <summary>A Word chart drawn from its numbers: bar, column, line or pie, with its title, labels and a legend.</summary>
+    private static FrameworkElement ChartView(BookChart chart, Color? fg)
+    {
+        var box = new StackPanel { Width = 640, HorizontalAlignment = HorizontalAlignment.Left };
+        TextBlock T(string text, double sz, bool bold = false, bool muted = false)
+        {
+            var t = new TextBlock { Text = text, FontSize = sz, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Segoe UI") };
+            if (fg is Color c) t.Foreground = new SolidColorBrush(c) { Opacity = muted ? 0.7 : 1 };
+            else t.SetResourceReference(TextBlock.ForegroundProperty, muted ? "Muted" : "Text");
+            return t;
+        }
+        Brush Series(int i) => (Brush)new BrushConverter().ConvertFromString(ChartColors[i % ChartColors.Length])!;
+        if (chart.Title.Length > 0) { var tt = T(chart.Title, 14, bold: true); tt.Margin = new Thickness(0, 0, 0, 8); box.Children.Add(tt); }
+        var cats = chart.Categories.Count > 0 ? chart.Categories : Enumerable.Range(1, chart.SeriesValues.Max(v => v.Count)).Select(n => n.ToString()).ToList();
+        var canvas = new Canvas { Width = 640, Height = 280 };
+        Brush lineBrush = fg is Color lc ? new SolidColorBrush(lc) { Opacity = 0.35 } : (Brush)Application.Current.Resources["Line"];
+        if (chart.Kind == "pie")
+        {
+            var vals = chart.SeriesValues[0];
+            double total = vals.Where(v => v > 0).Sum();
+            double angle = -Math.PI / 2, cx = 140, cy = 140, r = 120;
+            for (int i = 0; i < vals.Count && total > 0; i++)
+            {
+                if (vals[i] <= 0) continue;
+                double sweep = vals[i] / total * 2 * Math.PI;
+                var fig = new PathFigure { StartPoint = new Point(cx, cy), IsClosed = true };
+                fig.Segments.Add(new LineSegment(new Point(cx + r * Math.Cos(angle), cy + r * Math.Sin(angle)), true));
+                fig.Segments.Add(new ArcSegment(new Point(cx + r * Math.Cos(angle + sweep), cy + r * Math.Sin(angle + sweep)), new Size(r, r), 0, sweep > Math.PI, SweepDirection.Clockwise, true));
+                canvas.Children.Add(new System.Windows.Shapes.Path { Data = new PathGeometry(new[] { fig }), Fill = Series(i), Stroke = Brushes.White, StrokeThickness = 1 });
+                angle += sweep;
+                var key = new StackPanel { Orientation = Orientation.Horizontal };
+                key.Children.Add(new Border { Width = 11, Height = 11, Background = Series(i), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+                key.Children.Add(T($"{(i < cats.Count ? cats[i] : "")}  {vals[i] / total:P0}", 12.5));
+                Canvas.SetLeft(key, 300); Canvas.SetTop(key, 20 + i * 22); canvas.Children.Add(key);
+            }
+            box.Children.Add(canvas);
+            return box;
+        }
+        double max = Math.Max(0, chart.SeriesValues.SelectMany(v => v).DefaultIfEmpty(0).Max());
+        double min = Math.Min(0, chart.SeriesValues.SelectMany(v => v).DefaultIfEmpty(0).Min());
+        if (max - min <= 0) max = min + 1;
+        // A round step for the scale (about five lines).
+        double raw = (max - min) / 5, mag = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        double step = new[] { 1, 2, 2.5, 5, 10 }.Select(m => m * mag).First(s => s >= raw);
+        max = Math.Ceiling(max / step) * step; min = Math.Floor(min / step) * step;
+        bool horizontal = chart.Kind == "bar";
+        double left = horizontal ? 130 : 50, top = 8, w = 640 - left - 10, h = 280 - top - 36;
+        double Scale(double v) => (v - min) / (max - min);
+        for (double v = min; v <= max + step / 2; v += step)
+        {
+            var gl = new Line { Stroke = lineBrush, StrokeThickness = 1 };
+            var lab = T(v.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture), 11, muted: true);
+            if (horizontal) { double x = left + Scale(v) * w; gl.X1 = gl.X2 = x; gl.Y1 = top; gl.Y2 = top + h; Canvas.SetLeft(lab, x - 12); Canvas.SetTop(lab, top + h + 4); }
+            else { double y = top + h - Scale(v) * h; gl.X1 = left; gl.X2 = left + w; gl.Y1 = gl.Y2 = y; Canvas.SetLeft(lab, 4); Canvas.SetTop(lab, y - 8); }
+            canvas.Children.Add(gl); canvas.Children.Add(lab);
+        }
+        int n = cats.Count, sCount = chart.SeriesValues.Count;
+        double band = (horizontal ? h : w) / Math.Max(1, n);
+        for (int ci = 0; ci < n; ci++)
+        {
+            var cl = T(cats[ci], 11, muted: true);
+            cl.TextTrimming = TextTrimming.CharacterEllipsis; cl.TextWrapping = TextWrapping.NoWrap;
+            if (horizontal) { cl.Width = left - 10; cl.TextAlignment = TextAlignment.Right; Canvas.SetLeft(cl, 0); Canvas.SetTop(cl, top + ci * band + band / 2 - 8); }
+            else { cl.Width = band; cl.TextAlignment = TextAlignment.Center; Canvas.SetLeft(cl, left + ci * band); Canvas.SetTop(cl, top + h + 4); }
+            canvas.Children.Add(cl);
+        }
+        for (int si = 0; si < sCount; si++)
+        {
+            var vals = chart.SeriesValues[si];
+            if (chart.Kind == "line")
+            {
+                var pl = new Polyline { Stroke = Series(si), StrokeThickness = 2.5 };
+                for (int ci = 0; ci < Math.Min(n, vals.Count); ci++) pl.Points.Add(new Point(left + ci * band + band / 2, top + h - Scale(vals[ci]) * h));
+                canvas.Children.Add(pl);
+                foreach (var pt in pl.Points) { var d = new Ellipse { Width = 7, Height = 7, Fill = Series(si) }; Canvas.SetLeft(d, pt.X - 3.5); Canvas.SetTop(d, pt.Y - 3.5); canvas.Children.Add(d); }
+                continue;
+            }
+            double barW = band * 0.7 / sCount;
+            for (int ci = 0; ci < Math.Min(n, vals.Count); ci++)
+            {
+                double z = Scale(0);
+                double lo = Math.Min(Scale(vals[ci]), z), hi = Math.Max(Scale(vals[ci]), z);
+                var rect = new Rectangle { Fill = Series(si), RadiusX = 2, RadiusY = 2 };
+                double off = band * 0.15 + si * barW;
+                if (horizontal) { rect.Width = Math.Max(1, (hi - lo) * w); rect.Height = barW; Canvas.SetLeft(rect, left + lo * w); Canvas.SetTop(rect, top + ci * band + off); }
+                else { rect.Width = barW; rect.Height = Math.Max(1, (hi - lo) * h); Canvas.SetLeft(rect, left + ci * band + off); Canvas.SetTop(rect, top + h - hi * h); }
+                canvas.Children.Add(rect);
+            }
+        }
+        box.Children.Add(canvas);
+        if (sCount > 1 || chart.SeriesNames.Any(s => s.Length > 0))
+        {
+            var legend = new WrapPanel { Margin = new Thickness(left, 6, 0, 0) };
+            for (int si = 0; si < sCount; si++)
+            {
+                string name = si < chart.SeriesNames.Count ? chart.SeriesNames[si] : "";
+                if (name.Length == 0 && sCount == 1) continue;
+                legend.Children.Add(new Border { Width = 11, Height = 11, Background = Series(si), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center });
+                var lt = T(name.Length > 0 ? name : $"Series {si + 1}", 12); lt.Margin = new Thickness(0, 0, 16, 0);
+                legend.Children.Add(lt);
+            }
+            box.Children.Add(legend);
+        }
+        return box;
     }
 }

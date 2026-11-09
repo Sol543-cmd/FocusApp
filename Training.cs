@@ -110,12 +110,37 @@ public class BookPara
     public bool InTable { get; set; }
     /// <summary>A picture or map from the book (a file in the course's media folder), if this paragraph holds one.</summary>
     public string? Image { get; set; }
+    /// <summary>A text box's own fill color (#RRGGBB), when the book gave it one.</summary>
+    public string? Fill { get; set; }
+    /// <summary>A picture's caption (small and muted under it).</summary>
+    public bool Caption { get; set; }
+    /// <summary>A list item's bullet or number ("•", "3.", "b)"), and how deep it is (0 = first level).</summary>
+    public string? ListMark { get; set; }
+    public int ListLevel { get; set; }
+    /// <summary>Tables: which table (paragraphs of one table share it), and the cell's row and column.</summary>
+    public int TableId { get; set; }
+    public int Row { get; set; }
+    public int Col { get; set; }
+    /// <summary>A chart from the book, drawn from the numbers Word stored with it.</summary>
+    public BookChart? Chart { get; set; }
     public List<BookRun> Runs { get; set; } = new();
     [JsonIgnore] public string Text => string.Concat(Runs.Select(r => r.Text));
 }
 
+/// <summary>A Word chart's numbers: its kind (bar, column, line or pie), title, categories and series.</summary>
+public class BookChart
+{
+    public string Kind { get; set; } = "column";
+    public string Title { get; set; } = "";
+    public List<string> Categories { get; set; } = new();
+    public List<string> SeriesNames { get; set; } = new();
+    public List<List<double>> SeriesValues { get; set; } = new();
+}
+
 public static class BookReader
 {
+    private static readonly XNamespace MC = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+    private static readonly XNamespace C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
     private static readonly XNamespace W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
     /// <summary>Reads a .docx file into paragraphs, keeping italics, bold, superscript, headings, shaded sidebars and tables.</summary>
@@ -138,13 +163,18 @@ public static class BookReader
         XDocument doc;
         using (var s = entry.Open()) doc = XDocument.Load(s);
 
-        // Styles: which style ids are headings, and which carry shading.
+        // Styles: which style ids are headings, which carry shading, and which are captions.
         var headingOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var shadedStyles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var captionStyles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Caption" };
+        var styleSize = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int normalSize = 22;
         if (zip.GetEntry("word/styles.xml") is ZipArchiveEntry stylesEntry)
         {
             using var ss = stylesEntry.Open();
-            foreach (var st in XDocument.Load(ss).Descendants(W + "style"))
+            var sdoc = XDocument.Load(ss);
+            if (int.TryParse((string?)sdoc.Root?.Element(W + "docDefaults")?.Descendants(W + "sz").FirstOrDefault()?.Attribute(W + "val"), out int dsz)) normalSize = dsz;
+            foreach (var st in sdoc.Descendants(W + "style"))
             {
                 string id = (string?)st.Attribute(W + "styleId") ?? "";
                 string name = (string?)st.Element(W + "name")?.Attribute(W + "val") ?? id;
@@ -153,23 +183,88 @@ public static class BookReader
                 if (level == 0 && outline != null && int.TryParse(outline.Value, out int ol) && ol < 3) level = ol + 1;
                 if (level > 0) headingOf[id] = level;
                 if (IsShaded(st.Element(W + "pPr")?.Element(W + "shd"))) shadedStyles.Add(id);
+                if (name.Equals("caption", StringComparison.OrdinalIgnoreCase)) captionStyles.Add(id);
+                if (int.TryParse((string?)st.Element(W + "rPr")?.Element(W + "sz")?.Attribute(W + "val"), out int ssz)) styleSize[id] = ssz;
+                if (id.Equals("Normal", StringComparison.OrdinalIgnoreCase) && styleSize.TryGetValue(id, out int nsz)) normalSize = nsz;
             }
         }
+
+        // Numbering: each list's bullet or number format, by list and level.
+        var numFormat = new Dictionary<(string Num, int Level), (string Fmt, string Text)>();
+        if (zip.GetEntry("word/numbering.xml") is ZipArchiveEntry numEntry)
+        {
+            using var ns = numEntry.Open();
+            var ndoc = XDocument.Load(ns);
+            var abstracts = ndoc.Descendants(W + "abstractNum").ToDictionary(x => (string?)x.Attribute(W + "abstractNumId") ?? "", x => x);
+            foreach (var num in ndoc.Descendants(W + "num"))
+            {
+                string numId = (string?)num.Attribute(W + "numId") ?? "";
+                string absId = (string?)num.Element(W + "abstractNumId")?.Attribute(W + "val") ?? "";
+                if (!abstracts.TryGetValue(absId, out var abs)) continue;
+                foreach (var lvl in abs.Elements(W + "lvl"))
+                    if (int.TryParse((string?)lvl.Attribute(W + "ilvl"), out int il))
+                        numFormat[(numId, il)] = ((string?)lvl.Element(W + "numFmt")?.Attribute(W + "val") ?? "bullet", (string?)lvl.Element(W + "lvlText")?.Attribute(W + "val") ?? "");
+            }
+        }
+        var counters = new Dictionary<(string, int), int>();
 
         var paras = new List<BookPara>();
         var body = doc.Root?.Element(W + "body");
         if (body == null) return paras;
-        foreach (var p in body.Descendants(W + "p"))
+        var tableIds = new Dictionary<XElement, int>();
+        // Word keeps a second copy of every text box (for older versions) under mc:Fallback: read only the first.
+        foreach (var p in body.Descendants(W + "p").Where(p => !p.Ancestors(MC + "Fallback").Any()))
         {
             var pPr = p.Element(W + "pPr");
             string style = (string?)pPr?.Element(W + "pStyle")?.Attribute(W + "val") ?? "";
+            var box = p.Ancestors(W + "txbxContent").FirstOrDefault();
+            var tbl = p.Ancestors(W + "tbl").FirstOrDefault();
             var para = new BookPara
             {
                 Heading = headingOf.TryGetValue(style, out int h) ? h : HeadingLevel(style),
-                Sidebar = IsShaded(pPr?.Element(W + "shd")) || shadedStyles.Contains(style) || p.Ancestors(W + "tc").Any(tc => IsShaded(tc.Element(W + "tcPr")?.Element(W + "shd"))),
-                InTable = p.Ancestors(W + "tbl").Any()
+                Sidebar = box != null || IsShaded(pPr?.Element(W + "shd")) || shadedStyles.Contains(style),
+                InTable = tbl != null,
+                Caption = captionStyles.Contains(style)
             };
-            foreach (var r in p.Descendants(W + "r"))
+            if (box != null)
+            {
+                // The text box's own fill color, if it has one.
+                var fill = box.Ancestors().FirstOrDefault(x => x.Name.LocalName is "wsp" or "shape")?.Descendants(A + "solidFill").FirstOrDefault()?.Element(A + "srgbClr")?.Attribute("val");
+                if (fill != null && fill.Value.Length == 6 && fill.Value.ToUpperInvariant() != "FFFFFF") para.Fill = "#" + fill.Value;
+            }
+            if (tbl != null)
+            {
+                if (!tableIds.TryGetValue(tbl, out int tid)) tableIds[tbl] = tid = tableIds.Count + 1;
+                para.TableId = tid;
+                var tr = p.Ancestors(W + "tr").First();
+                var tc = p.Ancestors(W + "tc").First();
+                para.Row = tbl.Elements(W + "tr").ToList().IndexOf(tr);
+                para.Col = tr.Elements(W + "tc").ToList().IndexOf(tc);
+                if (IsShaded(tc.Element(W + "tcPr")?.Element(W + "shd"))) para.Fill ??= "shade";
+            }
+            var numPr = pPr?.Element(W + "numPr");
+            string? numId = (string?)numPr?.Element(W + "numId")?.Attribute(W + "val");
+            if (numId != null && numId != "0" && para.Heading == 0)
+            {
+                int il = int.TryParse((string?)numPr!.Element(W + "ilvl")?.Attribute(W + "val"), out int lv) ? lv : 0;
+                var (fmt, lvlText) = numFormat.TryGetValue((numId, il), out var f) ? f : ("bullet", "");
+                foreach (var k in counters.Keys.Where(k => k.Item1 == numId && k.Item2 > il).ToList()) counters.Remove(k);
+                int n = counters[(numId, il)] = (counters.TryGetValue((numId, il), out int c0) ? c0 : 0) + 1;
+                string mark = fmt switch
+                {
+                    "bullet" or "none" => il % 2 == 0 ? "•" : "◦",
+                    "lowerLetter" => ((char)('a' + (n - 1) % 26)).ToString(),
+                    "upperLetter" => ((char)('A' + (n - 1) % 26)).ToString(),
+                    "lowerRoman" => Roman(n).ToLowerInvariant(),
+                    "upperRoman" => Roman(n),
+                    _ => n.ToString(CultureInfo.InvariantCulture)
+                };
+                if (fmt is not ("bullet" or "none")) mark += lvlText.EndsWith(")") ? ")" : ".";
+                para.ListMark = mark; para.ListLevel = il;
+            }
+            int sizeSum = 0, sizeCount = 0;
+            // Only this paragraph's own runs: a text box's runs belong to the text box's own paragraphs.
+            foreach (var r in p.Descendants(W + "r").Where(r => r.Ancestors(W + "p").First() == p && !r.Ancestors(MC + "Fallback").Any()))
             {
                 var rPr = r.Element(W + "rPr");
                 var text = new StringBuilder();
@@ -181,6 +276,8 @@ public static class BookReader
                     else if (e.Name == W + "noBreakHyphen") text.Append('‑');
                 }
                 if (text.Length == 0) continue;
+                int sz = int.TryParse((string?)rPr?.Element(W + "sz")?.Attribute(W + "val"), out int rs) ? rs : styleSize.TryGetValue(style, out int st2) ? st2 : normalSize;
+                sizeSum += sz * text.Length; sizeCount += text.Length;
                 var run = new BookRun
                 {
                     Text = text.ToString(),
@@ -192,23 +289,103 @@ public static class BookReader
                 if (last != null && last.Italic == run.Italic && last.Bold == run.Bold && last.Super == run.Super) last.Text += run.Text;
                 else para.Runs.Add(run);
             }
+            // Small text right under a picture or chart reads as its caption.
+            if (!para.Caption && para.Heading == 0 && sizeCount > 0 && sizeSum / sizeCount <= normalSize - 3 && sizeCount < 400 &&
+                paras.Count > 0 && (paras[^1].Image != null || paras[^1].Chart != null)) para.Caption = true;
             if (mediaDir != null)
-                foreach (var blip in p.Descendants(A + "blip"))
+                foreach (var blip in p.Descendants().Where(x => (x.Name == A + "blip" || x.Name.LocalName == "imagedata") && x.Ancestors(W + "p").First() == p && !x.Ancestors(MC + "Fallback").Any()))
                 {
-                    string rid = (string?)blip.Attribute(R + "embed") ?? "";
+                    string rid = (string?)blip.Attribute(R + "embed") ?? (string?)blip.Attribute(R + "id") ?? "";
                     if (!rels.TryGetValue(rid, out var target)) continue;
-                    string ext = Path.GetExtension(target).ToLowerInvariant();
-                    if (ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp")) continue;
-                    var img = zip.GetEntry("word/" + target.TrimStart('/').Replace("word/", "")) ?? zip.GetEntry(target.TrimStart('/'));
-                    if (img == null) continue;
-                    Directory.CreateDirectory(mediaDir);
-                    string name = Path.GetFileName(target);
-                    img.ExtractToFile(Path.Combine(mediaDir, name), overwrite: true);
-                    paras.Add(new BookPara { Image = name, Sidebar = para.Sidebar });
+                    if (SaveImage(zip, target, mediaDir) is string name) paras.Add(new BookPara { Image = name, Sidebar = para.Sidebar, Fill = para.Fill });
                 }
+            foreach (var chartRef in p.Descendants(C + "chart").Where(x => x.Ancestors(W + "p").First() == p && !x.Ancestors(MC + "Fallback").Any()))
+            {
+                string rid = (string?)chartRef.Attribute(R + "id") ?? "";
+                if (rels.TryGetValue(rid, out var target) && ReadChart(zip, target) is BookChart chart) paras.Add(new BookPara { Chart = chart, Sidebar = para.Sidebar });
+            }
             if (para.Text.Trim().Length > 0) paras.Add(para);
         }
         return paras;
+    }
+
+    private static string Roman(int n)
+    {
+        var sb = new StringBuilder();
+        foreach (var (v, r) in new[] { (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I") })
+            while (n >= v) { sb.Append(r); n -= v; }
+        return sb.ToString();
+    }
+
+    private static ZipArchiveEntry? Part(ZipArchive zip, string target) =>
+        zip.GetEntry("word/" + target.TrimStart('/').Replace("word/", "")) ?? zip.GetEntry(target.TrimStart('/'));
+
+    /// <summary>Saves a picture into the media folder; Windows drawings (EMF, WMF) become PNG pictures.</summary>
+    private static string? SaveImage(ZipArchive zip, string target, string mediaDir)
+    {
+        string ext = Path.GetExtension(target).ToLowerInvariant();
+        var img = Part(zip, target);
+        if (img == null) return null;
+        Directory.CreateDirectory(mediaDir);
+        string name = Path.GetFileName(target);
+        if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp")
+        {
+            img.ExtractToFile(Path.Combine(mediaDir, name), overwrite: true);
+            return name;
+        }
+        if (ext is not (".emf" or ".wmf")) return null;
+        try
+        {
+            using var ms = new MemoryStream();
+            using (var src = img.Open()) src.CopyTo(ms);
+            ms.Position = 0;
+            using var meta = new System.Drawing.Imaging.Metafile(ms);
+            // Twice its size, so it stays sharp.
+            int w = Math.Clamp(meta.Width * 2, 50, 2400), hgt = Math.Clamp(meta.Height * 2, 50, 2400);
+            using var bmp = new System.Drawing.Bitmap(w, hgt);
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            {
+                g.Clear(System.Drawing.Color.White);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.DrawImage(meta, 0, 0, w, hgt);
+            }
+            name = Path.GetFileNameWithoutExtension(target) + ".png";
+            bmp.Save(Path.Combine(mediaDir, name), System.Drawing.Imaging.ImageFormat.Png);
+            return name;
+        }
+        catch (Exception ex) { Log.Error("Book picture " + target, ex); return null; }
+    }
+
+    /// <summary>A chart's numbers from its part in the Word file (bar, column, line or pie).</summary>
+    private static BookChart? ReadChart(ZipArchive zip, string target)
+    {
+        try
+        {
+            var part = Part(zip, target);
+            if (part == null) return null;
+            XDocument cd;
+            using (var cs = part.Open()) cd = XDocument.Load(cs);
+            var plot = cd.Descendants(C + "plotArea").FirstOrDefault();
+            if (plot == null) return null;
+            var kindEl = plot.Elements().FirstOrDefault(e => e.Name.LocalName.EndsWith("Chart"));
+            if (kindEl == null) return null;
+            string local = kindEl.Name.LocalName;
+            var chart = new BookChart
+            {
+                Kind = local.StartsWith("pie") || local.StartsWith("doughnut") ? "pie" : local.StartsWith("line") || local.StartsWith("area") ? "line"
+                     : (string?)kindEl.Element(C + "barDir")?.Attribute("val") == "bar" ? "bar" : "column",
+                Title = string.Concat(cd.Root?.Element(C + "chart")?.Element(C + "title")?.Descendants(A + "t").Select(t => t.Value) ?? Array.Empty<string>())
+            };
+            static List<string> Points(XElement? e) => e?.Descendants(C + "pt").OrderBy(pt => (int?)pt.Attribute("idx") ?? 0).Select(pt => (string?)pt.Element(C + "v") ?? "").ToList() ?? new();
+            foreach (var ser in kindEl.Elements(C + "ser"))
+            {
+                if (chart.Categories.Count == 0) chart.Categories = Points(ser.Element(C + "cat"));
+                chart.SeriesNames.Add(Points(ser.Element(C + "tx")).FirstOrDefault() ?? "");
+                chart.SeriesValues.Add(Points(ser.Element(C + "val")).Select(v => double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : 0).ToList());
+            }
+            return chart.SeriesValues.Count == 0 ? null : chart;
+        }
+        catch (Exception ex) { Log.Error("Book chart " + target, ex); return null; }
     }
 
     private static int HeadingLevel(string name)
@@ -364,6 +541,22 @@ public class CourseConfig
     /// <summary>When it pops up (set on the practice timelines).</summary>
     public List<string> CardReviewTimes { get; set; } = new() { "20:30" };
     public int CardReviewMinutes { get; set; } = 5;
+
+    /// <summary>Weeks you changed on the Training page: a day's lessons (book ids, in order), by date (yyyy-MM-dd).
+    /// Days not listed follow the weekly plan.</summary>
+    public Dictionary<string, DayPlan> WeekPlan { get; set; } = new();
+    /// <summary>Timeline practice: rounds a day on the practice timeline, and how many events a round.</summary>
+    public List<string> TimelineTimes { get; set; } = new() { "16:30" };
+    public bool TimelineOn { get; set; } = true;
+    public int TimelineCount { get; set; } = 8;
+}
+
+/// <summary>One changed day: its lessons, or back to the weekly plan; the newest change wins between computers.</summary>
+public class DayPlan
+{
+    public List<string> Books { get; set; } = new();
+    public bool Default { get; set; }
+    public DateTime At { get; set; } = DateTime.UtcNow;
 }
 
 public enum ConceptStage { New, Learning, Learned, Retired }
@@ -428,7 +621,122 @@ public static class Course
     private static string Ymd(DateTime d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     /// <summary>The book planned for a day: none at weekends; with no days planned yet, your active book takes every weekday.</summary>
-    public static CourseInfo? BookFor(DateTime day)
+    public static CourseInfo? BookFor(DateTime day) => BooksFor(day).FirstOrDefault();
+
+    /// <summary>A day's lessons in order (a book twice means two of its lessons), from the week you changed or the weekly plan.</summary>
+    public static List<CourseInfo> BooksFor(DateTime day)
+    {
+        if (Config.WeekPlan.TryGetValue(Ymd(day), out var plan) && !plan.Default)
+            return plan.Books.Select(id => Config.Courses.FirstOrDefault(c => c.Id == id)).Where(c => c != null).Select(c => c!).ToList();
+        return PlanBook(day) is CourseInfo c1 ? new List<CourseInfo> { c1 } : new List<CourseInfo>();
+    }
+
+    /// <summary>True when that day's week was changed (it differs from the weekly plan).</summary>
+    public static bool WeekChanged(DateTime monday) =>
+        Enumerable.Range(0, 7).Any(i => Config.WeekPlan.TryGetValue(Ymd(monday.AddDays(i)), out var p) && !p.Default);
+
+    /// <summary>Changes one day's lessons (this week or ahead only).</summary>
+    public static void SetDay(DateTime day, List<string> books, bool save = true)
+    {
+        if (day.Date < DateTime.Today) return;
+        Config.WeekPlan[Ymd(day)] = new DayPlan { Books = books, At = DateTime.UtcNow };
+        // Forget changed days more than two weeks past.
+        foreach (var k in Config.WeekPlan.Keys.Where(k => string.CompareOrdinal(k, Ymd(DateTime.Today.AddDays(-14))) < 0).ToList()) Config.WeekPlan.Remove(k);
+        if (save) SaveConfig();
+    }
+
+    /// <summary>Back to the weekly plan for a week (today and the days after it).</summary>
+    public static void ResetWeek(DateTime monday)
+    {
+        for (int i = 0; i < 7; i++)
+        {
+            var d = monday.AddDays(i);
+            if (d >= DateTime.Today && Config.WeekPlan.ContainsKey(Ymd(d))) Config.WeekPlan[Ymd(d)] = new DayPlan { Default = true, At = DateTime.UtcNow };
+        }
+        SaveConfig();
+    }
+
+    /// <summary>Lessons done in a book on a day (on any device).</summary>
+    public static int DoneCountOn(string courseId, DateTime day) =>
+        Events.Count(e => CourseOf(e) == courseId && e.Kind == "lessonDone" && e.Day == Ymd(day));
+
+    /// <summary>A day's planned lessons, each marked done once that many of its book's lessons were finished that day.</summary>
+    public static List<(CourseInfo Book, bool Done)> DayLessons(DateTime day)
+    {
+        var seen = new Dictionary<string, int>();
+        var list = new List<(CourseInfo, bool)>();
+        foreach (var b in BooksFor(day))
+        {
+            int n = seen[b.Id] = (seen.TryGetValue(b.Id, out int k) ? k : 0) + 1;
+            list.Add((b, DoneCountOn(b.Id, day) >= n));
+        }
+        return list;
+    }
+
+    /// <summary>The book of today's next lesson not yet done, or null when today's lessons are all done (or none are planned).</summary>
+    public static CourseInfo? NextDueToday() => DayLessons(DateTime.Today).Where(x => !x.Done).Select(x => x.Book).FirstOrDefault();
+
+    /// <summary>How many of today's planned lessons are done.</summary>
+    public static int DoneTodayCount() => DayLessons(DateTime.Today).Count(x => x.Done);
+
+    public record Outline(List<LessonRef> Lessons, HashSet<int> Done, int NextChapter, int? InProgress);
+    private static readonly Dictionary<string, (DateTime At, int Events, Outline O)> _outlines = new();
+
+    /// <summary>A book's lessons, which are done and the chapter to import next (each book opened quietly; kept a minute).</summary>
+    public static Outline OutlineOf(string id)
+    {
+        if (_outlines.TryGetValue(id, out var c) && DateTime.Now - c.At < TimeSpan.FromMinutes(1) && c.Events == Events.Count) return c.O;
+        var was = Current;
+        Outline o = new(new(), new(), 1, null);
+        try
+        {
+            if (Config.Courses.FirstOrDefault(x => x.Id == id) is CourseInfo book)
+            {
+                if (book.Id != Current.Id) { Current = book; LoadCurrent(raise: false); }
+                var next = NextLesson();
+                o = new(Lessons(), DoneLessons(), Packs.Count == 0 ? 1 : Packs.Keys.Max() + 1, InProgress(next) ? (int?)next!.Index : null);
+            }
+        }
+        catch (Exception ex) { Log.Error("Outline " + id, ex); }
+        finally { if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); } }
+        _outlines[id] = (DateTime.Now, Events.Count, o);
+        return o;
+    }
+
+    private static (DateTime At, int Events, int Pages)? _pages;
+
+    /// <summary>About how many book pages this week's finished lessons covered (about 2,400 letters a page).</summary>
+    public static int PagesReadThisWeek()
+    {
+        if (_pages is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(1) && c.Events == Events.Count) return c.Pages;
+        var monday = DateTime.Today.AddDays(-(((int)DateTime.Today.DayOfWeek + 6) % 7));
+        string from = Ymd(monday);
+        long letters = 0;
+        var was = Current;
+        try
+        {
+            foreach (var g in Events.Where(e => e.Kind == "lessonDone" && e.Lesson >= 0 && string.CompareOrdinal(e.Day, from) >= 0).GroupBy(CourseOf))
+            {
+                if (Config.Courses.FirstOrDefault(x => x.Id == g.Key) is not CourseInfo book) continue;
+                if (book.Id != Current.Id) { Current = book; LoadCurrent(raise: false); }
+                var lessons = Lessons();
+                foreach (int idx in g.Select(e => e.Lesson).Distinct())
+                {
+                    if (idx >= lessons.Count) continue;
+                    var (st, en) = LessonRange(lessons[idx]);
+                    for (int i = Math.Max(0, st); i < Math.Min(Book.Count, en); i++) letters += Book[i].Text.Length;
+                }
+            }
+        }
+        catch (Exception ex) { Log.Error("Pages read", ex); }
+        finally { if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); } }
+        int pages = (int)Math.Round(letters / 2400.0);
+        _pages = (DateTime.Now, Events.Count, pages);
+        return pages;
+    }
+
+    /// <summary>The weekly plan's book for a day: none at weekends; with no days planned yet, your active book takes every weekday.</summary>
+    private static CourseInfo? PlanBook(DateTime day)
     {
         int dow = (int)day.DayOfWeek;
         if (dow == 0 || dow == 6) return null;
@@ -452,12 +760,20 @@ public static class Course
     public static (CourseInfo Book, DateTime Day)? MissedLesson()
     {
         if (Config.MissedPolicy != "offer") return null;
-        var day = DateTime.Today.AddDays(-1);
-        while (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) day = day.AddDays(-1);
-        if ((DateTime.Today - day).TotalDays > 3 || BookFor(day) is not CourseInfo book) return null;
-        if (Config.SkippedCatchUps.Contains(book.Id + "|" + Ymd(day))) return null;
-        for (var d = day; d <= DateTime.Today; d = d.AddDays(1)) if (DoneOn(book.Id, d)) return null;
-        return (book, day);
+        // The last day before today that had lessons planned (up to three days back); one catch-up at a time.
+        for (var day = DateTime.Today.AddDays(-1); (DateTime.Today - day).TotalDays <= 3; day = day.AddDays(-1))
+        {
+            var lessons = DayLessons(day);
+            if (lessons.Count == 0) continue;
+            var book = lessons.FirstOrDefault(x => !x.Done).Book;
+            if (book == null) return null;
+            if (Config.SkippedCatchUps.Contains(book.Id + "|" + Ymd(day))) return null;
+            // Already caught up: a lesson of that book on a day since, beyond what that day planned.
+            for (var d = day.AddDays(1); d <= DateTime.Today; d = d.AddDays(1))
+                if (DoneCountOn(book.Id, d) > BooksFor(d).Count(c => c.Id == book.Id)) return null;
+            return (book, day);
+        }
+        return null;
     }
 
     public static void SkipCatchUp(CourseInfo book, DateTime day)
@@ -468,11 +784,16 @@ public static class Course
     }
 
     /// <summary>Makes today's planned book the open one (lessons, prompts and "done today" follow it).</summary>
+    /// <summary>The book of the lesson or practice window that's open: the open book doesn't change under it, and its
+    /// answers always count toward it.</summary>
+    public static string? Pinned { get; set; }
+
     public static void UseToday()
     {
+        if (Pinned != null) { UseBookQuietly(Pinned); return; }
         // Switches without saving the book's settings file (saving it here let an older computer overwrite newer settings).
         EnsureWeeklyPlan();
-        if (BookFor(DateTime.Today) is CourseInfo c && c.Id != Current.Id) { Current = c; Config.ActiveId = c.Id; LoadCurrent(raise: false); }
+        if ((NextDueToday() ?? BookFor(DateTime.Today)) is CourseInfo c && c.Id != Current.Id) { Current = c; Config.ActiveId = c.Id; LoadCurrent(raise: false); }
     }
 
     /// <summary>
@@ -520,6 +841,7 @@ public static class Course
 
     public static void Open(string id)
     {
+        if (Pinned != null && Pinned != id) return; // a lesson is open: its book stays open
         if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;
         Current = c;
         Config.ActiveId = id;
@@ -590,6 +912,18 @@ public static class Course
     public static void SaveConfig()
     {
         Directory.CreateDirectory(Dir);
+        // Changed weeks: two computers editing the same week keep the newest change for each day.
+        try
+        {
+            string cfgPath = Path.Combine(Dir, "course.json");
+            if (File.Exists(cfgPath) && JsonSerializer.Deserialize<CourseConfig>(File.ReadAllText(cfgPath)) is CourseConfig disk)
+            {
+                string oldest = Ymd(DateTime.Today.AddDays(-14));
+                foreach (var (day, plan) in disk.WeekPlan)
+                    if (string.CompareOrdinal(day, oldest) >= 0 && (!Config.WeekPlan.TryGetValue(day, out var mine) || plan.At > mine.At)) Config.WeekPlan[day] = plan;
+            }
+        }
+        catch (Exception ex) { Log.Error("Course.SaveConfig merge", ex); }
         WriteAtomic(Path.Combine(Dir, "course.json"), JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true }));
         Changed?.Invoke();
     }
@@ -604,7 +938,7 @@ public static class Course
     public static void Add(TrainingEvent e)
     {
         e.Device = Device;
-        if (e.CourseId.Length == 0) e.CourseId = Current.Id;
+        if (e.CourseId.Length == 0) e.CourseId = Pinned ?? Current.Id;
         e.At = DateTime.UtcNow;
         if (e.Day.Length == 0) e.Day = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var mine = Events.Where(x => x.Device == Device).ToList();
@@ -695,6 +1029,9 @@ public static class Course
     /// <summary>True once any device has finished a lesson today.</summary>
     public static bool DoneToday() => CE.Any(e => e.Kind == "lessonDone" && e.Day == Today);
 
+    /// <summary>True when every lesson planned for today is done (or none was planned).</summary>
+    public static bool AllDoneToday() => NextDueToday() == null;
+
     /// <summary>The next lesson to do (the first one not finished), or null if none is imported.</summary>
     public static LessonRef? NextLesson()
     {
@@ -740,6 +1077,108 @@ public static class Course
         return Lessons().Where(l => done.Contains(l.Index)).SelectMany(l => l.Lesson.Timeline.Select(e => (l, e)))
             .OrderByDescending(x => TimelineMisses(x.e.Text)).ThenBy(_ => Guid.NewGuid()).Take(max).ToList();
     }
+
+    // ---------- Timeline practice (spaced repetition by event) ----------
+
+    /// <summary>Which book each event in a timeline round comes from (rounds can mix books).</summary>
+    public static Dictionary<PackEvent, string> EventBook { get; } = new();
+
+    public record TimelineState(DateTime Due, int Streak, int Seen, bool Graduated);
+
+    /// <summary>
+    /// An event's place in timeline practice. Exact placements space it out (2 days, then ×2.5) and after four in a row it
+    /// graduates; close enough spaces it out more slowly; a miss brings it back sooner the further off it was.
+    /// </summary>
+    public static TimelineState TimelineStateOf(string bookId, PackEvent ev)
+    {
+        DateTime due = DateTime.MinValue; double gap = 0; int streak = 0, seen = 0;
+        foreach (var e in Events.Where(e => e.Kind == "timeline" && e.Question == ev.Text && CourseOf(e) == bookId).OrderBy(e => e.At))
+        {
+            seen++;
+            var at = e.At.ToLocalTime();
+            int off = e.Grade >= 0 ? e.Grade : e.Correct ? 0 : 999;
+            if (e.Correct)
+            {
+                bool exact = off == 0;
+                streak = exact ? streak + 1 : 0;
+                gap = gap <= 0 ? (exact ? 2 : 1) : gap * (exact ? 2.5 : 1.4);
+                due = at.AddDays(gap);
+            }
+            else
+            {
+                streak = 0; gap = 0;
+                double far = off / (double)Math.Max(5, ev.Within);
+                due = far > 8 ? at.AddMinutes(10) : far > 3 ? at.AddHours(3) : at.AddDays(1);
+            }
+        }
+        return new(due, streak, seen, streak >= 4);
+    }
+
+    /// <summary>Every event in the lessons you've done, in the books given (each book opened quietly, then back).</summary>
+    public static List<(LessonRef Lesson, PackEvent E, string Book, int Order)> LearnedEvents(IEnumerable<string> bookIds)
+    {
+        var list = new List<(LessonRef, PackEvent, string, int)>();
+        if (EventBook.Count > 5000) EventBook.Clear();
+        _tlDue = null;
+        var was = Current;
+        foreach (var id in bookIds.Distinct().ToList())
+        {
+            if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) continue;
+            try
+            {
+                if (c.Id != Current.Id) { Current = c; LoadCurrent(raise: false); }
+                var done = DoneLessons();
+                int order = 0;
+                foreach (var l in Lessons().Where(l => done.Contains(l.Index)))
+                {
+                    order++;
+                    foreach (var ev in l.Lesson.Timeline) { EventBook[ev] = c.Id; list.Add((l, ev, c.Id, order)); }
+                }
+            }
+            catch (Exception ex) { Log.Error("Timeline events " + id, ex); }
+        }
+        if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); }
+        return list;
+    }
+
+    /// <summary>
+    /// A Learn round: what's due, then the events of your last two lessons you haven't placed yet (from each of the day's
+    /// books). Graduated events stay out.
+    /// </summary>
+    public static List<(LessonRef Lesson, PackEvent E)> TimelineLearn(IEnumerable<string> bookIds, int max)
+    {
+        var all = LearnedEvents(bookIds);
+        var states = all.Select(x => (x, st: TimelineStateOf(x.Book, x.E))).Where(x => !x.st.Graduated).ToList();
+        var due = states.Where(x => x.st.Seen > 0 && x.st.Due <= DateTime.Now).OrderBy(x => x.st.Due).Select(x => x.x);
+        var fresh = states.Where(x => x.st.Seen == 0 && all.Where(y => y.Book == x.x.Book).Select(y => y.Order).DefaultIfEmpty(0).Max() - x.x.Order < 2).Select(x => x.x);
+        return due.Concat(fresh).Distinct().Take(max).Select(x => (x.Lesson, x.E)).ToList();
+    }
+
+    /// <summary>Eras to review by (only ones holding an event you've learned are offered).</summary>
+    public static readonly (string Name, int From, int To)[] Eras =
+    {
+        ("Israel before the exile", -2200, -598), ("Babylonian exile", -597, -539), ("Persian period", -538, -333),
+        ("Greek rule (Ptolemies and Seleucids)", -332, -168), ("Maccabean revolt and Hasmonean rule", -167, -64),
+        ("Roman rule and Herod the Great", -63, -5), ("Life of Jesus", -6, 30), ("The apostles and Paul", 30, 70),
+        ("Jewish wars and the late first century", 66, 135), ("The early church", 100, 325), ("Councils and the later church", 325, 600),
+        ("Middle Ages", 600, 1500), ("Reformation", 1500, 1650), ("Modern era", 1650, 2100)
+    };
+
+    /// <summary>A Review round: events you've learned between two years (any order, at most <paramref name="max"/>).</summary>
+    public static List<(LessonRef Lesson, PackEvent E)> TimelineReview(IEnumerable<string> bookIds, int from, int to, int max) =>
+        LearnedEvents(bookIds).Where(x => x.E.Year >= from && x.E.Year <= to).OrderBy(_ => Guid.NewGuid()).Take(max).Select(x => (x.Lesson, x.E)).ToList();
+
+    private static (DateTime At, int Count)? _tlDue;
+    /// <summary>Timeline events due in every book (counted at most once a minute).</summary>
+    public static int TimelineDueCount()
+    {
+        if (_tlDue is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(1)) return c.Count;
+        int n = LearnedEvents(Config.Courses.Select(x => x.Id)).Count(x => TimelineStateOf(x.Book, x.E) is { Seen: > 0, Graduated: false } st && st.Due <= DateTime.Now);
+        _tlDue = (DateTime.Now, n);
+        return n;
+    }
+
+    public static bool TimelineDoneToday() => Events.Any(e => e.Kind == "timelineDone" && e.Day == Today);
 
     public static int TimelineMisses(string text) =>
         CE.Count(e => e.Kind == "timeline" && e.Question == text && !e.Correct) - CE.Count(e => e.Kind == "timeline" && e.Question == text && e.Correct);

@@ -207,9 +207,13 @@ public partial class LessonWindow
             foreach (var (i, year) in placed)
             {
                 var ev = events[i].E;
-                bool ok = Math.Abs(year - ev.Year) <= ev.Within;
+                int off = Math.Abs(year - ev.Year);
+                bool ok = off <= ev.Within;
                 if (ok) right++;
-                Course.Add(new TrainingEvent { Kind = "timeline", Question = ev.Text, Correct = ok, Lesson = events[i].Lesson.Index });
+                if (off == 0) _exact++;
+                // Grade: how many years off (timeline practice spaces each event by it).
+                Course.Add(new TrainingEvent { Kind = "timeline", Question = ev.Text, Correct = ok, Grade = off, Lesson = events[i].Lesson.Index,
+                                               CourseId = Course.EventBook.TryGetValue(ev, out var book) ? book : "" });
             }
             _asked += events.Count; _right += right;
             MarkDone("timeline");
@@ -222,10 +226,10 @@ public partial class LessonWindow
                 var box = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
                 box.Children.Add(Text($"{ev.Text} · {PackEvent.Label(ev.Year)}", 15, bold: true));
                 if (ev.Note.Length > 0) box.Children.Add(Text(ev.Note, 14, brush: "Muted", top: 2));
-                if (ev.Find.Length > 0) { var see = Link("See it in the book", () => ShowWhere(l, new PackRef { Find = ev.Find })); see.HorizontalAlignment = HorizontalAlignment.Left; see.Margin = new Thickness(0, 4, 0, 0); box.Children.Add(see); }
+                if (ev.Find.Length > 0) { var see = Link("See it in the book", () => { if (Course.EventBook.TryGetValue(ev, out var b)) Course.UseBookQuietly(b); ShowWhere(l, new PackRef { Find = ev.Find }); }); see.HorizontalAlignment = HorizontalAlignment.Left; see.Margin = new Thickness(0, 4, 0, 0); box.Children.Add(see); }
                 results.Children.Add(box);
             }
-            if (right < events.Count) results.Children.Add(Text("The ones you missed come back first in the next timeline.", 13, brush: "Muted", top: 10));
+            if (right < events.Count) results.Children.Add(Text(_timelineOnly != null ? "The ones you missed come back soon, the furthest off soonest." : "The ones you missed come back first in the next timeline.", 13, brush: "Muted", top: 10));
             results.Children.Add(Primary("Next", Next));
         });
         finishedBtn.IsEnabled = false;

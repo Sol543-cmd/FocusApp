@@ -206,15 +206,16 @@ public partial class MainWindow
     {
         if (_timelineWindow != null) { _timelineWindow.Activate(); return; }
 
-        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "Books practice", ["cardreview"] = "Book flashcards" };
-        var rows = Practices.Concat(new[] { "lesson", "cardreview", "allbooks" }).ToArray();
-        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["cardreview"] = "PriorityNormal", ["allbooks"] = "Muted" };
+        var names = new Dictionary<string, string> { ["words"] = "Words", ["alphabet"] = "Alphabet", ["concepts"] = "Concepts", ["lesson"] = "Book lesson", ["allbooks"] = "Books practice", ["cardreview"] = "Book flashcards", ["timeline"] = "Timeline" };
+        var rows = Practices.Concat(new[] { "lesson", "cardreview", "allbooks", "timeline" }).ToArray();
+        var colors = new Dictionary<string, string> { ["words"] = "FocusBrush", ["alphabet"] = "BreakBrush", ["concepts"] = "PriorityHigh", ["lesson"] = "MeetingBrush", ["cardreview"] = "PriorityNormal", ["allbooks"] = "Muted", ["timeline"] = "Text" };
         var features = new Dictionary<string, string> { ["words"] = "greek", ["alphabet"] = "alphabet", ["concepts"] = "concepts" };
         var work = rows.ToDictionary(p => p, p => p switch
         {
             "lesson" => TrainingTimes(),
             "allbooks" => ParseTimes(string.Join(",", Course.Config.AllBooksTimes)) ?? new List<TimeSpan>(),
             "cardreview" => ParseTimes(string.Join(",", Course.Config.CardReviewTimes)) ?? new List<TimeSpan>(),
+            "timeline" => ParseTimes(string.Join(",", Course.Config.TimelineTimes)) ?? new List<TimeSpan>(),
             _ => SlotsFor(PerDayFor(p), p).Select(s => s.TimeOfDay).ToList()
         });
         var doneAt = rows.ToDictionary(p => p, p =>
@@ -239,7 +240,7 @@ public partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var canvases = new List<(Canvas Canvas, string? Practice)>();
 
-        int Limit(string p) => p == "lesson" ? 3 : p == "cardreview" ? 1 : p == "allbooks" ? 6 : MaxRounds;
+        int Limit(string p) => p == "lesson" ? 3 : p == "cardreview" ? 1 : p == "allbooks" ? 6 : p == "timeline" ? 4 : MaxRounds;
         double X(TimeSpan t, double width) => (t - axisStart).TotalMinutes / (axisEnd - axisStart).TotalMinutes * width;
         TimeSpan TimeAt(double x, double width)
         {
@@ -267,9 +268,10 @@ public partial class MainWindow
                     "lesson" => Course.Config.On && Course.Packs.Count > 0,
                     "allbooks" => Course.Config.AllBooksAuto && Course.Config.Courses.Count > 0,
                     "cardreview" => Course.Config.CardReviewOn && Course.Packs.Count > 0,
+                    "timeline" => Course.Config.TimelineOn && Course.Config.Courses.Count > 0,
                     _ => _settings.On(features[practice])
                 };
-                string offText = practice switch { "lesson" => "Not set up (Training page)", "cardreview" => "Off (Training settings)", "allbooks" => "After you finish a book", _ => "Off in Settings" };
+                string offText = practice switch { "lesson" => "Not set up (Training page)", "cardreview" or "timeline" => "Off (Training settings)", "allbooks" => "After you finish a book", _ => "Off in Settings" };
                 if (!on) { var off = new TextBlock { Text = offText }; off.SetResourceReference(StyleProperty, "Caption"); labelPanel.Children.Add(off); name.Opacity = 0.6; }
                 var actions = new WrapPanel();
                 Button Small(string text, string tip, Action click)
@@ -513,6 +515,7 @@ public partial class MainWindow
             // The book lesson's times, card review and All-books practice (these are always every day's).
             Course.Config.Times = work["lesson"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.CardReviewTimes = work["cardreview"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
+            Course.Config.TimelineTimes = work["timeline"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.Config.AllBooksTimes = work["allbooks"].Distinct().OrderBy(t => t).Select(t => t.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
             Course.SaveConfig();
             SaveSharedPracticeTimes(); // every timeline, including these, goes to your other computers (the newest change wins)

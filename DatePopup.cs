@@ -46,16 +46,35 @@ public static class DatePopup
         };
         box.LostKeyboardFocus += (_, e) => { if (e.NewFocus is not System.Windows.Media.Visual v || !frame.IsAncestorOf(v)) popup.IsOpen = false; };
 
+        // WPF's calendar captures the mouse while a day is pressed. If the pop-up closes before the button comes up, the
+        // capture stays with a hidden calendar and the whole window ignores the mouse until it's minimized: so the
+        // capture is always let go before closing, and whenever the pop-up closes.
+        void Release()
+        {
+            if (Mouse.Captured is DependencyObject held && (held == calendar || frame.IsAncestorOf(held) || held is CalendarItem or CalendarDayButton or Calendar))
+                Mouse.Capture(null);
+        }
         calendar.SelectedDatesChanged += (_, _) =>
         {
             if (filling || calendar.SelectedDate is not DateTime day) return;
             box.Text = day.ToString("d");
             box.CaretIndex = box.Text.Length;
-            popup.IsOpen = false;
-            box.Focus();
-            picked?.Invoke();
+            Release();
+            // Close once the click has finished (after the mouse button comes up), then hand the mouse back.
+            box.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Release();
+                popup.IsOpen = false;
+                box.Focus();
+                picked?.Invoke();
+            }), System.Windows.Threading.DispatcherPriority.Input);
         };
-        // WPF's calendar keeps hold of the mouse after a click, so the next click elsewhere would be swallowed.
-        calendar.PreviewMouseUp += (_, _) => { if (Mouse.Captured is CalendarItem) Mouse.Capture(null); };
+        calendar.PreviewMouseUp += (_, _) => Release();
+        calendar.GotMouseCapture += (_, _) =>
+        {
+            // A day button holding the mouse after it's been clicked: let go as soon as the button is up.
+            if (Mouse.LeftButton == MouseButtonState.Released) Release();
+        };
+        popup.Closed += (_, _) => Release();
     }
 }

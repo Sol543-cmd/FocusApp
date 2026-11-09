@@ -15,6 +15,7 @@ public class SharedPracticeTimes
     /// <summary>The book lesson's times, card review and All-books practice (from Training), so they sync too.</summary>
     public List<string> LessonTimes { get; set; } = new();
     public List<string> CardReviewTimes { get; set; } = new();
+    public List<string> TimelineTimes { get; set; } = new();
     public List<string> AllBooksTimes { get; set; } = new();
     public DateTime UpdatedUtc { get; set; }
 }
@@ -52,6 +53,7 @@ public partial class MainWindow
                 TodayTimes = new Dictionary<string, string>(_settings.PracticeTodayTimes),
                 LessonTimes = Course.Config.Times.ToList(),
                 CardReviewTimes = Course.Config.CardReviewTimes.ToList(),
+                TimelineTimes = Course.Config.TimelineTimes.ToList(),
                 AllBooksTimes = Course.Config.AllBooksTimes.ToList(),
                 UpdatedUtc = now
             });
@@ -78,6 +80,7 @@ public partial class MainWindow
             // the book's settings; a file from before they were shared gets this computer's.
             if (shared.LessonTimes.Count > 0 && !shared.LessonTimes.SequenceEqual(Course.Config.Times)) Course.Config.Times = shared.LessonTimes.ToList();
             if (shared.LessonTimes.Count > 0 && !shared.CardReviewTimes.SequenceEqual(Course.Config.CardReviewTimes)) Course.Config.CardReviewTimes = shared.CardReviewTimes.ToList();
+            if (shared.TimelineTimes.Count > 0 && !shared.TimelineTimes.SequenceEqual(Course.Config.TimelineTimes)) Course.Config.TimelineTimes = shared.TimelineTimes.ToList();
             if (shared.LessonTimes.Count > 0 && !shared.AllBooksTimes.SequenceEqual(Course.Config.AllBooksTimes)) Course.Config.AllBooksTimes = shared.AllBooksTimes.ToList();
             if (shared.LessonTimes.Count == 0 && Course.Config.Times.Count > 0 && shared.UpdatedUtc <= _settings.PracticeTimesUpdatedUtc) { SaveSharedPracticeTimes(); return; }
             if (shared.UpdatedUtc <= _settings.PracticeTimesUpdatedUtc) return;
