@@ -153,7 +153,7 @@ public partial class MainWindow : Window
             _settings.OverlayTop = _overlay.Top;
         };
 
-        StateChanged += (_, _) => UpdateOverlayVisibility();
+        StateChanged += (_, _) => { UpdateOverlayVisibility(); UpdateTitleBarForState(); };
         IsVisibleChanged += (_, _) => UpdateOverlayVisibility();
         Closing += MainWindow_Closing;
         Application.Current.SessionEnding += (_, _) =>

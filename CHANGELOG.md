@@ -3,6 +3,12 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.18
+
+- Focus draws its own title bar: the notification bell and the ⋯ menu sit right beside minimize, maximize and close,
+  so they no longer take room from the page. Drag the bar to move the window; double-click it to maximize.
+- The ⋯ menu is a clean panel in Focus's colors, with an icon and shortcut for each page.
+
 ## 1.7.17
 
 - Fixed: practice rounds stopped popping up. A check that lets the day's lesson go first could stay on all day (it
