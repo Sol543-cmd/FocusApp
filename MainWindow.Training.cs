@@ -687,7 +687,27 @@ public partial class MainWindow
     {
         var info = Course.Current;
         string pageBook = info.Id;
-        TrainingHost.Children.Add(TrainingHeader(info.Title, info.BookFileName.Length > 0 ? $"{info.BookFileName} · {Course.Book.Count:N0} paragraphs" : "No Word file yet", back: true, gear: true));
+        // The header: the cover (click to change it) beside the title, with Rename and the cover's links under it.
+        var header = TrainingHeader(info.Title, info.BookFileName.Length > 0 ? $"{info.BookFileName} · {Course.Book.Count:N0} paragraphs" : "No Word file yet", back: true, gear: true);
+        if (header.Children[^1] is StackPanel titleBlock)
+        {
+            var links = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+            links.Children.Add(TLink("Rename…", () => RenameBook(info)));
+            links.Children.Add(TLink(Course.CoverPath(info) != null ? "Change cover photo…" : "Add a cover photo…", () => ChooseCover(info)));
+            if (info.Cover.Length > 0) links.Children.Add(TLink("Remove cover photo", () => { Course.SetCover(info.Id, null); RefreshTraining(); }));
+            titleBlock.Children.Add(links);
+            header.Children.Remove(titleBlock);
+            var withCover = new DockPanel();
+            var cover = CoverImage(info, 96, 140);
+            cover.Margin = new Thickness(0, 0, 22, 0); cover.VerticalAlignment = VerticalAlignment.Top; cover.Cursor = System.Windows.Input.Cursors.Hand;
+            cover.ToolTip = "Change the cover photo";
+            cover.MouseLeftButtonUp += (_, _) => ChooseCover(info);
+            DockPanel.SetDock(cover, Dock.Left);
+            withCover.Children.Add(cover);
+            withCover.Children.Add(titleBlock);
+            header.Children.Add(withCover);
+        }
+        TrainingHost.Children.Add(header);
 
         // ----- A dashboard for the book -----
         var next = Course.NextLesson();

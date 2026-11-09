@@ -515,6 +515,7 @@ public partial class LessonWindow : Window
         side.Children.Add(finished);
         var sideScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var sideBody = new StackPanel { Margin = new Thickness(20, 18, 20, 10) };
+        var textSizeSave = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) }; // Ctrl + / Ctrl − sizes are saved a moment later
         sideBody.Children.Add(Text("Reading settings", 15, bold: true));
         sideScroll.Content = sideBody;
         DockPanel.SetDock(sideScroll, Dock.Top);
@@ -587,6 +588,20 @@ public partial class LessonWindow : Window
         }
         grid.PreviewKeyDown += (_, e) =>
         {
+            // Ctrl + bigger text, Ctrl − smaller, Ctrl 0 back to the usual size (saved, like the size in Aa).
+            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract or Key.D0 or Key.NumPad0)
+            {
+                e.Handled = true;
+                double curSize = Math.Clamp(cfg.ReadingSize, 12, 30);
+                double newSize = e.Key is Key.D0 or Key.NumPad0 ? 17 : Math.Clamp(curSize + (e.Key is Key.OemPlus or Key.Add ? 1 : -1), 12, 30);
+                if (Math.Abs(newSize - curSize) < 0.1) return;
+                cfg.ReadingSize = newSize;
+                Build();
+                sideBody.Children.Clear();
+                sideBody.Children.Add(AppearancePanel(Build, full: true)); // its size slider shows the new size
+                textSizeSave.Stop(); textSizeSave.Start();
+                return;
+            }
             if (e.Key != Key.Escape) return;
             if (contentsButton.IsChecked == true) { contentsButton.IsChecked = false; e.Handled = true; }
             else if (bare) { SetBare(false); e.Handled = true; }
@@ -678,6 +693,7 @@ public partial class LessonWindow : Window
         }
         prev.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToPreviousPage) pv.PreviousPage(); };
         nextBtn.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToNextPage) pv.NextPage(); };
+        textSizeSave.Tick += (_, _) => { textSizeSave.Stop(); Course.SaveConfig(); };
         sideBody.Children.Add(AppearancePanel(Build, full: true));
         track.SizeChanged += (_, _) => { if (viewer is FlowDocumentScrollViewer sv && FindChild<ScrollViewer>(sv) is ScrollViewer inner) ShowProgress(inner.ScrollableHeight <= 0 ? 1 : inner.VerticalOffset / inner.ScrollableHeight); };
         Build();
@@ -858,7 +874,8 @@ public partial class LessonWindow : Window
         }
         FrameworkElement viewer = pageView
             ? KindlePages(new FlowDocumentPageViewer { Document = docu })
-            : new FlowDocumentScrollViewer { Document = docu, VerticalScrollBarVisibility = ScrollBarVisibility.Visible, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, IsToolBarVisible = false, IsSelectionEnabled = true };
+            : new FlowDocumentScrollViewer { Document = docu, VerticalScrollBarVisibility = ScrollBarVisibility.Visible, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, IsToolBarVisible = false, IsSelectionEnabled = true,
+                                             MinZoom = 100, MaxZoom = 100, Zoom = 100 }; // Ctrl + and Ctrl − size the text instead of zooming
         if (viewer is Control c)
         {
             if (themed) c.SetResourceReference(Control.BackgroundProperty, "Panel");
@@ -867,12 +884,21 @@ public partial class LessonWindow : Window
         return viewer;
     }
 
+    private static readonly Lazy<ControlTemplate> PageOnly = new(() => (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+        "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='FlowDocumentPageViewer'>" +
+        "<Border Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'>" +
+        "<AdornerDecorator ClipToBounds='True'><DocumentPageView DocumentViewerBase.IsMasterPage='True' KeyboardNavigation.IsTabStop='False'/></AdornerDecorator>" +
+        "</Border></ControlTemplate>"));
+
     /// <summary>
     /// Page view like a Kindle: click or tap the left side of the page for the previous page, the right side for the next
     /// (the middle is for reading and selecting text). The arrow keys, Page Up/Down and the mouse wheel turn pages too.
     /// </summary>
     private static FlowDocumentPageViewer KindlePages(FlowDocumentPageViewer pages)
     {
+        // Just the page: no zoom slider or page bar at the bottom (Focus has its own page arrows; Ctrl + and Ctrl − size the text).
+        pages.Template = PageOnly.Value;
+        pages.MinZoom = pages.MaxZoom = pages.Zoom = 100;
         const double edge = 0.16; // the outer strip on each side turns the page
         // Only beside the page's middle: not near the top (window buttons above) or the page bar at the bottom.
         bool TurnZone(Point p) => p.Y > Math.Max(60, pages.ActualHeight * 0.12) && p.Y < pages.ActualHeight - 70;

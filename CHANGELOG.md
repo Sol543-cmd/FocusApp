@@ -3,6 +3,16 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.15
+
+- Rename a book: Rename… on its page, or click its cover on the Training page. Its lessons and progress stay with it.
+- Cover photos: add one on a book's page (click the cover, or Add a cover photo…). It shows on the book's page, beside
+  today's lesson and in your books on the Training page, and syncs to your other computers. Books without one get a
+  tile in their color with their first letter.
+- Reading: the zoom slider and page bar at the bottom of page view are gone. Ctrl + makes the text bigger, Ctrl −
+  smaller and Ctrl 0 puts it back to the usual size; the size is saved, like the size under Aa.
+- Includes everything in 1.7.14.
+
 ## 1.7.14
 
 - New Training page: today's lesson with one Start button, this week's numbers (pages read, lessons done, practice

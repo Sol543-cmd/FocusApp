@@ -109,7 +109,18 @@ public partial class MainWindow
                 tp.Children.Add(imp);
             }
         }
-        var todayCard = TBox(tp, accent: dueBook != null);
+        UIElement todayContent = tp;
+        if (dueBook != null)
+        {
+            var withCover = new DockPanel();
+            var cover = CoverImage(dueBook, 76, 110);
+            cover.Margin = new Thickness(0, 0, 22, 0); cover.VerticalAlignment = VerticalAlignment.Top;
+            DockPanel.SetDock(cover, Dock.Left);
+            withCover.Children.Add(cover);
+            withCover.Children.Add(tp);
+            todayContent = withCover;
+        }
+        var todayCard = TBox(todayContent, accent: dueBook != null);
         top.Children.Add(todayCard);
 
         var stats = new StackPanel();
@@ -234,10 +245,17 @@ public partial class MainWindow
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = new StackPanel { Cursor = Cursors.Hand, Background = Brushes.Transparent };
             var nrow = new StackPanel { Orientation = Orientation.Horizontal };
-            nrow.Children.Add(new Ellipse { Width = 9, Height = 9, Fill = BookBrush(c), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
-            nrow.Children.Add(TT(c.Title.Length > 38 ? ShortTitle(c) : c.Title, 14, bold: true));
+            var thumb = CoverImage(c, 30, 44);
+            thumb.Margin = new Thickness(0, 0, 12, 0);
+            thumb.ToolTip = "Cover photo and name";
+            var book = c;
+            thumb.MouseLeftButtonUp += (_, e) => { e.Handled = true; CoverMenu(thumb, book); };
+            nrow.Children.Add(thumb);
+            var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titles.Children.Add(TT(c.Title.Length > 38 ? ShortTitle(c) : c.Title, 14, bold: true));
+            titles.Children.Add(TT($"{Course.RoleOf(c)} · {Course.DaysText(c)}", 12, brush: "Muted", top: 2));
+            nrow.Children.Add(titles);
             name.Children.Add(nrow);
-            name.Children.Add(TT($"{Course.RoleOf(c)} · {Course.DaysText(c)}", 12, brush: "Muted", top: 2));
             string id = c.Id;
             name.MouseLeftButtonUp += (_, _) => { if (id != Course.Current.Id) Course.Open(id); _trainingView = "book"; RefreshTraining(); };
             g.Children.Add(name);
@@ -263,6 +281,68 @@ public partial class MainWindow
 
         // ----- Lessons this week -----
         TrainingHost.Children.Add(BuildWeekLessons());
+    }
+
+    /// <summary>A book's cover photo, or (with none) a tile in the book's color with its first letter.</summary>
+    private static FrameworkElement CoverImage(CourseInfo c, double w, double h)
+    {
+        var frame = new Border { Width = w, Height = h, CornerRadius = new CornerRadius(Math.Max(3, w / 16)), ClipToBounds = true, BorderThickness = new Thickness(1) };
+        frame.SetResourceReference(Border.BorderBrushProperty, "Line");
+        if (Course.CoverPath(c) is string path)
+        {
+            try
+            {
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit(); bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; bmp.DecodePixelWidth = (int)(w * 2); bmp.UriSource = new Uri(path); bmp.EndInit();
+                frame.Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill };
+                return frame;
+            }
+            catch (Exception ex) { Log.Error("Cover " + c.Id, ex); }
+        }
+        frame.Background = BookBrush(c);
+        frame.Child = new TextBlock { Text = c.Title.Trim().Length > 0 ? c.Title.Trim()[..1].ToUpperInvariant() : "?", FontSize = Math.Max(10, w * 0.45), FontWeight = FontWeights.SemiBold,
+                                      Foreground = Brushes.White, Opacity = 0.9, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        return frame;
+    }
+
+    /// <summary>Asks for a new name for a book.</summary>
+    private void RenameBook(CourseInfo c)
+    {
+        var box = new TextBox { Text = c.Title, Margin = new Thickness(20, 8, 20, 12), Padding = new Thickness(6, 4, 6, 4) };
+        var ok = new Button { Content = "Rename", IsDefault = true, Padding = new Thickness(18, 6, 18, 6), Margin = new Thickness(20, 0, 20, 20), HorizontalAlignment = HorizontalAlignment.Right };
+        ok.SetResourceReference(StyleProperty, "PrimaryButton");
+        var sp = new StackPanel();
+        sp.Children.Add(new TextBlock { Text = "The book's title (and author, if you like). Its lessons and progress stay with it.", Margin = new Thickness(20, 20, 20, 0), TextWrapping = TextWrapping.Wrap });
+        sp.Children.Add(box); sp.Children.Add(ok);
+        var dlg = new Window { Title = "Rename book", Width = 460, SizeToContent = SizeToContent.Height, Content = sp, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize };
+        dlg.SetResourceReference(BackgroundProperty, "Panel");
+        dlg.SetResourceReference(ForegroundProperty, "Text");
+        ok.Click += (_, _) => { if (box.Text.Trim().Length > 0) dlg.DialogResult = true; };
+        dlg.Loaded += (_, _) => { box.Focus(); box.SelectAll(); };
+        if (dlg.ShowDialog() != true) return;
+        Course.RenameCourse(c.Id, box.Text);
+        RefreshTraining();
+    }
+
+    /// <summary>Chooses a picture for a book's cover.</summary>
+    private void ChooseCover(CourseInfo c)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Pictures (*.jpg;*.jpeg;*.png;*.gif;*.bmp;*.webp)|*.jpg;*.jpeg;*.png;*.gif;*.bmp;*.webp", Title = $"Cover photo for {ShortTitle(c)}" };
+        if (dlg.ShowDialog(this) != true) return;
+        try { Course.SetCover(c.Id, dlg.FileName); }
+        catch (Exception ex) { Info("That picture couldn't be used:\n\n" + ex.Message, "Training"); }
+        RefreshTraining();
+    }
+
+    /// <summary>The menu on a book's cover: change or remove the cover, and rename the book.</summary>
+    private void CoverMenu(FrameworkElement target, CourseInfo c)
+    {
+        var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        void Add(string text, Action run) { var item = new MenuItem { Header = text }; item.Click += (_, _) => run(); menu.Items.Add(item); }
+        Add(Course.CoverPath(c) != null ? "Change cover photo…" : "Add a cover photo…", () => ChooseCover(c));
+        if (c.Cover.Length > 0) Add("Remove cover photo", () => { Course.SetCover(c.Id, null); RefreshTraining(); });
+        Add("Rename book…", () => RenameBook(c));
+        menu.IsOpen = true;
     }
 
     private void ImportPackFor(string bookId)

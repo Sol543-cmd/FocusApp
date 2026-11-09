@@ -483,6 +483,8 @@ public class CourseInfo
     /// <summary>The last chapter of each part of the book; a unit exam follows each one.</summary>
     public List<int> UnitEnds { get; set; } = new();
     public DateTime AddedUtc { get; set; } = DateTime.UtcNow;
+    /// <summary>The cover photo's file name in training\covers (synced with your other computers), or empty.</summary>
+    public string Cover { get; set; } = "";
 }
 
 /// <summary>Training settings (for every book) and your library, shared between your devices.</summary>
@@ -861,6 +863,43 @@ public static class Course
         Config.Courses.Add(info);
         Open(id);
         return info;
+    }
+
+    /// <summary>Renames a book (its lessons and progress stay with it).</summary>
+    public static void RenameCourse(string id, string title)
+    {
+        if (title.Trim().Length == 0 || Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;
+        c.Title = title.Trim();
+        if (Current.Id == id) Current.Title = c.Title;
+        SaveConfig();
+    }
+
+    /// <summary>The cover photo's full path, or null if the book has none (or the file hasn't synced yet).</summary>
+    public static string? CoverPath(CourseInfo c)
+    {
+        if (c.Cover.Length == 0) return null;
+        string path = Path.Combine(Dir, "covers", c.Cover);
+        return File.Exists(path) ? path : null;
+    }
+
+    /// <summary>Sets a book's cover photo (copied into the training folder), or removes it when <paramref name="source"/> is null.</summary>
+    public static void SetCover(string id, string? source)
+    {
+        if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) return;
+        string dir = Path.Combine(Dir, "covers");
+        string old = c.Cover;
+        if (source != null)
+        {
+            Directory.CreateDirectory(dir);
+            // A new name each time, so every computer (and the picture cache) shows the new cover.
+            string name = $"{Safe(id)}-{DateTime.UtcNow:yyyyMMddHHmmss}{Path.GetExtension(source).ToLowerInvariant()}";
+            File.Copy(source, Path.Combine(dir, name), overwrite: true);
+            c.Cover = name;
+        }
+        else c.Cover = "";
+        if (Current.Id == id) Current.Cover = c.Cover;
+        SaveConfig();
+        try { if (old.Length > 0 && old != c.Cover) File.Delete(Path.Combine(dir, old)); } catch (Exception ex) { Log.Error("Old cover", ex); }
     }
 
     /// <summary>Takes a book out of the library (its files and your progress stay in the training folder).</summary>
