@@ -10,7 +10,7 @@
     <AssemblyName>FocusApp</AssemblyName>
     <RootNamespace>FocusApp</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>1.7.15</Version>
+    <Version>1.7.16</Version>
     <Product>Focus</Product>
   </PropertyGroup>
 

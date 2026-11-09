@@ -3,6 +3,12 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.16
+
+- Today's practice on the Training page: the line now shows just a dot at each round's time (a chain stacks under it),
+  with the times and names in a tidy list beneath, so nothing overlaps. The next round is marked in amber.
+- "Evening card review" is now called Book flashcards everywhere.
+
 ## 1.7.15
 
 - Rename a book: Rename… on its page, or click its cover on the Training page. Its lessons and progress stay with it.
