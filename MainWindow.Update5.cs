@@ -1325,8 +1325,8 @@ public partial class MainWindow
         if (key == Key.F5 && mods == ModifierKeys.None) { RefreshCalendars_Click(this, new RoutedEventArgs()); ReloadSharedData(force: true); return true; }
         if (ctrl && key >= Key.D1 && key <= Key.D8)
         {
-            var navs = new[] { NavDashboard, NavPlan, NavCalendar, NavTasks, NavStats, NavLists, NavPomodoro, NavFocus }
-                .Where(n => n.Visibility == Visibility.Visible).ToList();
+            // Ctrl+1 the Dashboard, then the sidebar's pages in order.
+            var navs = new[] { NavDashboard, NavPlan, NavCalendar, NavTasks, NavPersonal, NavTraining, NavPomodoro }.ToList();
             int i = key - Key.D1;
             if (i < navs.Count) navs[i].IsChecked = true;
             return true;

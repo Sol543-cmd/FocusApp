@@ -940,6 +940,11 @@ public class AppSettings
     public string LastReviewDate { get; set; } = "";
     public bool WeekShowsPlan { get; set; } = true;
     public bool SidebarCollapsed { get; set; }
+    /// <summary>Tasks page: the side bar stays open (pinned), or collapses to a strip that opens when you point at it.</summary>
+    public bool TasksSidePinned { get; set; } = true;
+    /// <summary>Pomodoro: how many focus sessions (1 = a single quick focus), or keep going until you stop.</summary>
+    public int PomoCount { get; set; } = 4;
+    public bool PomoForever { get; set; }
 
     // Greek practice
     public int VocabPerDay { get; set; } = 4;

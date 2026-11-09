@@ -88,23 +88,37 @@ public partial class MainWindow
             SaveSettingsQuietly();
         });
 
+    /// <summary>
+    /// Pomodoro (Quick focus is part of it now): the number of sessions you choose, with a break between each, or on
+    /// repeat until you stop. One session is a single quick focus with no break.
+    /// </summary>
     private void StartPomodoro_Click(object sender, RoutedEventArgs e)
     {
         PomoFocusBox.Commit();
         PomoBreakBox.Commit();
+        PomoCountBox.Commit();
         if (!ConfirmReplaceRunning()) return;
-        _mode = RunMode.Pomodoro;
-        _lastUserActionUtc = DateTime.UtcNow;
-        _runner.Start(new[]
+        bool forever = PomoForeverCheck.IsChecked == true;
+        int count = Math.Clamp(PomoCountBox.Value, 1, 12);
+        if (_settings.PomoCount != count || _settings.PomoForever != forever) { _settings.PomoCount = count; _settings.PomoForever = forever; SaveSettingsQuietly(); }
+        string name = PomoNameBox.Text.Trim();
+        PlanBlock Focus() => new()
         {
-            new PlanBlock
+            Kind = BlockKind.Focus, Name = name.Length > 0 ? name : forever || count > 1 ? "Pomodoro" : "Focus", Minutes = PomoFocusBox.Value,
+            BlockedApps = _settings.PomodoroBlocked.Select(a => a.Copy()).ToList(),
+            BlockListIds = new List<string>(_settings.PomodoroLists)
+        };
+        var blocks = new List<PlanBlock>();
+        if (forever) { blocks.Add(Focus()); blocks.Add(new PlanBlock { Kind = BlockKind.Break, Name = "Break", Minutes = PomoBreakBox.Value }); }
+        else
+            for (int i = 0; i < count; i++)
             {
-                Kind = BlockKind.Focus, Name = "Pomodoro", Minutes = PomoFocusBox.Value,
-                BlockedApps = _settings.PomodoroBlocked.Select(a => a.Copy()).ToList(),
-                BlockListIds = new List<string>(_settings.PomodoroLists)
-            },
-            new PlanBlock { Kind = BlockKind.Break, Name = "Break", Minutes = PomoBreakBox.Value }
-        }, loop: true);
+                blocks.Add(Focus());
+                if (i < count - 1) blocks.Add(new PlanBlock { Kind = BlockKind.Break, Name = "Break", Minutes = PomoBreakBox.Value });
+            }
+        _mode = forever || count > 1 ? RunMode.Pomodoro : RunMode.QuickFocus;
+        _lastUserActionUtc = DateTime.UtcNow;
+        _runner.Start(blocks.ToArray(), loop: forever);
         BeginLock();
     }
 
@@ -232,6 +246,9 @@ public partial class MainWindow
         PomoFocusBox.Value = _settings.FocusMinutes;
         PomoBreakBox.Value = _settings.BreakMinutes;
         QuickMinutesBox.Value = _settings.FocusMinutes;
+        PomoCountBox.Value = Math.Clamp(_settings.PomoCount, 1, 12);
+        PomoForeverCheck.IsChecked = _settings.PomoForever;
+        UpdatePomoSetup();
     }
 
     private void SaveSettings_Click(object sender, RoutedEventArgs e)

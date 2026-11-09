@@ -27,6 +27,9 @@ public partial class MainWindow
         NewProjectBox.TextChanged += (_, _) => NewProjectHint.Visibility = NewProjectBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateGoals();
         if (_settings.SidebarCollapsed) SetSidebarCollapsed(true);
+        ApplyTasksSide();
+        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(NumberBox.ValueProperty, typeof(NumberBox))?.AddValueChanged(PomoCountBox, (_, _) => UpdatePomoSetup());
+        UpdatePomoSetup();
 
         // Left over from a crash: website blocking still on with nothing running. Offer to remove it.
         if (HostsBlocker.IsActive() && !Storage.TryLoad<RunState>("run-state.json", out var rs))
@@ -78,10 +81,11 @@ public partial class MainWindow
         Go("Day plan", NavPlan);
         Go("Calendar", NavCalendar);
         Go("Tasks", NavTasks);
-        if (NavStats.Visibility == Visibility.Visible) Go("Stats", NavStats);
+        Go("Personal", NavPersonal);
+        Go("Training", NavTraining);
+        if (StatsOn) Go("Stats", NavStats);
         Go("Block lists", NavLists);
         Go("Pomodoro", NavPomodoro);
-        Go("Quick focus", NavFocus);
         Go("Settings", NavSettings);
         items.Add(new CommandItem { Title = "Start my day", Kind = "Action", Run = () => StartTodayPlan(automatic: false) });
         items.Add(new CommandItem { Title = "Start Pomodoro", Kind = "Action", Run = () => StartPomodoro_Click(this, new RoutedEventArgs()) });
@@ -631,7 +635,6 @@ public partial class MainWindow
         SidebarColumn.Width = new GridLength(collapsed ? 80 : 252);
         SidebarTitle.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         AddTaskLabel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        NoticeLabel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         GoalWidget.Visibility = collapsed || !_settings.On("goals") ? Visibility.Collapsed : Visibility.Visible;
         CollapseBtn.Content = collapsed ? "\uE76C" : "\uE76B"; // arrow right / arrow left
         CollapseBtn.ToolTip = collapsed ? "Show names (Ctrl+\\)" : "Shrink the sidebar to icons (Ctrl+\\)";

@@ -3,6 +3,21 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.17
+
+- Fixed: practice rounds stopped popping up. A check that lets the day's lesson go first could stay on all day (it
+  looked at the open book, not the book whose lesson was due) and held every round back. Now it waits at most 10
+  minutes after a lesson time.
+- Fixed: moving a Books practice, Book flashcards or Timeline round to a few minutes from now didn't make it pop up
+  (a round was remembered by its place in the list, not its time).
+- New sidebar: Day plan, Calendar, Tasks, Personal, Training and Pomodoro. Click the Focus logo for the Dashboard.
+  Settings, Block lists and Stats are in the ⋯ menu at the top right, beside the notification bell. Ctrl+1 is the
+  Dashboard, Ctrl+2 to Ctrl+7 the sidebar's pages, Ctrl+, Settings.
+- Tasks: collapse the side bar (»), and it becomes a slim strip that opens over the list when you point at it; pin it
+  (📌) to keep it open.
+- Pomodoro and Quick focus are one: choose the number of sessions (1 is a single quick focus), their length and the
+  break, or Keep going until I stop. Optionally name what you're working on.
+
 ## 1.7.16
 
 - Today's practice on the Training page: the line now shows just a dot at each round's time (a chain stacks under it),

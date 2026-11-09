@@ -651,7 +651,7 @@ public partial class MainWindow
         ReviewBtn.Visibility = V("review");
         BinUpcomingView.Visibility = V("upcoming");
         // The Home page: hidden from the sidebar when switched off (the dashboard takes over).
-        NavHome.Visibility = V("home");
+        NavHome.Visibility = Visibility.Collapsed; // Home is in the ⋯ menu (top right) when it's on
         if (!_settings.On("home") && NavHome.IsChecked == true) NavDashboard.IsChecked = true;
         ProjectsCard.Visibility = V("projects");
         TemplatesCard.Visibility = V("templates");
@@ -666,8 +666,8 @@ public partial class MainWindow
         StatsCharts.Visibility = V("stats");
         StatsGame.Visibility = V("statsGame");
         StatsWorkloadSection.Visibility = V("workload");
-        NavStats.Visibility = _settings.On("stats") || _settings.On("workload") || _settings.On("statsGame") ? Visibility.Visible : Visibility.Collapsed;
-        if (NavStats.Visibility != Visibility.Visible && NavStats.IsChecked == true) NavPlan.IsChecked = true;
+        NavStats.Visibility = Visibility.Collapsed; // Stats is in the ⋯ menu (top right)
+        if (!StatsOn && NavStats.IsChecked == true) NavPlan.IsChecked = true;
         if (!_settings.On("projects") && _binFilter.StartsWith("project:")) _binFilter = "all";
         if (!_settings.On("ageFilters") && _binFilter.StartsWith("age")) _binFilter = "all";
         SetUpFocusKey(_settings.On("focusKey"));

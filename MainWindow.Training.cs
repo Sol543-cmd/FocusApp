@@ -72,13 +72,18 @@ public partial class MainWindow
     /// </summary>
     private bool LessonGoesFirst()
     {
-        if (!Course.Config.On || Course.BookFor(DateTime.Today) == null || Course.Packs.Count == 0 || PracticePausedToday()) return false;
+        // Fixed in 1.7.17: this used to check the open book (not the book whose lesson is due) and could stay true all day,
+        // which held back every practice round. Now it holds rounds back for at most 10 minutes from the lesson time
+        // (or from when the lesson was offered), and only while a lesson is really waiting.
+        if (!Course.Config.On || PracticePausedToday() || DateTime.Now < _trainingSnoozeUntil) return false;
+        if (Course.NextDueToday() is not CourseInfo due) return false;
         var times = TrainingTimes();
         int slot = times.FindLastIndex(t => t <= DateTime.Now.TimeOfDay);
         if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromDays(1))) return false;
-        if (Course.AllDoneToday() || (Course.NextLesson() == null && Course.ExamDue() == null)) return false;
-        if (_trainingPromptKey != LessonKey(times[slot])) return true;
-        return DateTime.Now - _lessonOfferedAt < TimeSpan.FromMinutes(10);
+        var o = Course.OutlineOf(due.Id);
+        if (!o.Lessons.Any(l => !o.Done.Contains(l.Index))) return false; // its next chapter isn't imported: nothing to offer
+        var since = _trainingPromptKey == LessonKey(times[slot]) ? _lessonOfferedAt : DateTime.Today + times[slot];
+        return DateTime.Now - since < TimeSpan.FromMinutes(10);
     }
 
     /// <summary>
@@ -218,7 +223,7 @@ public partial class MainWindow
                           .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(2))) return;
-        string key = Course.Today + "#ab" + slot;
+        string key = Course.Today + "#ab" + times[slot].ToString(@"hh\:mm", CultureInfo.InvariantCulture); // by its time: a moved round is a new round
         if (_allBooksPromptKey == key || Course.Events.Any(e => e.Kind == "allBooksDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
         if (PracticeMustWait()) return;
         _allBooksPromptKey = key;
@@ -241,7 +246,7 @@ public partial class MainWindow
                        .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(3))) return;
-        string key = Course.Today + "#cr" + slot;
+        string key = Course.Today + "#cr" + times[slot].ToString(@"hh\:mm", CultureInfo.InvariantCulture); // by its time: a moved round is a new round
         // Each time on the timeline is its own round (done once since that time, on any device).
         if (_cardReviewKey == key || Course.Events.Any(e => e.Kind == "cardReviewDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
         if (PracticeMustWait()) return; // waits until the meeting, break or lunch is over
@@ -360,7 +365,7 @@ public partial class MainWindow
                        .Where(t => t != null).Select(t => t!.Value).OrderBy(t => t).ToList();
         int slot = times.FindLastIndex(t => t <= now);
         if (slot < 0 || !SlotLive(DateTime.Today + times[slot], TimeSpan.FromHours(2))) return;
-        string key = Course.Today + "#tl" + slot;
+        string key = Course.Today + "#tl" + times[slot].ToString(@"hh\:mm", CultureInfo.InvariantCulture); // by its time: a moved round is a new round
         if (_timelinePromptKey == key || Course.Events.Any(e => e.Kind == "timelineDone" && e.Day == Course.Today && e.At.ToLocalTime().TimeOfDay >= times[slot])) return;
         if (PracticeMustWait()) return;
         _timelinePromptKey = key;
