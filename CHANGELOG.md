@@ -11,6 +11,9 @@ Each version gets a "## x.y.z" heading. The GitHub build uses the section that m
   tile in their color with their first letter.
 - Reading: the zoom slider and page bar at the bottom of page view are gone. Ctrl + makes the text bigger, Ctrl −
   smaller and Ctrl 0 puts it back to the usual size; the size is saved, like the size under Aa.
+- Today's practice on the Training page: the line now shows just a dot at each round's time (a chain stacks under it),
+  with the times and names in a tidy list beneath, so nothing overlaps. The next round is marked in amber.
+- "Evening card review" is now called Book flashcards everywhere.
 - Includes everything in 1.7.14.
 
 ## 1.7.14

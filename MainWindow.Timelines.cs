@@ -467,7 +467,7 @@ public partial class MainWindow
                    "double-click a row to add one, right-click a round to remove it. Each round comes up at its time whether or not a focus session is running (Focus just needs to be open, even in the tray); " +
                    "one that lands in a meeting, break or lunch waits until it's over. If you're away, missed rounds don't pile up: only one of each comes up when you're back. " +
                    (PracticeDayEnd is TimeSpan reset ? $"Times before {DateTime.Today.Add(reset):t} reset then (Settings, Greek practice); times after it last until midnight. " : "") +
-                   "The Book lesson row holds your three lesson times (the last is required); Card review is the evening pop-up with the day's hardest memory cards. " +
+                   "The Book lesson row holds your three lesson times (the last is required); Book flashcards is a short round with the day's hardest memory cards first. " +
                    "The All practice row shows every round together, so you can spread them apart or put them back to back.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 24, 6)
         };

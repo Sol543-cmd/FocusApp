@@ -179,9 +179,10 @@ public partial class MainWindow
             if (roundsToday.Count == 0) pr.Children.Add(TT(PracticePausedToday() ? "Practice is paused today." : "No practice rounds left today.", 13, brush: "Muted"));
             else
             {
-                var canvas = new Canvas { Height = 64 + 22 * Math.Max(0, roundsToday.GroupBy(r => r.At).Max(g => g.Count()) - 1), ClipToBounds = false };
+                var canvas = new Canvas { Height = 44 + 16 * Math.Max(0, roundsToday.GroupBy(r => r.At).Max(g => g.Count()) - 1), ClipToBounds = true };
                 canvas.SizeChanged += (_, _) => DrawDayLine(canvas, roundsToday);
                 pr.Children.Add(canvas);
+                pr.Children.Add(PracticeChips(roundsToday));
             }
             var pc = TBox(pr, padding: new Thickness(24, 18, 24, 16)); pc.Margin = new Thickness(0, 16, 0, 0);
             TrainingHost.Children.Add(pc);
@@ -411,8 +412,9 @@ public partial class MainWindow
         return list;
     }
 
-    /// <summary>The day line: 6 AM to 10 PM (wider if a round falls outside), a now line, and each round at its exact time.
-    /// Rounds at the same time form a small chain under it.</summary>
+    /// <summary>The day line: 6 AM to 10 PM (wider if a round falls outside), a now line, and a dot at each round's exact
+    /// time (rounds at the same time stack as a small chain). Names and times are in the list under the line, so nothing
+    /// on the line overlaps; point at a dot to see its round.</summary>
     private void DrawDayLine(Canvas canvas, List<(TimeSpan At, string Name, bool Done, bool Next, bool Required)> rounds)
     {
         canvas.Children.Clear();
@@ -420,68 +422,83 @@ public partial class MainWindow
         if (w < 100) return;
         double startH = Math.Min(6, Math.Floor(rounds.Min(r => r.At.TotalHours)));
         double endH = Math.Max(22, Math.Ceiling(rounds.Max(r => r.At.TotalHours)));
-        double X(TimeSpan t) => 8 + (t.TotalHours - startH) / (endH - startH) * (w - 16);
-        const double lineY = 22;
-        var track = new Rectangle { Width = w - 16, Height = 4, RadiusX = 2, RadiusY = 2 };
+        double X(TimeSpan t) => 10 + (t.TotalHours - startH) / (endH - startH) * (w - 20);
+        const double lineY = 30;
+        for (double h = Math.Ceiling(startH / 3) * 3; h <= endH; h += 3)
+        {
+            var lab = TT(h == 12 ? "Noon" : DateTime.Today.AddHours(h).ToString("h tt"), 11, brush: "Muted");
+            lab.Width = 60; lab.TextAlignment = TextAlignment.Center;
+            Canvas.SetLeft(lab, X(TimeSpan.FromHours(h)) - 30); Canvas.SetTop(lab, 0); canvas.Children.Add(lab);
+            var tick = new Rectangle { Width = 1, Height = 8 };
+            tick.SetResourceReference(Shape.FillProperty, "Line");
+            Canvas.SetLeft(tick, X(TimeSpan.FromHours(h))); Canvas.SetTop(tick, lineY - 2); canvas.Children.Add(tick);
+        }
+        var track = new Rectangle { Width = w - 20, Height = 4, RadiusX = 2, RadiusY = 2 };
         track.SetResourceReference(Shape.FillProperty, "Panel2");
-        Canvas.SetLeft(track, 8); Canvas.SetTop(track, lineY); canvas.Children.Add(track);
+        Canvas.SetLeft(track, 10); Canvas.SetTop(track, lineY); canvas.Children.Add(track);
         var now = DateTime.Now.TimeOfDay;
         if (now.TotalHours > startH && now.TotalHours < endH)
         {
-            var past = new Rectangle { Width = Math.Max(0, X(now) - 8), Height = 4, RadiusX = 2, RadiusY = 2, Opacity = 0.45 };
+            var past = new Rectangle { Width = Math.Max(0, X(now) - 10), Height = 4, RadiusX = 2, RadiusY = 2, Opacity = 0.45 };
             past.SetResourceReference(Shape.FillProperty, "FocusBrush");
-            Canvas.SetLeft(past, 8); Canvas.SetTop(past, lineY); canvas.Children.Add(past);
-            var nowLine = new Rectangle { Width = 2, Height = 32, Fill = (Brush)new BrushConverter().ConvertFromString("#E0705F")! };
-            Canvas.SetLeft(nowLine, X(now) - 1); Canvas.SetTop(nowLine, lineY - 14); canvas.Children.Add(nowLine);
+            Canvas.SetLeft(past, 10); Canvas.SetTop(past, lineY); canvas.Children.Add(past);
         }
-        // Hour labels along the bottom of the line.
-        for (double h = Math.Ceiling(startH / 3) * 3; h <= endH; h += 3)
-        {
-            var lab = TT(h == 12 ? "Noon" : DateTime.Today.AddHours(h).ToString("h tt").Replace(":00", ""), 10.5, brush: "Muted");
-            lab.Width = 50; lab.TextAlignment = TextAlignment.Center; lab.Opacity = 0.8;
-            Canvas.SetLeft(lab, X(TimeSpan.FromHours(h)) - 25); Canvas.SetTop(lab, -2); canvas.Children.Add(lab);
-        }
-        double lastLabelRight = -1e9; int stagger = 0;
         foreach (var group in rounds.GroupBy(r => r.At))
         {
             double x = X(group.Key);
             int k = 0;
             foreach (var r in group)
             {
-                double y = lineY + 2 + k * 22;
+                double cy = lineY + 2 + k * 16;
                 if (k > 0)
                 {
-                    var link = new Rectangle { Width = 2, Height = 12 };
+                    var link = new Rectangle { Width = 2, Height = 4 };
                     link.SetResourceReference(Shape.FillProperty, "Line");
-                    Canvas.SetLeft(link, x - 1); Canvas.SetTop(link, y - 14); canvas.Children.Add(link);
+                    Canvas.SetLeft(link, x - 1); Canvas.SetTop(link, cy - 10); canvas.Children.Add(link);
                 }
-                var dot = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(2) };
-                if (r.Done) { dot.SetResourceReference(Border.BackgroundProperty, "FocusBrush"); dot.SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); dot.Child = new TextBlock { Text = "✓", FontSize = 10, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("OnAccent") }; }
+                var dot = new Ellipse { Width = 12, Height = 12, StrokeThickness = 2 };
+                if (r.Done) { dot.SetResourceReference(Shape.FillProperty, "FocusBrush"); dot.SetResourceReference(Shape.StrokeProperty, "FocusBrush"); }
                 else
                 {
-                    dot.SetResourceReference(Border.BackgroundProperty, "Panel");
-                    if (r.Next || r.Required) dot.BorderBrush = Amber; else dot.SetResourceReference(Border.BorderBrushProperty, "FocusBrush");
+                    dot.SetResourceReference(Shape.FillProperty, "Panel");
+                    if (r.Next || r.Required) dot.Stroke = Amber; else dot.SetResourceReference(Shape.StrokeProperty, "Muted");
                 }
                 dot.ToolTip = $"{DateTime.Today.Add(r.At):t} · {r.Name}" + (r.Done ? " · done" : r.Required ? " · required" : r.Next ? " · next" : "");
-                Canvas.SetLeft(dot, x - 9); Canvas.SetTop(dot, y - 7); canvas.Children.Add(dot);
-                // Its time and name to the right of the dot (first in a chain: under the line if crowded).
-                string text = (k == 0 ? DateTime.Today.Add(r.At).ToString("t") + " " : "") + r.Name + (r.Required ? " · required" : r.Next ? " · next" : "");
-                var lab = TT(text, 11, brush: r.Next || r.Required ? null : r.Done ? "FocusBrush" : "Muted");
-                if (r.Next || r.Required) lab.Foreground = Amber;
-                lab.TextWrapping = TextWrapping.NoWrap;
-                lab.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                double lx = x + 12, ly = y - 6;
-                if (k == 0)
-                {
-                    if (lx < lastLabelRight + 6) { stagger = (stagger + 1) % 2; } else stagger = 0;
-                    if (stagger == 1) { lx = x - lab.DesiredSize.Width / 2; ly = y + 14; }
-                    lastLabelRight = Math.Max(lastLabelRight, lx + lab.DesiredSize.Width);
-                }
-                if (lx + lab.DesiredSize.Width > w) lx = x - 12 - lab.DesiredSize.Width;
-                Canvas.SetLeft(lab, lx); Canvas.SetTop(lab, ly); canvas.Children.Add(lab);
+                Canvas.SetLeft(dot, x - 6); Canvas.SetTop(dot, cy - 6); canvas.Children.Add(dot);
                 k++;
             }
         }
+        if (now.TotalHours > startH && now.TotalHours < endH)
+        {
+            var nowLine = new Rectangle { Width = 2, Height = 26, Fill = (Brush)new BrushConverter().ConvertFromString("#E0705F")!, ToolTip = "Now" };
+            Canvas.SetLeft(nowLine, X(now) - 1); Canvas.SetTop(nowLine, lineY - 11); canvas.Children.Add(nowLine);
+        }
+    }
+
+    /// <summary>Under the day line: each time's rounds in order (a chain as "A → B"), done ones faded, the next one marked.</summary>
+    private WrapPanel PracticeChips(List<(TimeSpan At, string Name, bool Done, bool Next, bool Required)> rounds)
+    {
+        var wrap = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+        foreach (var group in rounds.GroupBy(r => r.At))
+        {
+            bool done = group.All(r => r.Done), next = group.Any(r => r.Next), required = group.Any(r => r.Required && !r.Done);
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            var mark = TT(done ? "✓" : next || required ? "●" : "○", 11.5, bold: true, brush: done ? "FocusBrush" : "Muted");
+            if (!done && (next || required)) mark.Foreground = Amber;
+            mark.Margin = new Thickness(0, 0, 7, 0); mark.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(mark);
+            var time = TT(DateTime.Today.Add(group.Key).ToString("t"), 12.5, bold: true); time.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(time);
+            var names = TT("  " + string.Join(" → ", group.Select(r => r.Name)) + (required ? " · required" : next ? " · next" : ""), 12.5, brush: next || required ? null : "Muted");
+            if (next || required) names.Foreground = Amber;
+            names.TextWrapping = TextWrapping.NoWrap; names.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(names);
+            var chip = new Border { Child = row, CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 4, 12, 5), Margin = new Thickness(0, 0, 8, 8), BorderThickness = new Thickness(1), Opacity = done ? 0.55 : 1 };
+            chip.SetResourceReference(Border.BackgroundProperty, "Panel2");
+            if (next || required) chip.BorderBrush = Amber; else chip.BorderBrush = Brushes.Transparent;
+            wrap.Children.Add(chip);
+        }
+        return wrap;
     }
 
     // ---------- Lessons this week ----------

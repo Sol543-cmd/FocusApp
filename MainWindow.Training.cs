@@ -788,7 +788,7 @@ public partial class MainWindow
         var eve = new StackPanel();
         string crTime = Course.Config.CardReviewTimes.Count > 0 && TimeSpan.TryParse(Course.Config.CardReviewTimes[0], CultureInfo.InvariantCulture, out var crt) ? DateTime.Today.Add(crt).ToString("t") : "";
         eve.Children.Add(TT("This evening", 13, brush: "Muted"));
-        eve.Children.Add(TT(!Course.Config.CardReviewOn ? "Card review is off" : Course.CardReviewDoneToday() ? "Card review done" : $"Card review at {crTime}", 16, bold: true, top: 2));
+        eve.Children.Add(TT(!Course.Config.CardReviewOn ? "Book flashcards are off" : Course.CardReviewDoneToday() ? "Book flashcards done" : $"Book flashcards at {crTime}", 16, bold: true, top: 2));
         int ups = lessonsAll.SelectMany(l => l.Lesson.Cards).Count(q => Course.VoteOf(q.Id) > 0);
         if (ups > 0) eve.Children.Add(TT($"{ups} upvoted card{(ups == 1 ? "" : "s")} come first", 12.5, brush: "BreakBrush", top: 2));
         var eveLink = TLink("Review now", () => StartCardReview(quietIfNone: false));

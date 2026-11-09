@@ -83,7 +83,7 @@ public partial class LessonWindow : Window
 
     /// <summary>The evening card review: today's hardest memory cards for a few minutes.</summary>
     public static LessonWindow CardReview(List<(Course.LessonRef Lesson, PackQuestion Q)> cards, TimeSpan limit, Action<bool> finished) =>
-        new(cards[0].Lesson, false, finished, "Evening card review", null, null, cards, limit);
+        new(cards[0].Lesson, false, finished, "Book flashcards", null, null, cards, limit);
 
     /// <summary>Timeline practice on its own: events from the chapters you've done, placed on the line.</summary>
     public static LessonWindow TimelinePractice(List<(Course.LessonRef Lesson, PackEvent E)> events, Action<bool> finished) =>
@@ -184,7 +184,7 @@ public partial class LessonWindow : Window
             _steps.Add(new("intro", () =>
             {
                 SetStep("Start");
-                _page.Children.Add(Text("Evening card review", 28, bold: true));
+                _page.Children.Add(Text("Book flashcards", 28, bold: true));
                 _page.Children.Add(Text($"The hardest memory cards from today's lesson ({_cardsOnly.Count}), for about {Math.Max(1, (int)Math.Round(_limit.TotalMinutes))} minutes. " +
                                         "Flip each card, then ✕ (again), ✓✓ (know it well) or ✓ (know it).", 16, top: 10));
                 _page.Children.Add(Primary("Begin", () => { _deadline = DateTime.Now + _limit; Next(); }));
@@ -1734,7 +1734,7 @@ public partial class LessonWindow : Window
         if (_cardsOnly != null)
         {
             Course.Add(new TrainingEvent { Kind = "cardReviewDone", Lesson = -1 });
-            _page.Children.Add(Text("Card review finished", 28, bold: true));
+            _page.Children.Add(Text("Flashcards finished", 28, bold: true));
             _page.Children.Add(Text(_asked == 0 ? "Nothing graded this time." : $"{_right} of {_asked} known.", 18, top: 10));
             _page.Children.Add(Text("Cards you marked ✕ come back tomorrow; ✓ after a while; ✓✓ after a long while.", 16, top: 12));
             _page.Children.Add(Primary("Close", Close));
