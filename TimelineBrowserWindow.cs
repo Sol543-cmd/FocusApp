@@ -161,9 +161,9 @@ public class TimelineBrowserWindow : Window
         _detail.Children.Add(head);
         if (x.E.Note.Length > 0) { var n = Text(x.E.Note, 14.5, null); n.Margin = new Thickness(0, 8, 0, 0); _detail.Children.Add(n); }
         var book = Course.Config.Courses.FirstOrDefault(c => c.Id == x.Book);
-        var from = Text($"{book?.Title ?? ""} · Chapter {x.Lesson.Pack.Chapter}, lesson {x.Lesson.NumberInChapter}: {x.Lesson.Lesson.Title}", 12.5, "Muted");
-        from.Margin = new Thickness(0, 14, 0, 0);
-        _detail.Children.Add(from);
+        var source = Text($"{book?.Title ?? ""} · Chapter {x.Lesson.Pack.Chapter}, lesson {x.Lesson.NumberInChapter}: {x.Lesson.Lesson.Title}", 12.5, "Muted");
+        source.Margin = new Thickness(0, 14, 0, 0);
+        _detail.Children.Add(source);
         // The lesson's passage: the paragraph the event is found in, with one before and two after.
         var was = Course.Current.Id;
         try

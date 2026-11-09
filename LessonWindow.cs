@@ -515,6 +515,7 @@ public partial class LessonWindow : Window
         side.Children.Add(finished);
         var sideScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var sideBody = new StackPanel { Margin = new Thickness(20, 18, 20, 10) };
+        Action? rebuild = null; // Build (below), for Ctrl + and Ctrl −
         var textSizeSave = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) }; // Ctrl + / Ctrl − sizes are saved a moment later
         sideBody.Children.Add(Text("Reading settings", 15, bold: true));
         sideScroll.Content = sideBody;
@@ -596,9 +597,9 @@ public partial class LessonWindow : Window
                 double newSize = e.Key is Key.D0 or Key.NumPad0 ? 17 : Math.Clamp(curSize + (e.Key is Key.OemPlus or Key.Add ? 1 : -1), 12, 30);
                 if (Math.Abs(newSize - curSize) < 0.1) return;
                 cfg.ReadingSize = newSize;
-                Build();
+                rebuild?.Invoke();
                 sideBody.Children.Clear();
-                sideBody.Children.Add(AppearancePanel(Build, full: true)); // its size slider shows the new size
+                sideBody.Children.Add(AppearancePanel(() => rebuild?.Invoke(), full: true)); // its size slider shows the new size
                 textSizeSave.Stop(); textSizeSave.Start();
                 return;
             }
@@ -694,6 +695,7 @@ public partial class LessonWindow : Window
         prev.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToPreviousPage) pv.PreviousPage(); };
         nextBtn.Click += (_, _) => { if (viewer is FlowDocumentPageViewer pv && pv.CanGoToNextPage) pv.NextPage(); };
         textSizeSave.Tick += (_, _) => { textSizeSave.Stop(); Course.SaveConfig(); };
+        rebuild = Build;
         sideBody.Children.Add(AppearancePanel(Build, full: true));
         track.SizeChanged += (_, _) => { if (viewer is FlowDocumentScrollViewer sv && FindChild<ScrollViewer>(sv) is ScrollViewer inner) ShowProgress(inner.ScrollableHeight <= 0 ? 1 : inner.VerticalOffset / inner.ScrollableHeight); };
         Build();
