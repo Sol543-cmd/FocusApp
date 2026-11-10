@@ -551,6 +551,9 @@ public class CourseConfig
     public List<string> TimelineTimes { get; set; } = new() { "16:30" };
     public bool TimelineOn { get; set; } = true;
     public int TimelineCount { get; set; } = 8;
+    /// <summary>Round sizes (Training settings, Practice): questions in a Books practice round, cards in a Book flashcards round.</summary>
+    public int BooksPracticeCount { get; set; } = 12;
+    public int FlashcardsCount { get; set; } = 20;
 }
 
 /// <summary>One changed day: its lessons, or back to the weekly plan; the newest change wins between computers.</summary>

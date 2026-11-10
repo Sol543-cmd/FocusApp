@@ -276,26 +276,33 @@ public partial class MainWindow
     private void PracticePage(StackPanel page)
     {
         var cfg = Course.Config;
-        var times = new Button { Content = "Practice timelines", Padding = new Thickness(14, 5, 14, 5) };
-        times.Click += (_, _) => OpenPracticeTimelines();
 
-        page.Children.Add(Section("Books practice"));
-        page.Children.Add(SwitchRow("Pop up at its times", "Multiple-choice rounds. Learn: what's due in the day's book. Review: any book and lesson.", cfg.AllBooksAuto, on => { cfg.AllBooksAuto = on; Course.SaveConfig(); }));
+        page.Children.Add(Section("Round sizes"));
+        page.Children.Add(Note("Shorten or lengthen each round."));
+        page.Children.Add(SetRow("Books practice", "Questions a round", NumberField(cfg.BooksPracticeCount, 3, 40, n => { cfg.BooksPracticeCount = n; Course.SaveConfig(); })));
+        page.Children.Add(SetRow("Book flashcards", "Cards a round", NumberField(cfg.FlashcardsCount, 3, 60, n => { cfg.FlashcardsCount = n; Course.SaveConfig(); })));
+        page.Children.Add(SetRow("Timeline", "Events a round", NumberField(cfg.TimelineCount, 3, 15, n => { cfg.TimelineCount = n; Course.SaveConfig(); })));
+        page.Children.Add(SetRow("Greek words", "Words a round", NumberField(Math.Clamp(_settings.VocabWords, 3, 10), 3, 10, n => { _settings.VocabWords = n; SaveSettingsQuietly(); RefillGreek(); })));
+        page.Children.Add(SetRow("Greek alphabet", "Letters a round", NumberField(Math.Clamp(_settings.AlphaLetters, 3, 10), 3, 10, n => { _settings.AlphaLetters = n; SaveSettingsQuietly(); RefillGreek(); })));
 
-        page.Children.Add(Section("Book flashcards"));
-        page.Children.Add(SwitchRow("Pop up at its times", "The hardest memory cards from that day's lesson first. Once a day across your devices.", cfg.CardReviewOn, on => { cfg.CardReviewOn = on; Course.SaveConfig(); }));
-        page.Children.Add(SetRow("Length, in minutes", null, NumberField(cfg.CardReviewMinutes, 1, 30, n => { cfg.CardReviewMinutes = n; Course.SaveConfig(); })));
+        page.Children.Add(Section("Pop-ups"));
+        page.Children.Add(SwitchRow("Books practice", "Multiple-choice rounds at their times. Learn: what's due in the day's book. Review: any book and lesson.", cfg.AllBooksAuto, on => { cfg.AllBooksAuto = on; Course.SaveConfig(); }));
+        page.Children.Add(SwitchRow("Book flashcards", "The hardest memory cards from that day's lesson first. Once a day across your devices.", cfg.CardReviewOn, on => { cfg.CardReviewOn = on; Course.SaveConfig(); }));
+        page.Children.Add(SwitchRow("Timeline", "Place events on the line. Learn: what's due and your last two lessons' events. Review: an era or a span of years.", cfg.TimelineOn, on => { cfg.TimelineOn = on; Course.SaveConfig(); }));
+        page.Children.Add(SetRow("Book flashcards length, in minutes", "A round also ends at this time.", NumberField(cfg.CardReviewMinutes, 1, 30, n => { cfg.CardReviewMinutes = n; Course.SaveConfig(); })));
 
-        page.Children.Add(Section("Timeline"));
-        page.Children.Add(SwitchRow("Pop up at its times", "Place events on the line. Learn: what's due and your last two lessons' events. Review: an era or a span of years.", cfg.TimelineOn, on => { cfg.TimelineOn = on; Course.SaveConfig(); }));
-        page.Children.Add(SetRow("Events a round", null, NumberField(cfg.TimelineCount, 3, 15, n => { cfg.TimelineCount = n; Course.SaveConfig(); })));
+        page.Children.Add(Section("Times"));
+        page.Children.Add(SetRow("Practice timeline", "Each practice's rounds through the day, on the Training page under Today's practice. Drag a dot to move it, click a row to add one, right-click to remove.",
+                                 TButton("Open", () => { FlushGreekSettings(); _trainingView = "library"; RefreshTraining(); })));
+        page.Children.Add(SwitchRow("Show rounds in the Day plan and Dashboard", "Small markers for the day's practice rounds.", cfg.ShowPracticeInDay, on => { cfg.ShowPracticeInDay = on; Course.SaveConfig(); RefreshDayViews(); }));
         page.Children.Add(SetRow("Browse the timeline", "Every event you've learned on one line you can zoom; click one to read its passage.",
-                              TButton("Open", () => new TimelineBrowserWindow { Owner = this }.Show())));
+                                 TButton("Open", () => new TimelineBrowserWindow { Owner = this }.Show())));
+    }
 
-        page.Children.Add(Section("Where practice shows"));
-        page.Children.Add(SwitchRow("In the Day plan and Dashboard", "Small markers for the day's practice rounds.", cfg.ShowPracticeInDay, on => { cfg.ShowPracticeInDay = on; Course.SaveConfig(); RefreshDayViews(); }));
-        page.Children.Add(SwitchRow("On the Training page", "Today's practice as a line through the day.", cfg.ShowPracticeOnTraining, on => { cfg.ShowPracticeOnTraining = on; Course.SaveConfig(); }));
-        page.Children.Add(SetRow("Times for every practice", "Move, add or remove rounds on one line with your meetings.", times));
+    /// <summary>Greek round sizes changed here: Greek practice's own fields show the new numbers too.</summary>
+    private void RefillGreek()
+    {
+        try { BeginFillingSettings(); FillVocabSettings(); } catch (Exception ex) { Log.Error("Greek refill", ex); }
     }
 
     private void WeekendsPage(StackPanel page)

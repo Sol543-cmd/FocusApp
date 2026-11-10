@@ -30,8 +30,9 @@ public partial class MainWindow
 
             if (!review)
             {
-                round = Course.DueReview(120).Where(x => Fits(x.Q)).Take(cards ? 20 : 12).ToList();
-                if (round.Count == 0 && cards) round = Course.HardestCardsToday().Take(20).ToList();
+                int size = cards ? Math.Clamp(Course.Config.FlashcardsCount, 3, 60) : Math.Clamp(Course.Config.BooksPracticeCount, 3, 40); // Training settings, Practice
+                round = Course.DueReview(200).Where(x => Fits(x.Q)).Take(size).ToList();
+                if (round.Count == 0 && cards) round = Course.HardestCardsToday().Take(size).ToList();
                 if (round.Count == 0)
                 {
                     if (quiet) return;

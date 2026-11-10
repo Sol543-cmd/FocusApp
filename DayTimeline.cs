@@ -244,7 +244,10 @@ public class DayTimeline : UserControl
             var tag = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(7, 0, 7, 1), Opacity = 0.92,
                                    Child = new TextBlock { Text = $"{DateTime.Today.Add(at):h:mm}  {name}", FontSize = 10.5 }, IsHitTestVisible = false };
             tag.SetResourceReference(Border.BackgroundProperty, "Panel");
-            tag.SetResourceReference(Border.BorderBrushProperty, "FocusBrush");
+            // Each practice in its own color (the same as the Training page's lanes).
+            var practiceKey = name switch { "Greek words" => "words", "Greek alphabet" => "alphabet", "Greek concepts" => "concepts", "Book lesson" => "lesson",
+                                    "Books practice" => "allbooks", "Book flashcards" => "cardreview", "Timeline" => "timeline", _ => "" };
+            if (practiceKey.Length > 0) tag.BorderBrush = MainWindow.PracticeBrush(practiceKey); else tag.SetResourceReference(Border.BorderBrushProperty, "FocusBrush");
             ((TextBlock)tag.Child).SetResourceReference(TextBlock.ForegroundProperty, "Text");
             tag.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             Canvas.SetLeft(tag, Math.Max(LabelWidth, width - tag.DesiredSize.Width - 6));

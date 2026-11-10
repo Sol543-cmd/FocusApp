@@ -26,7 +26,7 @@ public partial class MainWindow
         PlanTasksColumn.Width = new GridLength(Math.Clamp(_settings.PlanTasksWidth, 220, 700));
         NewProjectBox.TextChanged += (_, _) => NewProjectHint.Visibility = NewProjectBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateGoals();
-        if (_settings.SidebarCollapsed) SetSidebarCollapsed(true);
+        SetSidebarCollapsed(true); // icons only
         ApplyTasksSide();
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(NumberBox.ValueProperty, typeof(NumberBox))?.AddValueChanged(PomoCountBox, (_, _) => UpdatePomoSetup());
         UpdatePomoSetup();
@@ -366,7 +366,7 @@ public partial class MainWindow
     {
         if (GoalWidget == null) return;
         bool on = _settings.On("goals");
-        GoalWidget.Visibility = on && !_settings.SidebarCollapsed ? Visibility.Visible : Visibility.Collapsed;
+        GoalWidget.Visibility = Visibility.Collapsed; // the sidebar is icons only
         if (!on) return;
         _stats ??= FocusStats.Load();
         int tasks = TasksDoneOn(DateTime.Today);
@@ -616,29 +616,19 @@ public partial class MainWindow
 
     private readonly Dictionary<RadioButton, object?> _navLabels = new();
 
-    private void CollapseSidebar_Click(object sender, RoutedEventArgs e) => SetSidebarCollapsed(!_settings.SidebarCollapsed);
+    private void CollapseSidebar_Click(object sender, RoutedEventArgs e) => SetSidebarCollapsed(true);
 
     /// <summary>Collapsed: just the icons (names show when you hover). Expanded: icons and names.</summary>
+    /// <summary>The sidebar is always icons only now (it doesn't widen): each page's name shows when you point at it.</summary>
     private void SetSidebarCollapsed(bool collapsed)
     {
-        _settings.SidebarCollapsed = collapsed;
-        SaveSettingsQuietly();
-        var navs = new[] { NavHome, NavDashboard, NavPlan, NavCalendar, NavTasks, NavStats, NavLists, NavPomodoro, NavFocus, NavSettings };
+        var navs = new[] { NavHome, NavDashboard, NavPlan, NavCalendar, NavTasks, NavPersonal, NavStats, NavLists, NavTraining, NavPomodoro, NavFocus, NavSettings };
         foreach (var nav in navs)
         {
             if (!_navLabels.ContainsKey(nav)) _navLabels[nav] = nav.Content;
-            nav.Content = collapsed ? null : _navLabels[nav];
-            nav.ToolTip = collapsed ? _navLabels[nav] : null;
+            nav.Content = null;
+            nav.ToolTip = _navLabels[nav];
         }
-        SidebarBorder.Width = collapsed ? 60 : 232;
-        SidebarBorder.Padding = collapsed ? new Thickness(8, 18, 8, 14) : new Thickness(12, 18, 12, 14);
-        SidebarColumn.Width = new GridLength(collapsed ? 80 : 252);
-        SidebarTitle.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        AddTaskLabel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        GoalWidget.Visibility = collapsed || !_settings.On("goals") ? Visibility.Collapsed : Visibility.Visible;
-        CollapseBtn.Content = collapsed ? "\uE76C" : "\uE76B"; // arrow right / arrow left
-        CollapseBtn.ToolTip = collapsed ? "Show names (Ctrl+\\)" : "Shrink the sidebar to icons (Ctrl+\\)";
-        // Collapsed, the logo makes room for the button underneath it.
-        DockPanel.SetDock(CollapseBtn, collapsed ? Dock.Bottom : Dock.Right);
+        GoalWidget.Visibility = Visibility.Collapsed;
     }
 }

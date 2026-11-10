@@ -202,7 +202,33 @@ public partial class MainWindow
 
     private void PracticeTimelines_Click(object sender, RoutedEventArgs e) => OpenPracticeTimelines();
 
+    /// <summary>The practice timeline now lives on the Training page (Today's practice): every link to it opens that page.</summary>
     private void OpenPracticeTimelines()
+    {
+        _timelineWindow?.Close();
+        if (NavTraining.IsChecked != true) NavTraining.IsChecked = true;
+        _trainingView = "library";
+        RefreshTraining();
+    }
+
+    /// <summary>Saves every practice's times as the daily default (Greek rounds done today stay done when matched by time).</summary>
+    private void SavePracticeWork(Dictionary<string, List<TimeSpan>> work)
+    {
+        foreach (var p in Practices) if (work.TryGetValue(p, out var t)) ReplaceTodaysTimes(p, t.Distinct().ToList(), asDefault: true);
+        SaveSettingsQuietly();
+        static List<string> Hm(List<TimeSpan> t) => t.Distinct().OrderBy(x => x).Select(x => x.ToString(@"hh\:mm", CultureInfo.InvariantCulture)).ToList();
+        if (work.TryGetValue("lesson", out var l)) Course.Config.Times = Hm(l);
+        if (work.TryGetValue("cardreview", out var c)) Course.Config.CardReviewTimes = Hm(c);
+        if (work.TryGetValue("timeline", out var tl)) Course.Config.TimelineTimes = Hm(tl);
+        if (work.TryGetValue("allbooks", out var ab)) Course.Config.AllBooksTimes = Hm(ab);
+        Course.SaveConfig();
+        SaveSharedPracticeTimes();
+        try { FillVocabSettings(); } catch (Exception ex) { Log.Error("Timelines.Fill", ex); }
+        RefreshDayViews();
+    }
+
+    /// <summary>The old practice timelines window (replaced by the Training page's lanes; kept for reference).</summary>
+    private void OpenPracticeTimelinesWindow()
     {
         if (_timelineWindow != null) { _timelineWindow.Activate(); return; }
 

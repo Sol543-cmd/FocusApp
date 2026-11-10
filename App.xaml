@@ -406,6 +406,33 @@
         <Thickness x:Key="TaskRowLineThickness">0</Thickness>
 
         <!-- Sidebar navigation: an icon (in Tag) and a label -->
+        <!-- The sidebar's pages: icon only, centered under the Focus logo; the name shows on hover -->
+        <Style x:Key="SideIconButton" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Width="44" Height="40">
+                            <TextBlock x:Name="Icon" Text="{TemplateBinding Tag}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Panel3}"/>
+                                <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Text}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource NavSelected}"/>
+                                <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource FocusBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SideNavButton" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource Text}"/>
             <Setter Property="FontSize" Value="14"/>

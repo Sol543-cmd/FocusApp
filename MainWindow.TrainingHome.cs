@@ -166,27 +166,8 @@ public partial class MainWindow
             TrainingHost.Children.Add(cc);
         }
 
-        // ----- Today's practice: a day line to scale -----
-        if (Course.Config.ShowPracticeOnTraining)
-        {
-            var pr = new StackPanel();
-            var head = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
-            var edit = TLink("Edit timeline", OpenPracticeTimelines); edit.Margin = new Thickness(0); DockPanel.SetDock(edit, Dock.Right);
-            head.Children.Add(edit);
-            head.Children.Add(TT("Today's practice", 16, bold: true));
-            pr.Children.Add(head);
-            var roundsToday = PracticeRoundStates();
-            if (roundsToday.Count == 0) pr.Children.Add(TT(PracticePausedToday() ? "Practice is paused today." : "No practice rounds left today.", 13, brush: "Muted"));
-            else
-            {
-                var canvas = new Canvas { Height = 44 + 16 * Math.Max(0, roundsToday.GroupBy(r => r.At).Max(g => g.Count()) - 1), ClipToBounds = true };
-                canvas.SizeChanged += (_, _) => DrawDayLine(canvas, roundsToday);
-                pr.Children.Add(canvas);
-                pr.Children.Add(PracticeChips(roundsToday));
-            }
-            var pc = TBox(pr, padding: new Thickness(24, 18, 24, 16)); pc.Margin = new Thickness(0, 16, 0, 0);
-            TrainingHost.Children.Add(pc);
-        }
+        // ----- Today's practice: one lane per practice, editable -----
+        TrainingHost.Children.Add(BuildPracticeLanes());
 
         // ----- Practices -----
         var practices = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3, Margin = new Thickness(0, 8, -14, 0) };

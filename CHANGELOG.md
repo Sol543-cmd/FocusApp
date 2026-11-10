@@ -3,6 +3,18 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.19
+
+- Today's practice on the Training page is now the practice timeline: one row for each practice, each round a dot in
+  the practice's color with its exact time beside it (filled when done, a white ring on the next round). Drag a dot to
+  move it, click a row to add a round, right-click a dot to remove it; changes save as your daily times. Every
+  "Practice timelines" link now opens it. The Day plan and Dashboard markers use the same colors.
+- Round sizes in Training settings, Practice: questions in a Books practice round, cards in a Book flashcards round,
+  events in a Timeline round, Greek words and Greek alphabet letters.
+- Tasks: the side bar's dock button is now a pop-out style icon.
+- The sidebar is icons only: larger icons lined up under the Focus logo and the add-task button. It no longer widens,
+  and the daily goal panel that showed when it was wide is gone. Point at an icon to see its name.
+
 ## 1.7.18
 
 - Focus draws its own title bar: the notification bell and the ⋯ menu sit right beside minimize, maximize and close,

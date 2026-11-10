@@ -20,7 +20,7 @@
 
     <Grid x:Name="RootGrid">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="SidebarColumn" Width="252"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="84"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="24"/>
         </Grid.ColumnDefinitions>
@@ -498,40 +498,38 @@
         </Popup>
 
         <!-- ===== Sidebar ===== -->
-        <Border x:Name="SidebarBorder" Grid.RowSpan="4" WindowChrome.IsHitTestVisibleInChrome="True" Width="232" HorizontalAlignment="Left" Background="{DynamicResource Sidebar}" Padding="12,18,12,14">
+        <Border x:Name="SidebarBorder" Grid.RowSpan="4" WindowChrome.IsHitTestVisibleInChrome="True" Width="64" HorizontalAlignment="Left" Background="{DynamicResource Sidebar}" Padding="8,14,8,14">
             <DockPanel>
-                <DockPanel DockPanel.Dock="Top" Margin="8,0,0,20">
-                    <Button x:Name="CollapseBtn" DockPanel.Dock="Right" Content="" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Style="{StaticResource IconButton}" FontSize="12" Click="CollapseSidebar_Click" ToolTip="Shrink the sidebar to icons (Ctrl+\)" VerticalAlignment="Center"/>
-                    <StackPanel x:Name="LogoButton" Orientation="Horizontal" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="Logo_Click">
-                        <Image Source="logo.png" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock x:Name="SidebarTitle" Text="Focus" FontSize="20" FontWeight="SemiBold" FontFamily="{StaticResource HeadingFont}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14" HorizontalAlignment="Center">
+                    <Button x:Name="CollapseBtn" Visibility="Collapsed" DockPanel.Dock="Right" Content="" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Style="{StaticResource IconButton}" FontSize="12" Click="CollapseSidebar_Click" ToolTip="Shrink the sidebar to icons (Ctrl+\)" VerticalAlignment="Center"/>
+                    <StackPanel x:Name="LogoButton" Orientation="Horizontal" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="Logo_Click" ToolTip="Dashboard">
+                        <Image Source="logo.png" Width="30" Height="30" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock x:Name="SidebarTitle" Visibility="Collapsed" Text="Focus" FontSize="20" FontWeight="SemiBold" FontFamily="{StaticResource HeadingFont}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                 </DockPanel>
-                <Button DockPanel.Dock="Top" Click="SideAddTask_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Padding="10,7" Margin="0,0,0,10" ToolTip="Add a task to your list">
-                    <StackPanel Orientation="Horizontal">
-                        <Grid Width="20" Height="20">
-                            <Ellipse Fill="{DynamicResource FocusBrush}"/>
-                            <TextBlock Text="+" Foreground="{DynamicResource OnAccent}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
-                        </Grid>
-                        <TextBlock x:Name="AddTaskLabel" Text="Add task" Foreground="{DynamicResource FocusBrush}" FontWeight="SemiBold" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Top" Click="SideAddTask_Click" HorizontalAlignment="Center" Width="44" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Margin="0,0,0,10" ToolTip="Add a task (Ctrl+N)">
+                    <Grid Width="28" Height="28">
+                        <Ellipse Fill="{DynamicResource FocusBrush}"/>
+                        <TextBlock Text="+" Foreground="{DynamicResource OnAccent}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-3,0,0"/>
+                        <TextBlock x:Name="AddTaskLabel" Visibility="Collapsed"/>
+                    </Grid>
                 </Button>
                 <StackPanel DockPanel.Dock="Top">
-                    <RadioButton x:Name="NavHome" Visibility="Collapsed" Content="Home" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavDashboard" Visibility="Collapsed" Content="Dashboard" Tag="" GroupName="nav" IsChecked="True" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavPlan" Content="Day plan" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavCalendar" Content="Calendar" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavTasks" Content="Tasks" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavPersonal" Content="Personal" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavStats" Visibility="Collapsed" Content="Stats" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavLists" Visibility="Collapsed" Content="Block lists" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavTraining" Content="Training" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked" ToolTip="Your books: daily lessons, chapter packs, notes"/>
-                    <RadioButton x:Name="NavPomodoro" Content="Pomodoro" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavFocus" Visibility="Collapsed" Content="Quick focus" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavSettings" Visibility="Collapsed" Content="Settings" Tag="" GroupName="nav" Style="{StaticResource SideNavButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavHome" Visibility="Collapsed" Content="Home" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavDashboard" Visibility="Collapsed" Content="Dashboard" Tag="" GroupName="nav" IsChecked="True" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavPlan" Content="Day plan" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavCalendar" Content="Calendar" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavTasks" Content="Tasks" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavPersonal" Content="Personal" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavStats" Visibility="Collapsed" Content="Stats" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavLists" Visibility="Collapsed" Content="Block lists" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavTraining" Content="Training" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked" ToolTip="Your books: daily lessons, chapter packs, notes"/>
+                    <RadioButton x:Name="NavPomodoro" Content="Pomodoro" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavFocus" Visibility="Collapsed" Content="Quick focus" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavSettings" Visibility="Collapsed" Content="Settings" Tag="" GroupName="nav" Style="{StaticResource SideIconButton}" Checked="Nav_Checked"/>
                 </StackPanel>
                 <!-- Daily goal and streak -->
-                <Border x:Name="GoalWidget" DockPanel.Dock="Bottom" Padding="10,10" CornerRadius="8" Background="{DynamicResource Panel}" ToolTip="Your daily goal: hit either the tasks or the focus hours. Weekends never break a streak.">
+                <Border x:Name="GoalWidget" Visibility="Collapsed" DockPanel.Dock="Bottom" Padding="10,10" CornerRadius="8" Background="{DynamicResource Panel}" ToolTip="Your daily goal: hit either the tasks or the focus hours. Weekends never break a streak.">
                     <StackPanel>
                         <TextBlock x:Name="GoalTitle" Text="Today's goal" FontSize="12" FontWeight="SemiBold"/>
                         <TextBlock x:Name="GoalTasksText" Style="{StaticResource Caption}" FontSize="12" Margin="0,4,0,0"/>
@@ -1304,7 +1302,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,-6,-8,2">
-                        <Button x:Name="TasksSidePinBtn" Style="{StaticResource IconButton}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Padding="6,3" Click="TasksSidePin_Click" Content="&#xE718;" ToolTip="Pin the side bar open"/>
+                        <Button x:Name="TasksSidePinBtn" Style="{StaticResource IconButton}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Padding="6,3" Click="TasksSidePin_Click" Content="&#xE8A7;" ToolTip="Dock the side bar (keep it open)"/>
                         <Button x:Name="TasksSideCollapseBtn" Style="{StaticResource IconButton}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Padding="6,3" Click="TasksSideCollapse_Click" Content="&#xE76C;" ToolTip="Collapse the side bar"/>
                     </StackPanel>
                     <!-- Today's numbers, on one line -->
