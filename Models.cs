@@ -52,6 +52,8 @@ public abstract class TaskBase : INotifyPropertyChanged
     [JsonIgnore] public int AgeDays => CreatedAt is DateTime c ? (int)(DateTime.Today - c.Date).TotalDays : 0;
     [JsonIgnore] public FocusApp.Project? ProjectInfo => Projects.Find(Project);
     [JsonIgnore] public string ProjectName => ProjectInfo?.Name ?? "";
+    /// <summary>Today, By project: the heading the task is listed under.</summary>
+    [JsonIgnore] public string ProjectHeading => ProjectInfo?.Name ?? "No project";
     [JsonIgnore] public string ProjectColor => ProjectInfo?.Color ?? "Transparent";
     [JsonIgnore] public bool HasProject => ProjectInfo != null;
     [JsonIgnore] public string SectionName => ProjectInfo?.Sections.FirstOrDefault(x => x.Id == Section)?.Name ?? "";
@@ -940,6 +942,17 @@ public class AppSettings
     public string LastReviewDate { get; set; } = "";
     public bool WeekShowsPlan { get; set; } = true;
     public bool SidebarCollapsed { get; set; }
+    /// <summary>How Today is listed (Tasks, the Dashboard, the floating timer and the task window): "default", "ordered" or "project".</summary>
+    public string TodayView { get; set; } = "default";
+    /// <summary>Ordered: your own order for today's tasks (task ids).</summary>
+    public List<string> TodayOrder { get; set; } = new();
+    /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
+    public string TaskWindowView { get; set; } = "today";
+    public double TaskWindowLeft { get; set; } = double.NaN;
+    public double TaskWindowTop { get; set; } = double.NaN;
+    public double TaskWindowWidth { get; set; } = 340;
+    public double TaskWindowHeight { get; set; } = 620;
+    public bool TaskWindowOnTop { get; set; } = true;
     /// <summary>Tasks page: the side bar stays open (pinned), or collapses to a strip that opens when you point at it.</summary>
     public bool TasksSidePinned { get; set; } = true;
     /// <summary>Pomodoro: how many focus sessions (1 = a single quick focus), or keep going until you stop.</summary>

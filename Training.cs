@@ -705,7 +705,8 @@ public static class Course
     /// <summary>A book's lessons, which are done and the chapter to import next (each book opened quietly; kept a minute).</summary>
     public static Outline OutlineOf(string id)
     {
-        if (_outlines.TryGetValue(id, out var c) && DateTime.Now - c.At < TimeSpan.FromMinutes(1) && c.Events == Events.Count) return c.O;
+        // Kept until a lesson is finished somewhere (or 5 minutes pass): answers alone don't change it, and reopening books is slow.
+        if (_outlines.TryGetValue(id, out var c) && DateTime.Now - c.At < TimeSpan.FromMinutes(5) && c.Events == LessonsFinished()) return c.O;
         var was = Current;
         Outline o = new(new(), new(), 1, null);
         try
@@ -719,7 +720,7 @@ public static class Course
         }
         catch (Exception ex) { Log.Error("Outline " + id, ex); }
         finally { if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); } }
-        _outlines[id] = (DateTime.Now, Events.Count, o);
+        _outlines[id] = (DateTime.Now, LessonsFinished(), o);
         return o;
     }
 
@@ -728,7 +729,7 @@ public static class Course
     /// <summary>About how many book pages this week's finished lessons covered (about 2,400 letters a page).</summary>
     public static int PagesReadThisWeek()
     {
-        if (_pages is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(1) && c.Events == Events.Count) return c.Pages;
+        if (_pages is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(5) && c.Events == LessonsFinished()) return c.Pages;
         var monday = DateTime.Today.AddDays(-(((int)DateTime.Today.DayOfWeek + 6) % 7));
         string from = Ymd(monday);
         long letters = 0;
@@ -751,7 +752,7 @@ public static class Course
         catch (Exception ex) { Log.Error("Pages read", ex); }
         finally { if (Current.Id != was.Id) { Current = was; LoadCurrent(raise: false); } }
         int pages = (int)Math.Round(letters / 2400.0);
-        _pages = (DateTime.Now, Events.Count, pages);
+        _pages = (DateTime.Now, LessonsFinished(), pages);
         return pages;
     }
 
@@ -1064,8 +1065,11 @@ public static class Course
         return problems;
     }
 
+    private static int _packVersion;
+
     public static void AddPack(string sourcePath, ChapterPack pack)
     {
+        _packVersion++;
         Directory.CreateDirectory(CourseDir);
         File.Copy(sourcePath, Path.Combine(CourseDir, $"ch{pack.Chapter:00}.focuspack"), overwrite: true);
         Packs[pack.Chapter] = pack;
@@ -1191,15 +1195,22 @@ public static class Course
     }
 
     /// <summary>Every event in the lessons you've done, in the books given (each book opened quietly, then back).</summary>
+    private static readonly Dictionary<string, (int Finished, int Packs, List<(LessonRef, PackEvent, string, int)> Events)> _learned = new();
+
+    /// <summary>How many lessons have been finished (any book, any device): caches that open books are kept until it changes.</summary>
+    public static int LessonsFinished() => Events.Count(e => e.Kind == "lessonDone");
+
     public static List<(LessonRef Lesson, PackEvent E, string Book, int Order)> LearnedEvents(IEnumerable<string> bookIds)
     {
         var list = new List<(LessonRef, PackEvent, string, int)>();
-        if (EventBook.Count > 5000) EventBook.Clear();
-        _tlDue = null;
         var was = Current;
+        int finished = LessonsFinished();
         foreach (var id in bookIds.Distinct().ToList())
         {
             if (Config.Courses.FirstOrDefault(c => c.Id == id) is not CourseInfo c) continue;
+            // Each book's events are kept until a lesson is finished or a pack imported (opening a book is slow).
+            if (_learned.TryGetValue(id, out var hit) && hit.Finished == finished && hit.Packs == _packVersion) { list.AddRange(hit.Events); continue; }
+            int before = list.Count;
             try
             {
                 if (c.Id != Current.Id) { Current = c; LoadCurrent(raise: false); }
@@ -1210,6 +1221,7 @@ public static class Course
                     order++;
                     foreach (var ev in l.Lesson.Timeline) { EventBook[ev] = c.Id; list.Add((l, ev, c.Id, order)); }
                 }
+                _learned[id] = (finished, _packVersion, list.Skip(before).ToList());
             }
             catch (Exception ex) { Log.Error("Timeline events " + id, ex); }
         }
@@ -1248,7 +1260,7 @@ public static class Course
     /// <summary>Timeline events due in every book (counted at most once a minute).</summary>
     public static int TimelineDueCount()
     {
-        if (_tlDue is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(1)) return c.Count;
+        if (_tlDue is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(5)) return c.Count;
         int n = LearnedEvents(Config.Courses.Select(x => x.Id)).Count(x => TimelineStateOf(x.Book, x.E) is { Seen: > 0, Graduated: false } st && st.Due <= DateTime.Now);
         _tlDue = (DateTime.Now, n);
         return n;

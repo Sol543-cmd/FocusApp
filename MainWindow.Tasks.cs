@@ -38,6 +38,7 @@ public partial class MainWindow
         _settings.LastBinView = BinUndatedView.IsChecked == true ? "undated" : BinTodayView.IsChecked == true ? "today" : BinTomorrowView.IsChecked == true ? "tomorrow" : upcoming ? "upcoming" : board ? "board" : done ? "done" : "list";
         SaveSettingsQuietly();
         ClearSelection();
+        ApplyBinOrder(); // Today has its own views
         BinTodoHeader.Visibility = todo ? Visibility.Visible : Visibility.Collapsed;
         BinTodoScroll.Visibility = todo ? Visibility.Visible : Visibility.Collapsed;
         UpcomingScroll.Visibility = upcoming ? Visibility.Visible : Visibility.Collapsed;
@@ -112,11 +113,27 @@ public partial class MainWindow
             .Where(t => !undatedOnly || t.IsUndated)
             .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue).ThenBy(t => TaskBin.All.IndexOf(t))
             .ToList();
-        SetItemsIfChanged(DashListTasks, tasks);
+        // Today follows the view chosen in Tasks (Default, Ordered or By project).
+        if (todayOnly) tasks = TodayInView(tasks);
+        if (todayOnly && TodayMode == "project")
+        {
+            if (DashListTasks.GroupStyle.Count == 0) DashListTasks.GroupStyle.Add(BinGroupStyle());
+            string key = "p|" + string.Join(",", tasks.Select(t => t.Id + t.Project));
+            if (!(DashListTasks.ItemsSource is ListCollectionView && _dashGroupKey == key))
+            {
+                _dashGroupKey = key;
+                var grouped = new ListCollectionView(tasks);
+                grouped.GroupDescriptions.Add(new PropertyGroupDescription(nameof(BinTask.ProjectHeading)));
+                DashListTasks.ItemsSource = grouped;
+            }
+        }
+        else SetItemsIfChanged(DashListTasks, tasks);
         DashNoTasks.Text = todayOnly ? "Nothing set for today. Switch to All, or add one below."
             : undatedOnly ? "Every task has a date. Nice." : "No tasks. Add one below.";
         DashNoTasks.Visibility = tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private string _dashGroupKey = "";
 
     private void DashTasksView_Checked(object sender, RoutedEventArgs e) => RefreshDashTasks();
 
@@ -259,8 +276,9 @@ public partial class MainWindow
 
     private void ApplyBinOrder()
     {
-        if (_binViewMain != null) _binViewMain.CustomSort = SmartOrderCheck.IsChecked == true ? new SmartTaskOrder(TaskStores.Main.Bin) : null;
-        if (_binViewPersonal != null) _binViewPersonal.CustomSort = SmartOrderCheck.IsChecked == true ? new SmartTaskOrder(TaskStores.Personal.Bin) : null;
+        // Today follows its view (Default, Ordered or By project); the other tabs keep the usual order.
+        ApplyTodayViewOrder(_binViewMain, TaskStores.Main.Bin, SmartOrderCheck.IsChecked == true ? new SmartTaskOrder(TaskStores.Main.Bin) : null);
+        ApplyTodayViewOrder(_binViewPersonal, TaskStores.Personal.Bin, SmartOrderCheck.IsChecked == true ? new SmartTaskOrder(TaskStores.Personal.Bin) : null);
     }
 
     /// <summary>Overdue, due today, picked for today, high priority, by due date, then the bin's own order.</summary>

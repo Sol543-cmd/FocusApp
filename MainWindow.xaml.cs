@@ -996,6 +996,7 @@ public partial class MainWindow : Window
         // The floating timer counts down in steps of ten seconds.
         string tens = _settings.OverlaySeconds ? Format.ClockTens(remaining) : Format.MinutesLeft(remaining);
         _overlay.Update(_runner.IsPaused ? $"{tens} paused" : tens, cur.Name, accent, fractionLeft, cur.IsFocus ? _runner.FocusNumber : 0);
+        _taskWindow?.UpdateTimer(_runner.IsPaused ? $"{tens} paused" : tens, cur.Name, accent, fractionLeft, cur.IsFocus ? _runner.FocusNumber : 0);
         TrackFocusTime(cur);
         RefreshDashboard();
         UpdateOverlayVisibility();
@@ -1020,7 +1021,7 @@ public partial class MainWindow : Window
     /// <summary>The floating timer when nothing is running: a calm "Ready" (double-click opens Focus).</summary>
     private void ShowOverlayIdle()
     {
-        try { _overlay.Update("Ready", "Nothing running", (Brush)FindResource("Muted"), 0); }
+        try { _overlay.Update("Ready", "Nothing running", (Brush)FindResource("Muted"), 0); _taskWindow?.UpdateTimer("Ready", "Nothing running", (Brush)FindResource("Muted"), 0, 0); }
         catch (Exception ex) { Log.Error("ShowOverlayIdle", ex); }
     }
 

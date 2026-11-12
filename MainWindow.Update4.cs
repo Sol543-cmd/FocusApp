@@ -391,6 +391,7 @@ public partial class MainWindow
         using var onWork = TaskStores.Use(TaskStores.Main); // background work always uses your work tasks (not Personal)
         try { BuildOverlayTasks(); }
         catch (Exception ex) { Log.Error("UpdateOverlayTasks", ex); }
+        try { _taskWindow?.Refresh(); } catch (Exception ex) { Log.Error("Task window refresh", ex); }
     }
 
     private void BuildOverlayTasks()
@@ -441,9 +442,9 @@ public partial class MainWindow
             catch (Exception ex) { Log.Error("Overlay today's plan", ex); } // no plan today: still show picked, due and overdue
             var today = TaskBin.All
                 .Where(t => !t.IsSnoozed && (t.IsPlannedToday || t.IsDueToday || t.IsOverdue || placed.Contains(t.Id)))
-                .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue)
-                .Select(t => new OverlayTask { Source = t, Kind = "main", Id = t.Id, Key = t.Id, Text = t.Text, IsHigh = t.IsHigh }).ToList();
-        return today;
+                .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue).ToList();
+        // In today's view, as chosen in Tasks: your own order, or under project headings.
+        return AsRows(TodayInView(today), groups: TodayMode == "project");
     }
 
     /// <summary>A task ticked on the floating timer: a session task is checked off; one of today's is finished.</summary>

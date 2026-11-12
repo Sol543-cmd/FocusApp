@@ -292,6 +292,7 @@ public partial class MainWindow
         if ((sender as FrameworkElement)?.DataContext is not BinTask target) return;
         var moving = DraggedTasks(e);
         if (moving.Count == 0 || moving.Contains(target)) return;
+        if (TodayOrderDrop(moving, target)) return; // Today, Ordered: your own order
         if (SmartOrderCheck.IsChecked == true)
         {
             _toast.ShowMessage("Arranged by importance", "Turn off \"Most important first\" in the Show list to put tasks in your own order.");

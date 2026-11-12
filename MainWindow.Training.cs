@@ -26,7 +26,13 @@ public partial class MainWindow
     private void SetUpTraining()
     {
         Course.Load();
-        Course.Changed += () => Dispatcher.BeginInvoke(new Action(() => _refreshCoursePage?.Invoke()));
+        // Every answer changes the course; redrawing the Training page then (it opens each book) froze practice windows.
+        // While a lesson or practice window is open, the page waits and redraws once when it closes.
+        Course.Changed += () => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_lessonWindow != null) { _trainingPageStale = true; return; }
+            _refreshCoursePage?.Invoke();
+        }));
         _tray.ContextMenuStrip?.Items.Insert(1, new System.Windows.Forms.ToolStripMenuItem("Training…", null, (_, _) => { ShowFromTray(); OpenCoursePage(); }));
         _trainingTimer.Tick += (_, _) => CheckTraining();
         _trainingTimer.Start();
@@ -70,6 +76,8 @@ public partial class MainWindow
     /// The lesson goes first in a chain: true while today's lesson is due and hasn't been offered yet, or was offered in
     /// the last 10 minutes (time to start it). After that, waiting rounds go ahead.
     /// </summary>
+    private bool _trainingPageStale;
+
     private bool LessonGoesFirst()
     {
         // Fixed in 1.7.17: this used to check the open book (not the book whose lesson is due) and could stay true all day,
@@ -192,6 +200,7 @@ public partial class MainWindow
         Course.Pinned = Course.Current.Id; // the open book stays put while the window is open (bug: an extra lesson switched books)
         window.Closed += (_, _) =>
         {
+            if (_trainingPageStale) { _trainingPageStale = false; Dispatcher.BeginInvoke(new Action(() => _refreshCoursePage?.Invoke())); }
             Course.Pinned = null;
             _lessonWindow = null;
             if (window.LeftPartWay && !window.ClosedByEndOfDay)

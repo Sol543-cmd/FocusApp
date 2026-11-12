@@ -189,7 +189,7 @@ public partial class LessonWindow : Window
                 SetStep("Start");
                 _page.Children.Add(Text("Book flashcards", 28, bold: true));
                 _page.Children.Add(Text($"The hardest memory cards from today's lesson ({_cardsOnly.Count}), for about {Math.Max(1, (int)Math.Round(_limit.TotalMinutes))} minutes. " +
-                                        "Flip each card, then ✕ (again), ✓✓ (know it well) or ✓ (know it).", 16, top: 10));
+                                        "Flip a card to check it, or grade it straight away if you know it: ✕ (again), ✓✓ (know it well) or ✓ (know it).", 16, top: 10));
                 _page.Children.Add(Primary("Begin", () => { _deadline = DateTime.Now + _limit; Next(); }));
             }));
             for (int i = 0; i < _cardsOnly.Count; i++)
@@ -1579,7 +1579,8 @@ public partial class LessonWindow : Window
         var card = new Border { Child = inner, MinHeight = 240, Padding = new Thickness(36, 22, 36, 30), Margin = new Thickness(0, 12, 0, 0), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(2), Cursor = Cursors.Hand };
         card.SetResourceReference(Border.BackgroundProperty, "Panel");
         card.SetResourceReference(Border.BorderBrushProperty, "Line");
-        var grades = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 26, 0, 0), Visibility = Visibility.Hidden };
+        // The grade buttons show from the start: a card you know can be passed without flipping it.
+        var grades = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 26, 0, 0) };
         var links = AnswerLinks(q, lesson);
         links.Visibility = Visibility.Collapsed;
         links.HorizontalAlignment = HorizontalAlignment.Center;
@@ -1590,13 +1591,13 @@ public partial class LessonWindow : Window
             flipped = !flipped;
             ScriptureLinks.SetText(face, flipped ? q.Back : q.Front);
             side.Text = flipped ? "Answer · click to flip back" : "Question · click to flip";
-            if (flipped && !answered) { grades.Visibility = Visibility.Visible; links.Visibility = Visibility.Visible; }
+            if (flipped && !answered) links.Visibility = Visibility.Visible;
         }
         card.MouseLeftButtonUp += (_, _) => Flip();
 
         void Grade(int g)
         {
-            if (answered || !flipped) return;
+            if (answered) return;
             answered = true;
             _asked++; if (g > 0) _right++;
             Course.Add(new TrainingEvent { Kind = "answer", Question = q.Id, Concept = q.Concept, Correct = g > 0, Sure = g > 0, Grade = g });

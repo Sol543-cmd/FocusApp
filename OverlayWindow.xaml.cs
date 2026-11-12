@@ -135,7 +135,7 @@ public partial class OverlayWindow : Window
         if (now != _shown)
         {
             _shown = now;
-            TaskList.ItemsSource = _tasks.ToList();
+            TaskList.ItemsSource = TaskGroups.Source(_tasks.ToList(), TaskList);
         }
         EmptyText.Visibility = _tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         TaskScroll.Visibility = _tasks.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -292,4 +292,7 @@ public sealed class OverlayTask
     public string Text { get; init; } = "";
     public bool IsHigh { get; init; }
     public bool Done { get; set; }
+    /// <summary>By project: the project heading it's listed under (empty: no headings).</summary>
+    public string Group { get; init; } = "";
+    public string GroupColor { get; init; } = "";
 }

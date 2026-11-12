@@ -3,6 +3,20 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.22
+
+- Flashcards: ✕ again, ✓ know it and ✓✓ know it well work whichever side is showing, so you can pass a card you know
+  without flipping it.
+- Tasks: a small caret beside Today chooses how Today is listed: Default, Ordered (drag tasks into your own order) or By
+  project (under project headings). Focus remembers it, and the Dashboard's task card and the floating timer's drop-down
+  follow it.
+- The task window: a real window for a side screen, opened from the new button at the top right of the Dashboard's timer
+  panel. The timer bar on top, today's progress, then your tasks (Session, Today, All or Undated). Tick tasks off there,
+  drag them into order when Today is Ordered, and pin it on top of other windows. It remembers its place and size.
+- Fixed: a Timeline or Greek practice pop-up could show only its buttons and freeze. Every answer redrew the Training page,
+  which reopened every book; now the page waits until the practice window closes, and book data is kept until a lesson
+  is finished.
+
 ## 1.7.21
 
 - Updated chapter packs (core cards and outlines) can be imported over the old ones: your place, finished lessons and
