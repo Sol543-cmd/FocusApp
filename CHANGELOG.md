@@ -3,6 +3,26 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.21
+
+- Updated chapter packs (core cards and outlines) can be imported over the old ones: your place, finished lessons and
+  answers stay. Focus warns before a re-imported chapter would change its number of lessons.
+- The "Sort your cards" offer doesn't show once a book's packs are the new kind (every card is marked core or chapter).
+
+## 1.7.20
+
+- Rebuild the outline: right after the reading, drag the lesson's headings into the order they were taught and each key
+  idea under its heading, in order (a few ideas from other lessons belong in the bank). Check marks each tile; click one
+  to see it in the book. Outlines come back after about 3 days, 2 weeks and 2 months at the start of Books practice
+  rounds (switch off in Training settings, Practice). Older packs use each part's watch points as the ideas.
+- Fewer flashcards: cards are core (kept for the long term) or chapter cards (shorter gaps, and they retire once you
+  pass the chapter quiz with 80%). Cards from older packs count as chapter cards.
+- Sort your cards: a one-time screen to mark each card from lessons you've done Keep, Quiz only or Retire, starting
+  from a suggestion (dates go to the timeline). Offered on the Training page and in Training settings, Practice.
+- Unit exams every 3 chapters when a book has no unit ends set, with a few questions from earlier units.
+- The lesson now goes: reading, outline, practice, new cards, chapter quiz, timeline, then the review of earlier
+  questions last.
+
 ## 1.7.19
 
 - Today's practice on the Training page is now the practice timeline: one row for each practice, each round a dot in

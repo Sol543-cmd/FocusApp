@@ -93,7 +93,7 @@ public partial class MainWindow
             if (next != null)
             {
                 tp.Children.Add(TT($"{ShortTitle(dueBook)}, Lesson {next.Index + 1}: {next.Lesson.Title}", 22, bold: true, top: 8));
-                tp.Children.Add(TT($"Chapter {next.Pack.Chapter} · about 25 minutes, then 5 minutes of cards" + (o.InProgress == next.Index ? " · you've started it" : ""), 13.5, brush: "Muted", top: 6));
+                tp.Children.Add(TT($"Chapter {next.Pack.Chapter} · about 25 minutes of reading, then the outline and questions" + (o.InProgress == next.Index ? " · you've started it" : ""), 13.5, brush: "Muted", top: 6));
                 string id = dueBook.Id;
                 var go = TButton(o.InProgress == next.Index ? "Continue lesson" : "Start lesson", () => StartLesson(required: false, bookId: id), primary: true);
                 go.Padding = new Thickness(24, 10, 24, 10); go.Margin = new Thickness(0, 16, 0, 0); go.HorizontalAlignment = HorizontalAlignment.Left;
@@ -148,6 +148,24 @@ public partial class MainWindow
         top.Children.Add(statCard);
         TrainingHost.Children.Add(top);
 
+        // ----- The card sort, offered once -----
+        // (Not needed once the book's packs are the new kind, where every card already says core or chapter.)
+        if (!Course.Config.CardSortDone && Course.Events.Any(e => e.Kind == "answer") && Course.Lessons().SelectMany(l => l.Lesson.Cards).Any(c => c.Tier.Length == 0))
+        {
+            var row = new DockPanel();
+            var btns = new StackPanel { Orientation = Orientation.Horizontal };
+            btns.Children.Add(TButton("Sort them", () => { new CardSortWindow { Owner = this }.ShowDialog(); RefreshTraining(); }, primary: true));
+            btns.Children.Add(TButton("Not now", () => { Course.Config.CardSortDone = true; Course.SaveConfig(); RefreshTraining(); }));
+            DockPanel.SetDock(btns, Dock.Right);
+            row.Children.Add(btns);
+            var txt = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            txt.Children.Add(TT("Fewer flashcards", 14, bold: true));
+            txt.Children.Add(TT("Sort your memory cards once: keep the ones that matter for the long term, make the rest quiz-only or retire them.", 12.5, brush: "Muted", top: 2));
+            row.Children.Add(txt);
+            var sc = TBox(row, padding: new Thickness(22, 12, 18, 12)); sc.Margin = new Thickness(0, 16, 0, 0);
+            TrainingHost.Children.Add(sc);
+        }
+
         // ----- Catch-up (optional, one at a time) -----
         if (Course.MissedLesson() is { } missed)
         {
@@ -188,7 +206,8 @@ public partial class MainWindow
             var c = TBox(row, padding: new Thickness(18, 14, 16, 14)); c.Margin = new Thickness(0, 8, 14, 0);
             practices.Children.Add(c);
         }
-        Practice("Books practice", Join(dueAll > 0 ? $"{dueAll} due" : "Nothing due", NextAt("Books practice")), () => StartBooksPractice());
+        bool outlineDue = Course.Config.OutlineInBooksPractice && Course.OutlineDue() != null;
+        Practice("Books practice", Join(dueAll > 0 ? $"{dueAll} due" : "Nothing due", outlineDue ? "an outline review" : "", NextAt("Books practice")), () => StartBooksPractice());
         Practice("Book flashcards", Join(Course.CardReviewDoneToday() ? "Done today" : "", NextAt("Book flashcards")), () => StartBookFlashcards());
         int tlDue = Course.TimelineDueCount();
         Practice("Timeline", Join(tlDue > 0 ? $"{tlDue} due" : Course.TimelineDoneToday() ? "Done today" : "", NextAt("Timeline")), () => StartTimelinePractice());

@@ -59,7 +59,7 @@ public partial class MainWindow
             string title = $"{what} · {ShortTitle(Course.Current)}";
             var w = cards
                 ? LessonWindow.CardReview(round, TimeSpan.FromMinutes(Math.Clamp(Course.Config.CardReviewMinutes, 1, 60)), _ => { })
-                : new LessonWindow(title, round, null, _ => { });
+                : new LessonWindow(title, round, null, _ => { }, outline: !review && Course.Config.OutlineInBooksPractice ? Course.OutlineDue() : null); // a due outline review goes first
             w.AddToTopBar(ModeBar(cards, review, Course.Current.Id, lesson));
             w.Closed += (_, _) => { Course.Pinned = null; Course.UseToday(); }; // back to the day's book
             OpenTrainingWindow(w, blocking: false);

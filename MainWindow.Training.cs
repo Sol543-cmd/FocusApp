@@ -667,6 +667,10 @@ public partial class MainWindow
             var pack = ChapterPack.Read(path);
             if (pack.Course.Length > 0 && pack.Course != Course.Current.Id &&
                 !Ask($"This pack was made for \"{pack.Book}\". Add it to \"{Course.Current.Title}\" anyway?", "Check chapter pack", defaultNo: true)) return;
+            // Re-importing a chapter: its lessons must stay the same, or your place in the book would shift.
+            if (Course.Packs.TryGetValue(pack.Chapter, out var old) && old.Lessons.Count != pack.Lessons.Count &&
+                !Ask($"Chapter {pack.Chapter} already has {old.Lessons.Count} lessons, and this pack has {pack.Lessons.Count}. Replacing it would move your place in the book " +
+                     "(lessons are counted in order). Replace it anyway?", "Check chapter pack", defaultNo: true)) return;
             var problems = Course.Check(pack, out string summary);
             if (problems.Count == 0)
             {

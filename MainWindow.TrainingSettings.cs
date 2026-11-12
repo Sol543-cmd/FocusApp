@@ -285,6 +285,12 @@ public partial class MainWindow
         page.Children.Add(SetRow("Greek words", "Words a round", NumberField(Math.Clamp(_settings.VocabWords, 3, 10), 3, 10, n => { _settings.VocabWords = n; SaveSettingsQuietly(); RefillGreek(); })));
         page.Children.Add(SetRow("Greek alphabet", "Letters a round", NumberField(Math.Clamp(_settings.AlphaLetters, 3, 10), 3, 10, n => { _settings.AlphaLetters = n; SaveSettingsQuietly(); RefillGreek(); })));
 
+        page.Children.Add(Section("Memory cards and outlines"));
+        page.Children.Add(SwitchRow("Review outlines in Books practice", "A lesson's outline comes back after about 3 days, 2 weeks and 2 months, at the start of a Books practice round. Off: you rebuild it only in the lesson.",
+                                    cfg.OutlineInBooksPractice, on => { cfg.OutlineInBooksPractice = on; Course.SaveConfig(); }));
+        page.Children.Add(SetRow("Sort your cards", "Keep, Quiz only or Retire for each memory card from lessons you've done. Chapter cards retire by themselves once you pass the chapter quiz with 80%.",
+                                 TButton("Open", () => { new CardSortWindow { Owner = this }.ShowDialog(); })));
+
         page.Children.Add(Section("Pop-ups"));
         page.Children.Add(SwitchRow("Books practice", "Multiple-choice rounds at their times. Learn: what's due in the day's book. Review: any book and lesson.", cfg.AllBooksAuto, on => { cfg.AllBooksAuto = on; Course.SaveConfig(); }));
         page.Children.Add(SwitchRow("Book flashcards", "The hardest memory cards from that day's lesson first. Once a day across your devices.", cfg.CardReviewOn, on => { cfg.CardReviewOn = on; Course.SaveConfig(); }));

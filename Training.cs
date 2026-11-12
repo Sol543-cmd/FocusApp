@@ -35,6 +35,15 @@ public class PackQuestion
     [JsonPropertyName("back")] public string Back { get; set; } = "";
     [JsonPropertyName("why")] public string Why { get; set; } = "";
     [JsonPropertyName("refs")] public List<PackRef> Refs { get; set; } = new();
+    /// <summary>Memory cards: "core" (kept for the long term) or "chapter" (learned for the chapter, then retired). Empty counts as chapter.</summary>
+    [JsonPropertyName("tier")] public string Tier { get; set; } = "";
+}
+
+/// <summary>One key idea of a lesson, for Rebuild the outline: which part (heading) it belongs under, in teaching order.</summary>
+public class PackIdea
+{
+    [JsonPropertyName("part")] public int Part { get; set; }
+    [JsonPropertyName("text")] public string Text { get; set; } = "";
 }
 
 public class PackPart
@@ -68,6 +77,8 @@ public class PackLesson
     [JsonPropertyName("quiz")] public List<PackQuestion> Quiz { get; set; } = new();
     [JsonPropertyName("endsChapter")] public bool EndsChapter { get; set; }
     [JsonPropertyName("timeline")] public List<PackEvent> Timeline { get; set; } = new();
+    /// <summary>The lesson's key ideas in teaching order (Rebuild the outline). Older packs: each part's "watch" list stands in.</summary>
+    [JsonPropertyName("outline")] public List<PackIdea> Outline { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<PackQuestion> AllQuestions => Warmup.Concat(Practice).Concat(Cards).Concat(Quiz);
 }
@@ -554,6 +565,10 @@ public class CourseConfig
     /// <summary>Round sizes (Training settings, Practice): questions in a Books practice round, cards in a Book flashcards round.</summary>
     public int BooksPracticeCount { get; set; } = 12;
     public int FlashcardsCount { get; set; } = 20;
+    /// <summary>Due outline reviews come up at the start of Books practice rounds (Learn). Off: the outline is only in the lesson.</summary>
+    public bool OutlineInBooksPractice { get; set; } = true;
+    /// <summary>The card sort (Keep / Quiz only / Retire) was offered and finished or dismissed.</summary>
+    public bool CardSortDone { get; set; }
 }
 
 /// <summary>One changed day: its lessons, or back to the weekly plan; the newest change wins between computers.</summary>
@@ -977,6 +992,25 @@ public static class Course
         File.Move(tmp, path, overwrite: true);
     }
 
+    /// <summary>Adds many events with one save (the card sort).</summary>
+    public static void AddMany(IEnumerable<TrainingEvent> list)
+    {
+        var mine = Events.Where(x => x.Device == Device).ToList();
+        int seq = mine.Count == 0 ? 0 : mine.Max(x => x.Seq);
+        foreach (var e in list)
+        {
+            e.Device = Device;
+            if (e.CourseId.Length == 0) e.CourseId = Pinned ?? Current.Id;
+            e.At = DateTime.UtcNow;
+            if (e.Day.Length == 0) e.Day = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            e.Seq = ++seq;
+            mine.Add(e); Events.Add(e);
+        }
+        try { Directory.CreateDirectory(Dir); WriteAtomic(MyLog, JsonSerializer.Serialize(mine, Json)); }
+        catch (Exception ex) { Log.Error("Course.AddMany", ex); }
+        Changed?.Invoke();
+    }
+
     public static void Add(TrainingEvent e)
     {
         e.Device = Device;
@@ -1238,6 +1272,7 @@ public static class Course
         var lessonIdx = CE.Where(e => e.Day == Today && e.Lesson >= 0 && (e.Kind == "lessonDone" || e.Kind == "lessonStep")).Select(e => e.Lesson).ToHashSet();
         if (lessonIdx.Count == 0) return new();
         var hidden = Hidden();
+        hidden.UnionWith(CardsOff());
         var todayAnswers = CE.Where(e => e.Kind == "answer" && e.Day == Today).GroupBy(e => e.Question).ToDictionary(g => g.Key, g => g.ToList());
         var list = new List<(LessonRef, PackQuestion, int Score)>();
         foreach (var l in Lessons().Where(l => lessonIdx.Contains(l.Index)))
@@ -1324,7 +1359,123 @@ public static class Course
         foreach (var e in CE)
             if (e.Kind == "hide") set.Add(e.Question);
             else if (e.Kind == "unhide") set.Remove(e.Question);
+        foreach (var (id, choice) in CardSorts()) if (choice == "retire") set.Add(id); // retired in the card sort
         return set;
+    }
+
+    // ---------- Card tiers and the card sort ----------
+
+    /// <summary>Your card sort choices by card id: "keep", "quiz" or "retire" (the latest choice wins).</summary>
+    public static Dictionary<string, string> CardSorts()
+    {
+        var d = new Dictionary<string, string>();
+        foreach (var e in CE.Where(e => e.Kind == "cardSort")) d[e.Question] = e.Note;
+        return d;
+    }
+
+    public static void SortCard(string cardId, string choice, string courseId = "") =>
+        Add(new TrainingEvent { Kind = "cardSort", Question = cardId, Note = choice, Lesson = -1, CourseId = courseId });
+
+    private static HashSet<string>? _chapterCards;
+    private static string _chapterCardsFor = "";
+    /// <summary>Chapter cards (not core, and not kept in the card sort): shorter gaps, and they retire once their chapter test is passed.</summary>
+    public static bool IsChapterCard(string id)
+    {
+        string key = Current.Id + "|" + Events.Count + "|" + string.Join(",", Packs.Select(p => p.Key + ":" + p.Value.GetHashCode()));
+        if (_chapterCards == null || _chapterCardsFor != key)
+        {
+            var sorts = CardSorts();
+            _chapterCards = Lessons().SelectMany(l => l.Lesson.Cards).Where(c => c.Tier != "core" && !(sorts.TryGetValue(c.Id, out var s) && s == "keep")).Select(c => c.Id).ToHashSet();
+            _chapterCardsFor = key;
+        }
+        return _chapterCards.Contains(id);
+    }
+
+    /// <summary>Chapters whose test (the chapter quiz at the end of the chapter) you passed with 80% or more on the first try.</summary>
+    public static HashSet<int> ChaptersPassed()
+    {
+        var first = new Dictionary<string, bool>();
+        foreach (var e in CE.Where(e => e.Kind == "answer")) first.TryAdd(e.Question, e.Grade >= 1 || (e.Grade < 0 && e.Correct));
+        var passed = new HashSet<int>();
+        foreach (var pack in Packs.Values)
+        {
+            var quiz = pack.Lessons.SelectMany(l => l.Quiz).Select(q => q.Id).ToList();
+            if (quiz.Count == 0 || !quiz.All(first.ContainsKey)) continue;
+            if (quiz.Count(id => first[id]) >= 0.8 * quiz.Count) passed.Add(pack.Chapter);
+        }
+        return passed;
+    }
+
+    /// <summary>Cards out of the daily review: sorted to Quiz only or Retire, or chapter cards whose chapter test is passed.
+    /// (Quiz-only cards still come up when you review their lesson on purpose.)</summary>
+    public static HashSet<string> CardsOff()
+    {
+        var off = CardSorts().Where(kv => kv.Value is "quiz" or "retire").Select(kv => kv.Key).ToHashSet();
+        var passed = ChaptersPassed();
+        foreach (var l in Lessons().Where(l => passed.Contains(l.Pack.Chapter)))
+            foreach (var c in l.Lesson.Cards) if (IsChapterCard(c.Id)) off.Add(c.Id);
+        return off;
+    }
+
+    /// <summary>What the card sort suggests: dates go to the timeline (Retire), short names and numbers become Quiz only, the rest Keep.</summary>
+    public static string SuggestSort(PackQuestion card)
+    {
+        string back = (card.Back.Length > 0 ? card.Back : card.Options.ElementAtOrDefault(card.Answer) ?? "").Trim();
+        string front = card.Front.Length > 0 ? card.Front : card.Prompt;
+        if (System.Text.RegularExpressions.Regex.IsMatch(front + " " + back, @"\b(\d{2,4}\s*(BCE|BC|CE|AD|B\.C\.|A\.D\.)|(when|what year|date)\b)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return "retire";
+        if (card.Tier == "core") return "keep";
+        if (back.Length <= 24 && back.Split(' ').Length <= 3) return "quiz";
+        return "keep";
+    }
+
+    // ---------- Rebuild the outline ----------
+
+    /// <summary>A lesson's outline: its parts' headings in order, each with its key ideas in order (the pack's outline,
+    /// or each part's "watch" points in older packs). Empty when there's too little to rebuild.</summary>
+    public static List<(string Heading, List<string> Ideas)> OutlineOf(LessonRef l)
+    {
+        var parts = l.Lesson.Parts;
+        var list = parts.Select((p, i) => (p.Title.Trim().Length > 0 ? p.Title.Trim() : $"Part {i + 1}",
+                                           l.Lesson.Outline.Count > 0 ? l.Lesson.Outline.Where(o => o.Part == i && o.Text.Trim().Length > 0).Select(o => o.Text.Trim()).ToList()
+                                                                       : p.Watch.Where(w => w.Trim().Length > 0).Select(w => w.Trim()).Take(4).ToList())).ToList();
+        int ideas = list.Sum(x => x.Item2.Count);
+        return list.Count >= 2 && ideas >= 2 || ideas >= 4 ? list : new();
+    }
+
+    /// <summary>Two or three ideas from neighboring lessons, to leave in the bank.</summary>
+    public static List<string> OutlineDecoys(LessonRef l, int count = 3)
+    {
+        var own = OutlineOf(l).SelectMany(x => x.Ideas.Append(x.Heading)).ToHashSet();
+        var near = Lessons().Where(o => o.Index != l.Index).OrderBy(o => Math.Abs(o.Index - l.Index)).Take(4)
+                            .SelectMany(o => OutlineOf(o).SelectMany(x => x.Ideas)).Where(t => !own.Contains(t)).Distinct().ToList();
+        var rnd = new Random();
+        return near.OrderBy(_ => rnd.Next()).Take(count).ToList();
+    }
+
+    /// <summary>An outline's review schedule: after a good rebuild (70%+) about 3 days, then 2 weeks, then 2 months; a weak
+    /// one comes back tomorrow. Three good rebuilds in a row and it's learned.</summary>
+    public static (DateTime Due, bool Learned, int Tries) OutlineState(int lessonIndex)
+    {
+        int[] gaps = { 3, 14, 60 };
+        int good = 0, tries = 0;
+        DateTime due = DateTime.MaxValue;
+        foreach (var e in CE.Where(e => e.Kind == "outline" && e.Lesson == lessonIndex).OrderBy(e => e.At))
+        {
+            tries++;
+            var day = e.At.ToLocalTime().Date;
+            if (e.Grade >= 70) { due = day.AddDays(gaps[Math.Min(good, gaps.Length - 1)]); good++; }
+            else { due = day.AddDays(1); good = 0; }
+        }
+        return (due, good >= 3, tries);
+    }
+
+    /// <summary>The first lesson (of the open book) whose outline review is due, if any.</summary>
+    public static LessonRef? OutlineDue()
+    {
+        var done = DoneLessons();
+        return Lessons().Where(l => done.Contains(l.Index) && OutlineOf(l).Count > 0)
+                        .Select(l => (l, st: OutlineState(l.Index))).Where(x => x.st.Tries > 0 && !x.st.Learned && x.st.Due <= DateTime.Today)
+                        .OrderBy(x => x.st.Due).Select(x => x.l).FirstOrDefault();
     }
 
     public static IEnumerable<string> Flagged() => CE.Where(e => e.Kind == "flag").Select(e => e.Question).Distinct();
@@ -1345,7 +1496,8 @@ public static class Course
         DateTime due = DateTime.MinValue;
         int streak = 0, seen = 0;
         bool miscon = false;
-        int[] gaps = longTerm ? new[] { 1, 3, 7, 14, 30, 60, 120 } : new[] { 3 };
+        // Core cards: out to four months. Chapter cards: learned for the chapter (to two weeks), then done.
+        int[] gaps = longTerm ? (IsChapterCard(questionId) ? new[] { 1, 3, 7, 14 } : new[] { 1, 3, 7, 14, 30, 60, 120 }) : new[] { 3 };
         DateTime last = DateTime.MinValue;
         foreach (var e in CE.Where(e => e.Kind == "answer" && e.Question == questionId))
         {
@@ -1420,6 +1572,7 @@ public static class Course
         var hidden = Hidden();
         var done = DoneLessons();
         var retired = RetiredConcepts();
+        var cardsOff = CardsOff();
         var today = DateTime.Today;
         double load = 0;
         var waiting = new List<string>();
@@ -1427,12 +1580,15 @@ public static class Course
             foreach (var (q, card) in l.Lesson.Practice.Select(pq => (pq, false)).Concat(l.Lesson.Quiz.Where(x => x.Kind == "mc").Select(pq => (pq, false)))
                                                      .Concat(l.Lesson.Cards.Select(pq => (pq, true))))
             {
-                if (hidden.Contains(q.Id) || (q.Concept.Length > 0 && retired.Contains(q.Concept))) continue;
+                if (hidden.Contains(q.Id) || (card && cardsOff.Contains(q.Id)) || (q.Concept.Length > 0 && retired.Contains(q.Concept))) continue;
                 var st = StateOf(q.Id, card);
                 if (st.Seen == 0 || st.Graduated) continue;
                 if (card && !Released(q.Id)) { waiting.Add(q.Id); continue; }
                 if (st.Due <= today) load += SecondsFor(card);
             }
+        // Due outline reviews count too (about 2 minutes each), when they come up in Books practice.
+        if (Config.OutlineInBooksPractice)
+            load += 120 * Lessons().Count(l => { if (!done.Contains(l.Index)) return false; var os = OutlineState(l.Index); return os.Tries > 0 && !os.Learned && os.Due <= today; });
         double room = Math.Max(1, Config.ReviewMinutes) * 60 - load;
         foreach (var id in waiting)
         {
@@ -1486,12 +1642,13 @@ public static class Course
         var today = DateTime.Today;
         ReleaseCards(); // new memory cards join while today's review fits in your daily review time
         var retired = RetiredConcepts();
+        var cardsOff = CardsOff();
         var due = new List<(LessonRef, PackQuestion, QState)>();
         foreach (var l in Lessons().Where(l => done.Contains(l.Index)))
             foreach (var (q, card) in l.Lesson.Practice.Select(pq => (pq, false)).Concat(l.Lesson.Cards.Select(pq => (pq, true)))
                                                      .Concat(l.Lesson.Quiz.Where(x => x.Kind == "mc").Select(pq => (pq, false))))
             {
-                if (hidden.Contains(q.Id)) continue;
+                if (hidden.Contains(q.Id) || (card && cardsOff.Contains(q.Id))) continue; // retired, quiz only, or its chapter test is passed
                 if (q.Concept.Length > 0 && retired.Contains(q.Concept)) continue;   // known for good
                 if (card && !Released(q.Id)) continue;                                // still in the waiting room
                 var s = StateOf(q.Id, card);
@@ -1586,13 +1743,21 @@ public static class Course
         var lessons = Lessons();
         var done = DoneLessons();
         int prev = 0;
-        for (int u = 0; u < Current.UnitEnds.Count; u++)
+        // Units: the book's own unit ends, or every 3 chapters.
+        var ends = Current.UnitEnds.Count > 0 ? Current.UnitEnds : Enumerable.Range(1, Math.Max(0, Current.Chapters / 3)).Select(u => u * 3).ToList();
+        for (int u = 0; u < ends.Count; u++)
         {
-            int last = Current.UnitEnds[u];
+            int last = ends[u];
             var unit = lessons.Where(l => l.Pack.Chapter > prev && l.Pack.Chapter <= last).ToList();
             bool complete = Enumerable.Range(prev + 1, Math.Max(0, last - prev)).All(c => Packs.ContainsKey(c)) && unit.Count > 0 && unit.All(l => done.Contains(l.Index));
             string key = $"unit{u + 1}";
-            if (complete && !ExamsPassed().Contains(key)) return new Exam(key, $"Unit exam {u + 1}: chapters {prev + 1}–{last}", ExamQuestions(unit, 20));
+            if (complete && !ExamsPassed().Contains(key))
+            {
+                // Cumulative: mostly this unit, plus a few from earlier units.
+                var qs = ExamQuestions(unit, 16);
+                if (prev > 0) qs.AddRange(ExamQuestions(lessons.Where(l => l.Pack.Chapter <= prev).ToList(), 4));
+                return new Exam(key, $"Unit exam {u + 1}: chapters {prev + 1}–{last}" + (prev > 0 ? ", with a few from earlier" : ""), qs);
+            }
             prev = last;
         }
         bool all = Enumerable.Range(1, Current.Chapters).All(c => Packs.ContainsKey(c)) && lessons.Count > 0 && lessons.All(l => done.Contains(l.Index));
