@@ -53,7 +53,7 @@ public partial class VocabWindow : Window
             w = new VocabWindow(screen.Bounds, words, finished, nextRound, startSize, deck ?? WordsDeck.Instance);
             Open.Add(w);
             w.Show();
-            w.Activate();
+            WindowFront.Bring(w);
         }
         catch (Exception ex)
         {

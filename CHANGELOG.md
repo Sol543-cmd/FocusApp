@@ -3,6 +3,18 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.24
+
+- List, Undated and Tomorrow each get the Default / Ordered / By project caret, like Today, remembered separately. The
+  Dashboard, thermometer pop-out and task window follow it. On Default the tab just says "List ⌄".
+- The task window has a Tomorrow view, and "All" is now "List".
+- Projects have a "No Project" group for tasks outside any project, everywhere tasks are shown by project.
+- Working Memory: a Markdown box at the bottom of the task window. Drag the line above it to make it taller or shorter.
+  It keeps what you write until you delete it, and syncs between computers.
+- The sidebar's + button is gone; the logo takes the theme's color and is a little bigger.
+- Practice and lesson pop-ups come to the front instead of only flashing the taskbar icon.
+- The task window button on the Dashboard no longer runs into the scroll bar.
+
 ## 1.7.23
 
 - The task window can dock to the left or right side of a screen (the new button beside the pin). Docked, it reserves

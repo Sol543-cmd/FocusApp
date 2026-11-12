@@ -76,6 +76,7 @@ public partial class MainWindow
         });
         _conceptQuiz = w;
         w.Show();
+        WindowFront.Bring(w);
     }
 
     private ConceptQuizWindow? _conceptQuiz;

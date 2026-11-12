@@ -36,7 +36,7 @@ public static class TaskGroups
         return list;
     }
 
-    public static string Heading(BinTask t) => t.ProjectName.Length > 0 ? t.ProjectName : "No project";
+    public static string Heading(BinTask t) => t.ProjectName.Length > 0 ? t.ProjectName : "No Project";
 
     private static GroupStyle? _style;
 
@@ -76,7 +76,8 @@ public class TaskWindow : Window
 {
     private readonly Func<string, List<OverlayTask>> _tasks;
     private readonly Action<OverlayTask> _toggled;
-    private readonly Action<List<string>> _reordered;
+    private readonly Action<string, List<string>> _reordered;
+    private readonly Func<string, string> _listMode;
     private readonly Func<(int Done, int Total, string Left)> _progress;
     private readonly AppSettings _settings;
     private readonly Action _save;
@@ -97,9 +98,10 @@ public class TaskWindow : Window
     private double _fraction;
 
     public TaskWindow(AppSettings settings, Action save, Func<string, List<OverlayTask>> tasks, Action<OverlayTask> toggled,
-                      Action<List<string>> reordered, Func<(int Done, int Total, string Left)> progress)
+                      Action<string, List<string>> reordered, Func<string, string> listMode, Func<(int Done, int Total, string Left)> progress)
     {
-        _settings = settings; _save = save; _tasks = tasks; _toggled = toggled; _reordered = reordered; _progress = progress;
+        _settings = settings; _save = save; _tasks = tasks; _toggled = toggled; _reordered = reordered; _listMode = listMode; _progress = progress;
+        if (_settings.TaskWindowView == "all") _settings.TaskWindowView = "list"; // All is now List
         Title = "Focus · Tasks";
         Width = Math.Max(240, settings.TaskWindowWidth); Height = Math.Max(300, settings.TaskWindowHeight);
         MinWidth = 220; MinHeight = 260;
@@ -172,7 +174,25 @@ public class TaskWindow : Window
         var root = new DockPanel();
         DockPanel.SetDock(_pill, Dock.Top); DockPanel.SetDock(day, Dock.Top); DockPanel.SetDock(head, Dock.Top);
         root.Children.Add(_pill); root.Children.Add(day); root.Children.Add(head);
-        root.Children.Add(scroll);
+        // Working Memory below the tasks; the splitter sets how much room each gets, as a share of the window, so both stretch with it.
+        double share = _settings.WorkingMemoryHeight is > 0.05 and < 0.95 ? _settings.WorkingMemoryHeight : 0.3;
+        var body = new Grid();
+        var memRow = new RowDefinition { Height = new GridLength(share, GridUnitType.Star), MinHeight = 70 };
+        var listRow = new RowDefinition { Height = new GridLength(1 - share, GridUnitType.Star), MinHeight = 40 };
+        body.RowDefinitions.Add(listRow);
+        body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
+        body.RowDefinitions.Add(memRow);
+        var splitter = new GridSplitter { Height = 8, HorizontalAlignment = HorizontalAlignment.Stretch, Background = Brushes.Transparent, Cursor = Cursors.SizeNS, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
+        splitter.DragCompleted += (_, _) =>
+        {
+            double l = listRow.ActualHeight, m = memRow.ActualHeight;
+            if (l + m > 0) { _settings.WorkingMemoryHeight = Math.Round(m / (l + m), 3); _save(); }
+            listRow.Height = new GridLength(l, GridUnitType.Star); memRow.Height = new GridLength(m, GridUnitType.Star);
+        };
+        var memory = new WorkingMemoryBox { Margin = new Thickness(8, 0, 8, 8) };
+        Grid.SetRow(scroll, 0); Grid.SetRow(splitter, 1); Grid.SetRow(memory, 2);
+        body.Children.Add(scroll); body.Children.Add(splitter); body.Children.Add(memory);
+        root.Children.Add(body);
         Content = root;
 
         Closing += (_, _) =>
@@ -216,7 +236,7 @@ public class TaskWindow : Window
         _pin.Opacity = Topmost ? 1 : 0.6;
     }
 
-    private static readonly (string Key, string Name)[] Views = { ("session", "Session"), ("today", "Today"), ("all", "All"), ("undated", "Undated") };
+    private static readonly (string Key, string Name)[] Views = { ("session", "Session"), ("today", "Today"), ("tomorrow", "Tomorrow"), ("list", "List"), ("undated", "Undated") };
 
     private void ViewMenu(FrameworkElement target)
     {
@@ -257,13 +277,15 @@ public class TaskWindow : Window
     public void Refresh()
     {
         string view = _settings.TaskWindowView;
-        string title = view switch { "session" => "Session tasks", "all" => "All tasks", "undated" => "Undated tasks", _ => "Today's tasks" };
-        if (view == "today" && _settings.TodayView != "default") title += _settings.TodayView == "ordered" ? " · Ordered" : " · By project";
+        // Default shows just the list's name; otherwise its view, as set in Tasks ("List · By project").
+        string title = view switch { "session" => "Session", "list" => "List", "undated" => "Undated", "tomorrow" => "Tomorrow", _ => "Today" };
+        string mode = view == "session" ? "default" : _listMode(view);
+        if (mode != "default") title += mode == "ordered" ? " · Ordered" : " · By project";
         _viewText.Text = title;
         var tasks = _tasks(view);
         // Narrow: no project headings, so the names keep their room.
         if (ActualWidth > 0 && ActualWidth < 280) tasks = tasks.Select(t => new OverlayTask { Source = t.Source, Kind = t.Kind, Id = t.Id, Key = t.Key, Text = t.Text, IsHigh = t.IsHigh, Done = t.Done }).ToList();
-        string now = view + _settings.TodayView + (ActualWidth < 280 ? "n" : "w") + string.Join("|", tasks.Select(t => t.Key + (t.Done ? "1" : "0") + t.Text + t.Group));
+        string now = view + mode + (ActualWidth < 280 ? "n" : "w") + string.Join("|", tasks.Select(t => t.Key + (t.Done ? "1" : "0") + t.Text + t.Group));
         if (now != _shown)
         {
             _shown = now;
@@ -273,7 +295,8 @@ public class TaskWindow : Window
         {
             "session" => "No tasks for this session (or nothing running).",
             "undated" => "Every task has a date.",
-            "all" => "No tasks.",
+            "list" => "No tasks.",
+            "tomorrow" => "Nothing planned or due tomorrow.",
             _ => "Nothing picked, due or overdue today."
         };
         _empty.Visibility = tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -323,11 +346,12 @@ public class TaskWindow : Window
         dock.AddHandler(DropEvent, new DragEventHandler((s, e) =>
         {
             if (e.Data.GetData(typeof(OverlayTask)) is not OverlayTask moving || (s as FrameworkElement)?.DataContext is not OverlayTask target || moving.Key == target.Key) return;
-            var ids = _tasks("today").Select(t => t.Id).ToList();
+            string list = _settings.TaskWindowView;
+            var ids = _tasks(list).Select(t => t.Id).ToList();
             ids.Remove(moving.Id);
             int at = ids.IndexOf(target.Id);
             ids.Insert(at < 0 ? ids.Count : at, moving.Id);
-            _reordered(ids);
+            _reordered(list, ids);
             _shown = ""; Refresh();
         }));
         template.VisualTree = dock;
@@ -469,5 +493,5 @@ public class TaskWindow : Window
 
     private Point _down;
     private OverlayTask? _pressed;
-    private bool CanReorder => _settings.TaskWindowView == "today" && _settings.TodayView == "ordered";
+    private bool CanReorder => _settings.TaskWindowView != "session" && _listMode(_settings.TaskWindowView) == "ordered";
 }

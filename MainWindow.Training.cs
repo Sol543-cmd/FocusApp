@@ -171,6 +171,7 @@ public partial class MainWindow
         w.Closed += (_, _) => _lessonPrompt = null;
         _lessonPrompt = w;
         w.Show();
+        WindowFront.Bring(w);
     }
 
     /// <param name="bookId">The book to do it in (a book page's Start lesson always uses its own book).</param>
@@ -217,7 +218,7 @@ public partial class MainWindow
         };
         _lessonWindow = window;
         window.Show();
-        window.Activate();
+        WindowFront.Bring(window); // in front of what you're working in, not just a flashing taskbar button
     }
 
     // ---------- All-books practice ----------

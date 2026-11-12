@@ -53,7 +53,7 @@ public abstract class TaskBase : INotifyPropertyChanged
     [JsonIgnore] public FocusApp.Project? ProjectInfo => Projects.Find(Project);
     [JsonIgnore] public string ProjectName => ProjectInfo?.Name ?? "";
     /// <summary>Today, By project: the heading the task is listed under.</summary>
-    [JsonIgnore] public string ProjectHeading => ProjectInfo?.Name ?? "No project";
+    [JsonIgnore] public string ProjectHeading => ProjectInfo?.Name ?? "No Project";
     [JsonIgnore] public string ProjectColor => ProjectInfo?.Color ?? "Transparent";
     [JsonIgnore] public bool HasProject => ProjectInfo != null;
     [JsonIgnore] public string SectionName => ProjectInfo?.Sections.FirstOrDefault(x => x.Id == Section)?.Name ?? "";
@@ -946,6 +946,11 @@ public class AppSettings
     public string TodayView { get; set; } = "default";
     /// <summary>Ordered: your own order for today's tasks (task ids).</summary>
     public List<string> TodayOrder { get; set; } = new();
+    /// <summary>Each list's view (keys: list, undated, today, tomorrow): "default", "ordered" or "project"; and each list's own order.</summary>
+    public Dictionary<string, string> ListViews { get; set; } = new();
+    public Dictionary<string, List<string>> ListOrders { get; set; } = new();
+    /// <summary>The task window's Working Memory: your jotted notes (Markdown), and how tall its pane is.</summary>
+    public double WorkingMemoryHeight { get; set; } = 0.3; // share of the task window
     /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
     public string TaskWindowView { get; set; } = "today";
     public double TaskWindowLeft { get; set; } = double.NaN;

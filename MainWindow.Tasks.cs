@@ -114,11 +114,12 @@ public partial class MainWindow
             .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue).ThenBy(t => TaskBin.All.IndexOf(t))
             .ToList();
         // Today follows the view chosen in Tasks (Default, Ordered or By project).
-        if (todayOnly) tasks = TodayInView(tasks);
-        if (todayOnly && TodayMode == "project")
+        string dashList = todayOnly ? "today" : undatedOnly ? "undated" : "list"; // All follows List's view
+        tasks = InView(dashList, tasks);
+        if (ListMode(dashList) == "project")
         {
             if (DashListTasks.GroupStyle.Count == 0) DashListTasks.GroupStyle.Add(BinGroupStyle());
-            string key = "p|" + string.Join(",", tasks.Select(t => t.Id + t.Project));
+            string key = dashList + "|" + string.Join(",", tasks.Select(t => t.Id + t.Project));
             if (!(DashListTasks.ItemsSource is ListCollectionView && _dashGroupKey == key))
             {
                 _dashGroupKey = key;
@@ -319,6 +320,7 @@ public partial class MainWindow
         "nodate" => t.Due == null,
         "age7" => t.AgeDays >= 7,
         "age10" => t.AgeDays >= 10,
+        "noproject" => !t.HasProject,
         _ when _binFilter.StartsWith("project:") => t.Project == _binFilter[8..],
         _ => _binFilter.StartsWith("#") && t.Tags.Any(tag => string.Equals(tag, _binFilter[1..], StringComparison.CurrentCultureIgnoreCase))
     };
@@ -386,6 +388,8 @@ public partial class MainWindow
         if (_settings.On("projects"))
             foreach (var p in Projects.All)
                 filters.Add(("project:" + p.Id, $"● {p.Name} ({TaskBin.All.Count(t => t.Project == p.Id)})"));
+        // No Project: every task that isn't in a project.
+        if (_settings.On("projects")) filters.Add(("noproject", $"● No Project ({TaskBin.All.Count(t => !t.HasProject)})"));
         foreach (var tag in TaskBin.All.SelectMany(t => t.Tags).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(t => t))
             filters.Add(("#" + tag, $"#{tag} ({TaskBin.All.Count(t => t.Tags.Contains(tag, StringComparer.CurrentCultureIgnoreCase))})"));
         var same = filters.FirstOrDefault(f => string.Equals(f.Key, _binFilter, StringComparison.CurrentCultureIgnoreCase));
@@ -406,7 +410,8 @@ public partial class MainWindow
             string text = label, count = "";
             int open = label.LastIndexOf(" (", StringComparison.Ordinal);
             if (open > 0 && label.EndsWith(")")) { text = label[..open]; count = label[(open + 2)..^1]; }
-            if (key.StartsWith("project:"))
+            if (key == "noproject") ProjectFilters.Children.Add(FilterRow(key, "No Project", count, "#7A8886", null));
+            else if (key.StartsWith("project:"))
             {
                 var project = Projects.Find(key[8..]);
                 ProjectFilters.Children.Add(FilterRow(key, project?.Name ?? text.TrimStart('●', ' '), count, project?.Color, project));
