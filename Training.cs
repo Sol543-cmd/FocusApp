@@ -996,7 +996,7 @@ public static class Course
     public static void AddMany(IEnumerable<TrainingEvent> list)
     {
         var mine = Events.Where(x => x.Device == Device).ToList();
-        int seq = mine.Count == 0 ? 0 : mine.Max(x => x.Seq);
+        long seq = mine.Count == 0 ? 0 : mine.Max(x => x.Seq);
         foreach (var e in list)
         {
             e.Device = Device;
