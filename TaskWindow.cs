@@ -9,6 +9,9 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace FocusApp;
 
@@ -143,10 +146,15 @@ public class TaskWindow : Window
         // What it lists, and the pin.
         var head = new DockPanel { Margin = new Thickness(14, 10, 10, 4) };
         _pin.SetResourceReference(StyleProperty, "IconButton");
-        _pin.Click += (_, _) => { Topmost = !Topmost; _settings.TaskWindowOnTop = Topmost; _save(); PaintPin(); };
+        _pin.Click += (_, _) => { if (_edge.Length > 0) return; Topmost = !Topmost; _settings.TaskWindowOnTop = Topmost; _save(); PaintPin(); };
         PaintPin();
         DockPanel.SetDock(_pin, Dock.Right);
         head.Children.Add(_pin);
+        _dockBtn.SetResourceReference(StyleProperty, "IconButton");
+        _dockBtn.Click += (_, _) => DockMenu();
+        DockPanel.SetDock(_dockBtn, Dock.Right);
+        head.Children.Add(_dockBtn);
+        PaintDock();
         var picker = new StackPanel { Orientation = Orientation.Horizontal, Cursor = Cursors.Hand, Background = Brushes.Transparent, HorizontalAlignment = HorizontalAlignment.Left };
         var chev = new TextBlock { Text = " ⌄", FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, -4, 0, 0) };
         chev.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
@@ -169,9 +177,31 @@ public class TaskWindow : Window
 
         Closing += (_, _) =>
         {
-            if (WindowState == WindowState.Normal) { _settings.TaskWindowLeft = Left; _settings.TaskWindowTop = Top; _settings.TaskWindowWidth = Width; _settings.TaskWindowHeight = Height; }
+            if (_edge.Length > 0) { _settings.TaskWindowWidth = ActualWidth; RemoveBar(); }
+            else if (WindowState == WindowState.Normal) { _settings.TaskWindowLeft = Left; _settings.TaskWindowTop = Top; _settings.TaskWindowWidth = Width; _settings.TaskWindowHeight = Height; }
             _save();
         };
+        // The strip always goes back to Windows when the window closes or Focus quits.
+        Closed += (_, _) => RemoveBar();
+        if (Application.Current != null) Application.Current.Exit += (_, _) => RemoveBar();
+        // Docked last time: dock again (on the screen the window opens on).
+        SourceInitialized += (_, _) =>
+        {
+            _hwnd = new WindowInteropHelper(this).Handle;
+            HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
+            if (_settings.TaskWindowDock is "left" or "right") Dispatcher.BeginInvoke(new Action(() => DockTo(_settings.TaskWindowDock)), DispatcherPriority.Loaded);
+        };
+        // Minimized, the strip is given back; restored, it's taken again. Docked windows don't maximize.
+        StateChanged += (_, _) =>
+        {
+            if (_edge.Length == 0) return;
+            if (WindowState == WindowState.Maximized) { WindowState = WindowState.Normal; return; }
+            if (WindowState == WindowState.Minimized) { RemoveBar(); return; }
+            Dispatcher.BeginInvoke(new Action(() => DockTo(_edge)), DispatcherPriority.Loaded);
+        };
+        // Docked and made wider or narrower (drag its inner edge): the reserved strip follows.
+        _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); if (_edge.Length > 0 && _registered) SetBarPos(); };
+        SizeChanged += (_, _) => { if (_edge.Length > 0 && !_placing) { _resizeTimer.Stop(); _resizeTimer.Start(); } };
         Refresh();
     }
 
@@ -182,7 +212,7 @@ public class TaskWindow : Window
     private void PaintPin()
     {
         _pin.Content = Topmost ? "" : "";
-        _pin.ToolTip = Topmost ? "On top of other windows (click to let it go behind)" : "Keep on top of other windows";
+        _pin.ToolTip = _edge.Length > 0 ? "Docked: always visible" : Topmost ? "On top of other windows (click to let it go behind)" : "Keep on top of other windows";
         _pin.Opacity = Topmost ? 1 : 0.6;
     }
 
@@ -261,7 +291,7 @@ public class TaskWindow : Window
     {
         var template = new DataTemplate(typeof(OverlayTask));
         var dock = new FrameworkElementFactory(typeof(DockPanel));
-        dock.SetValue(MarginProperty, new Thickness(4, 3, 4, 3));
+        dock.SetValue(MarginProperty, new Thickness(4, 5, 4, 5)); // a little roomier than the floating timer
         dock.SetValue(BackgroundProperty, Brushes.Transparent);
         var check = new FrameworkElementFactory(typeof(CheckBox));
         check.SetValue(DockPanel.DockProperty, Dock.Left);
@@ -277,7 +307,8 @@ public class TaskWindow : Window
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(OverlayTask.Text)));
         text.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
-        text.SetValue(TextBlock.FontSizeProperty, 13.5);
+        text.SetValue(TextBlock.FontSizeProperty, 14.0);
+        text.SetValue(TextBlock.LineHeightProperty, 19.0);
         dock.AppendChild(text);
         dock.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((s, e) => { _down = e.GetPosition(this); _pressed = (s as FrameworkElement)?.DataContext as OverlayTask; }));
         dock.AddHandler(MouseMoveEvent, new MouseEventHandler((s, e) =>
@@ -302,6 +333,139 @@ public class TaskWindow : Window
         template.VisualTree = dock;
         return template;
     }
+
+    // ---------- Docking: an app bar, like the taskbar ----------
+    // Docked to the left or right edge of a screen, the window reserves that strip: maximized and snapped windows use the
+    // space that's left instead of covering it. The same Windows feature the taskbar uses (SHAppBarMessage).
+
+    private readonly Button _dockBtn = new() { Padding = new Thickness(8, 4, 8, 4), FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 13, Margin = new Thickness(0, 0, 2, 0) };
+    private readonly DispatcherTimer _resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
+    private string _edge = "";
+    private bool _registered, _placing;
+    private int _callback;
+    private IntPtr _hwnd;
+
+    private void PaintDock()
+    {
+        _dockBtn.Content = _edge == "left" ? "" : _edge == "right" ? "" : "";
+        _dockBtn.ToolTip = _edge.Length > 0 ? $"Docked to the {_edge} of the screen: click to move or undock" : "Dock to the side of the screen";
+        _dockBtn.Opacity = _edge.Length > 0 ? 1 : 0.6;
+    }
+
+    private void DockMenu()
+    {
+        var menu = new ContextMenu { PlacementTarget = _dockBtn, Placement = PlacementMode.Bottom };
+        void Add(string text, string edge, bool on)
+        {
+            var item = new MenuItem { Header = text, IsCheckable = true, IsChecked = on };
+            item.Click += (_, _) =>
+            {
+                if (edge.Length == 0) { if (_edge.Length > 0) Undock(); return; }
+                if (_edge.Length > 0 && _edge != edge) RemoveBar();
+                DockTo(edge);
+            };
+            menu.Items.Add(item);
+        }
+        Add("Dock to the left", "left", _edge == "left");
+        Add("Dock to the right", "right", _edge == "right");
+        menu.Items.Add(new Separator());
+        Add("Undock", "", _edge.Length == 0);
+        menu.IsOpen = true;
+    }
+
+    private void DockTo(string edge)
+    {
+        try
+        {
+            if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal;
+            if (WindowState == WindowState.Minimized) return; // docks again when restored
+            _edge = edge;
+            _settings.TaskWindowDock = edge;
+            _save();
+            Topmost = true; // a docked bar stays visible
+            if (!_registered)
+            {
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (_callback == 0) _callback = RegisterWindowMessage("FocusTaskWindowAppBar");
+                var abd = NewData(hwnd);
+                abd.uCallbackMessage = _callback;
+                SHAppBarMessage(ABM_NEW, ref abd);
+                _registered = true;
+            }
+            SetBarPos();
+        }
+        catch (Exception ex) { Log.Error("Task window dock", ex); }
+        PaintDock(); PaintPin();
+    }
+
+    private void Undock()
+    {
+        string was = _edge;
+        RemoveBar();
+        _edge = "";
+        _settings.TaskWindowDock = "";
+        _save();
+        Topmost = _settings.TaskWindowOnTop;
+        // Back to a normal floating window, a little in from the edge.
+        Height = Math.Max(400, Math.Min(_settings.TaskWindowHeight, SystemParameters.WorkArea.Height - 80));
+        Top = Top + 40;
+        Left += was == "right" ? -40 : 40;
+        PaintDock(); PaintPin();
+    }
+
+    /// <summary>Gives the reserved strip back to Windows.</summary>
+    private void RemoveBar()
+    {
+        if (!_registered) return;
+        try { var abd = NewData(_hwnd != IntPtr.Zero ? _hwnd : new WindowInteropHelper(this).Handle); SHAppBarMessage(ABM_REMOVE, ref abd); }
+        catch (Exception ex) { Log.Error("Task window undock", ex); }
+        _registered = false;
+    }
+
+    /// <summary>Asks Windows for the strip at the edge of this window's screen, takes it, and moves the window into it.
+    /// Works in the screen's own pixels, so screens with different scaling get the right width.</summary>
+    private void SetBarPos()
+    {
+        if (!_registered) return;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info)) return;
+        var screen = info.rcMonitor;
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        int width = (int)Math.Round(Math.Clamp(ActualWidth > 0 ? ActualWidth : _settings.TaskWindowWidth, 220, 700) * scale);
+        var abd = NewData(hwnd);
+        abd.uEdge = _edge == "left" ? ABE_LEFT : ABE_RIGHT;
+        abd.rc = _edge == "left" ? new RECT { left = screen.left, top = screen.top, right = screen.left + width, bottom = screen.bottom }
+                                 : new RECT { left = screen.right - width, top = screen.top, right = screen.right, bottom = screen.bottom };
+        SHAppBarMessage(ABM_QUERYPOS, ref abd);
+        if (_edge == "left") abd.rc.right = abd.rc.left + width; else abd.rc.left = abd.rc.right - width;
+        SHAppBarMessage(ABM_SETPOS, ref abd);
+        _placing = true;
+        SetWindowPos(hwnd, IntPtr.Zero, abd.rc.left, abd.rc.top, abd.rc.right - abd.rc.left, abd.rc.bottom - abd.rc.top, 0x0004 | 0x0010); // keep z-order, don't activate
+        Dispatcher.BeginInvoke(new Action(() => _placing = false), DispatcherPriority.Background);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // The taskbar or another bar moved: take our place again.
+        if (_registered && _callback != 0 && msg == _callback && wParam.ToInt64() == ABN_POSCHANGED)
+            Dispatcher.BeginInvoke(new Action(SetBarPos), DispatcherPriority.Background);
+        return IntPtr.Zero;
+    }
+
+    private static APPBARDATA NewData(IntPtr hwnd) => new() { cbSize = Marshal.SizeOf<APPBARDATA>(), hWnd = hwnd };
+
+    private const int ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABE_LEFT = 0, ABE_RIGHT = 2, ABN_POSCHANGED = 1;
+
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct APPBARDATA { public int cbSize; public IntPtr hWnd; public int uCallbackMessage; public int uEdge; public RECT rc; public IntPtr lParam; }
+    [StructLayout(LayoutKind.Sequential)] private struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public int dwFlags; }
+
+    [DllImport("shell32.dll")] private static extern IntPtr SHAppBarMessage(int dwMessage, ref APPBARDATA pData);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int RegisterWindowMessage(string msg);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, int flags);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO info);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, int flags);
 
     private Point _down;
     private OverlayTask? _pressed;

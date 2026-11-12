@@ -953,6 +953,8 @@ public class AppSettings
     public double TaskWindowWidth { get; set; } = 340;
     public double TaskWindowHeight { get; set; } = 620;
     public bool TaskWindowOnTop { get; set; } = true;
+    /// <summary>The task window docked to a screen edge ("left" or "right"; empty: not docked). Docked, it reserves that strip of the screen.</summary>
+    public string TaskWindowDock { get; set; } = "";
     /// <summary>Tasks page: the side bar stays open (pinned), or collapses to a strip that opens when you point at it.</summary>
     public bool TasksSidePinned { get; set; } = true;
     /// <summary>Pomodoro: how many focus sessions (1 = a single quick focus), or keep going until you stop.</summary>

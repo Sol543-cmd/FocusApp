@@ -3,6 +3,14 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.23
+
+- The task window can dock to the left or right side of a screen (the new button beside the pin). Docked, it reserves
+  that strip like the taskbar does: maximized and snapped windows use the space that's left instead of covering it.
+  Drag its inner edge to make it wider or narrower. Focus remembers it and docks it again when you open the task window;
+  Undock gives the space back (so does closing it or quitting Focus).
+- Tasks in the task window have a little more room.
+
 ## 1.7.22
 
 - Flashcards: ✕ again, ✓ know it and ✓✓ know it well work whichever side is showing, so you can pass a card you know
