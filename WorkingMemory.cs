@@ -44,7 +44,7 @@ public class WorkingMemoryBox : Border
         BorderThickness = new Thickness(1);
         SetResourceReference(BackgroundProperty, "Panel");
         SetResourceReference(BorderBrushProperty, "Line");
-        _box.SetResourceReference(ForegroundProperty, "Text");
+        _box.SetResourceReference(Control.ForegroundProperty, "Text");
         _box.SetResourceReference(TextBoxBase.CaretBrushProperty, "Text");
         _box.Document.PagePadding = new Thickness(0);
         _box.Document.FontFamily = new FontFamily("Segoe UI");
