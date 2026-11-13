@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.25
+
+- Outline: your outline is numbered and lettered (I., A., B.) as you build it. Check shows the original outline beside
+  yours, and each misplaced tile gets a badge saying where it belongs (like II.B). Next opens once your outline matches.
+  Only the first check counts for review.
+- Lesson timeline: type the year beside each event and press Enter. The card appears on the timeline and the next box
+  is ready (4 BC, -4, 30 and AD 30 all work).
+- Timeline practice is now matching, like Greek words: a few events, their dates and a couple of extra dates. Each pair
+  drops onto the timeline. Check (or Enter) marks wrong pairs without giving the answer; pair those again. Right ones
+  stay on the timeline all round. A date missed three times is shown. Keys: 1–6 for events, A–I for dates.
+- Timeline practice modes: Review (the usual: everything you've learned, rustiest most often) and Practice (an era or
+  span of years). Training settings: events at a time and extra dates.
+
 ## 1.7.24
 
 - List, Undated and Tomorrow each get the Default / Ordered / By project caret, like Today, remembered separately. The

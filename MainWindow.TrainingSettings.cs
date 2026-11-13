@@ -282,6 +282,8 @@ public partial class MainWindow
         page.Children.Add(SetRow("Books practice", "Questions a round", NumberField(cfg.BooksPracticeCount, 3, 40, n => { cfg.BooksPracticeCount = n; Course.SaveConfig(); })));
         page.Children.Add(SetRow("Book flashcards", "Cards a round", NumberField(cfg.FlashcardsCount, 3, 60, n => { cfg.FlashcardsCount = n; Course.SaveConfig(); })));
         page.Children.Add(SetRow("Timeline", "Events a round", NumberField(cfg.TimelineCount, 3, 15, n => { cfg.TimelineCount = n; Course.SaveConfig(); })));
+        page.Children.Add(SetRow("Timeline matching", "Events at a time (each round matches them a few at a time)", NumberField(Math.Clamp(cfg.TimelineMatchCount, 3, 6), 3, 6, n => { cfg.TimelineMatchCount = n; Course.SaveConfig(); })));
+        page.Children.Add(SetRow("Timeline extra dates", "Dates that belong to none of the events, to make it harder", NumberField(Math.Clamp(cfg.TimelineExtraDates, 0, 3), 0, 3, n => { cfg.TimelineExtraDates = n; Course.SaveConfig(); })));
         page.Children.Add(SetRow("Greek words", "Words a round", NumberField(Math.Clamp(_settings.VocabWords, 3, 10), 3, 10, n => { _settings.VocabWords = n; SaveSettingsQuietly(); RefillGreek(); })));
         page.Children.Add(SetRow("Greek alphabet", "Letters a round", NumberField(Math.Clamp(_settings.AlphaLetters, 3, 10), 3, 10, n => { _settings.AlphaLetters = n; SaveSettingsQuietly(); RefillGreek(); })));
 

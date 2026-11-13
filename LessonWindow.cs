@@ -1902,6 +1902,10 @@ public partial class LessonWindow : Window
 
         // Tiles: (text, section or -1 for a decoy, position in its section; -1 for a heading).
         var tiles = new List<Border>();
+        var codes = new Dictionary<Border, TextBlock>();
+        var badges = new Dictionary<Border, (Border Box, TextBlock Text)>();
+        static string Roman(int n) => n switch { 1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V", 6 => "VI", 7 => "VII", 8 => "VIII", 9 => "IX", 10 => "X", 11 => "XI", 12 => "XII", _ => n.ToString() };
+        static string Letter(int n) => n < 26 ? ((char)('A' + n)).ToString() : (n + 1).ToString();
         Border Tile(string text, int section, int pos)
         {
             var t = new Border { Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 6, 6), CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(pos < 0 ? 3 : 1, 1, 1, 1),
@@ -1911,7 +1915,19 @@ public partial class LessonWindow : Window
             if (pos < 0 && section < 0) t.SetResourceReference(Border.BorderBrushProperty, "Line");
             var tb = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 14, FontWeight = pos < 0 && section >= 0 ? FontWeights.SemiBold : FontWeights.Normal };
             tb.SetResourceReference(TextBlock.ForegroundProperty, "Text");
-            t.Child = tb;
+            // Its number or letter in your outline (I., A.), and after Check a badge with where it belongs.
+            var code = new TextBlock { FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 6, 0), Visibility = Visibility.Collapsed };
+            code.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            var badgeText = new TextBlock { FontSize = 11.5, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
+            var badge = new Border { Child = badgeText, CornerRadius = new CornerRadius(9), Padding = new Thickness(7, 1, 7, 2), HorizontalAlignment = HorizontalAlignment.Right,
+                                     VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -16, -18, 0), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
+            var line = new DockPanel();
+            DockPanel.SetDock(code, Dock.Left);
+            line.Children.Add(code); line.Children.Add(tb);
+            var layers = new Grid();
+            layers.Children.Add(line); layers.Children.Add(badge);
+            t.Child = layers;
+            codes[t] = code; badges[t] = (badge, badgeText);
             Point? down = null;
             t.PreviewMouseLeftButtonDown += (_, e) => down = e.GetPosition(t);
             t.PreviewMouseLeftButtonUp += (_, _) => down = null;
@@ -1939,7 +1955,15 @@ public partial class LessonWindow : Window
         var outline = new StackPanel();
         var heads = new List<Border>();
         var ideaLists = new List<StackPanel>();
-        void Detach(Border t) { if (t.Parent is Panel p) p.Children.Remove(t); else if (t.Parent is Border b) b.Child = null; }
+        void Detach(Border t)
+        {
+            if (t.Parent is Panel p) p.Children.Remove(t); else if (t.Parent is Border b) b.Child = null;
+            // Moved: its old mark no longer applies.
+            badges[t].Box.Visibility = Visibility.Collapsed;
+            t.BorderThickness = new Thickness(IsHeading(t) ? 3 : 1, 1, 1, 1);
+            t.SetResourceReference(Border.BorderBrushProperty, IsHeading(t) ? "FocusBrush" : "Line");
+            Dispatcher.BeginInvoke(new Action(Renumber));
+        }
         bool IsHeading(Border t) => t.Tag is ValueTuple<int, int, string> v && v.Item2 < 0 && v.Item1 >= 0;
         for (int i = 0; i < sections.Count; i++)
         {
@@ -1976,6 +2000,17 @@ public partial class LessonWindow : Window
             e.Handled = true;
         }
         bank.Drop += (_, e) => { if (e.Data.GetData("focus-outline") is Border t) { Detach(t); bank.Children.Add(t); e.Handled = true; } };
+        void Renumber()
+        {
+            foreach (var c in codes.Values) c.Visibility = Visibility.Collapsed;
+            for (int i = 0; i < sections.Count; i++)
+            {
+                if (heads[i].Child is Border h && codes.TryGetValue(h, out var hc)) { hc.Text = Roman(i + 1) + "."; hc.Visibility = Visibility.Visible; }
+                int k = 0;
+                foreach (var t in ideaLists[i].Children.OfType<Border>())
+                    if (codes.TryGetValue(t, out var c)) { c.Text = Letter(k++) + "."; c.Visibility = Visibility.Visible; }
+            }
+        }
 
         var grid = new Grid { Margin = new Thickness(0, 16, 0, 0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -1994,7 +2029,24 @@ public partial class LessonWindow : Window
         }
         var bankBox = Box("BANK", bank); bankBox.AllowDrop = true;
         bankBox.Drop += (_, e) => { if (e.Data.GetData("focus-outline") is Border t) { Detach(t); bank.Children.Add(t); e.Handled = true; } };
-        grid.Children.Add(bankBox);
+        // The original outline, shown under the bank after the first Check (beside your outline).
+        var original = new StackPanel();
+        for (int i = 0; i < sections.Count; i++)
+        {
+            original.Children.Add(Text($"{Roman(i + 1)}. {sections[i].Heading}", 14, bold: true, top: i == 0 ? 0 : 8));
+            for (int j = 0; j < sections[i].Ideas.Count; j++)
+            {
+                var idea = Text($"{Letter(j)}. {sections[i].Ideas[j]}", 14, top: 3);
+                idea.Margin = new Thickness(22, 3, 0, 0);
+                original.Children.Add(idea);
+            }
+        }
+        var originalBox = Box("ORIGINAL OUTLINE", original);
+        originalBox.Margin = new Thickness(0, 16, 0, 0);
+        originalBox.Visibility = Visibility.Collapsed;
+        var left = new StackPanel();
+        left.Children.Add(bankBox); left.Children.Add(originalBox);
+        grid.Children.Add(left);
         var outBox = Box("YOUR OUTLINE", outline); Grid.SetColumn(outBox, 2);
         grid.Children.Add(outBox);
         _page.Children.Add(grid);
@@ -2002,44 +2054,71 @@ public partial class LessonWindow : Window
         var result = Text("", 15, top: 12);
         var buttons = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
         bool checkedOnce = false;
+        Button? next = null;
         var check = Primary("Check", () => { });
         check.Click += (_, _) =>
         {
             int headsOk = 0, under = 0, inOrder = 0, total = sections.Sum(x => x.Ideas.Count);
-            void Mark(Border t, string brush) { t.SetResourceReference(Border.BorderBrushProperty, brush); t.BorderThickness = new Thickness(2); }
+            bool perfect = true;
+            void Mark(Border t, string brush, string? where)
+            {
+                t.SetResourceReference(Border.BorderBrushProperty, brush); t.BorderThickness = new Thickness(2);
+                var (box, label) = badges[t];
+                box.Visibility = where == null ? Visibility.Collapsed : Visibility.Visible;
+                if (where != null) { label.Text = where; box.SetResourceReference(Border.BackgroundProperty, brush); }
+            }
+            string Where((int Sec, int Pos, string Text) v) => v.Sec < 0 ? "not in lesson" : v.Pos < 0 ? Roman(v.Sec + 1) : $"{Roman(v.Sec + 1)}.{Letter(v.Pos)}";
             for (int i = 0; i < sections.Count; i++)
             {
                 int sec = -1;
                 if (heads[i].Child is Border h && h.Tag is ValueTuple<int, int, string> hv)
                 {
                     sec = hv.Item1;
-                    if (hv.Item1 == i) { headsOk++; Mark(h, "FocusBrush"); } else Mark(h, "PriorityHigh");
+                    if (hv.Item1 == i) { headsOk++; Mark(h, "FocusBrush", null); } else { Mark(h, "PriorityHigh", Where(hv)); perfect = false; }
                 }
-                int last = -1;
+                else perfect = false;
+                int last = -1, k = 0;
                 foreach (var t in ideaLists[i].Children.OfType<Border>())
                 {
-                    if (t.Tag is not ValueTuple<int, int, string> v || v.Item1 < 0 || v.Item1 != sec) { Mark(t, "PriorityHigh"); continue; }
+                    if (t.Tag is not ValueTuple<int, int, string> v) continue;
+                    int at = k++;
+                    if (v.Item1 < 0 || v.Item1 != i) { Mark(t, "PriorityHigh", Where(v)); perfect = false; continue; }
                     under++;
-                    if (v.Item2 > last) { inOrder++; Mark(t, "FocusBrush"); } else Mark(t, "BreakBrush");
+                    if (v.Item2 > last) inOrder++;
                     last = Math.Max(last, v.Item2);
+                    if (v.Item2 == at) Mark(t, "FocusBrush", null);
+                    else { Mark(t, "BreakBrush", Where(v)); perfect = false; }
                 }
+                if (k != sections[i].Ideas.Count) perfect = false;
             }
-            foreach (var t in bank.Children.OfType<Border>()) if (t.Tag is ValueTuple<int, int, string> v && v.Item1 < 0) Mark(t, "FocusBrush");
+            foreach (var t in bank.Children.OfType<Border>())
+                if (t.Tag is ValueTuple<int, int, string> v)
+                {
+                    if (v.Item1 < 0) Mark(t, "FocusBrush", null);
+                    else { Mark(t, "PriorityHigh", Where(v)); perfect = false; }
+                }
             int score = (int)Math.Round(100.0 * (headsOk + under + inOrder) / Math.Max(1, sections.Count + 2 * total));
-            result.Text = $"Headings in order {headsOk} of {sections.Count} · ideas under the right heading {under} of {total} · in order {inOrder} of {total}  ({score}%)";
+            result.Text = perfect ? $"It matches the original.{(checkedOnce ? "" : $"  ({score}%)")}"
+                                  : $"Headings in place {headsOk} of {sections.Count} · ideas under the right heading {under} of {total} · in order {inOrder} of {total}  ({score}%). Move the marked tiles to where their badges say, then check again.";
+            originalBox.Visibility = Visibility.Visible;
             if (!checkedOnce)
             {
                 checkedOnce = true;
                 // The first check counts for the review schedule.
                 Course.Add(new TrainingEvent { Kind = "outline", Lesson = lesson.Index, Grade = score, Correct = score >= 70, Note = lesson.Lesson.Title });
                 check.Content = "Check again";
-                buttons.Children.Add(Primary(review ? "Continue" : "Next", () => { _page.MaxWidth = 760; MarkDone("outline"); Next(); }));
+                next = Primary(review ? "Continue" : "Next", () => { _page.MaxWidth = 760; MarkDone("outline"); Next(); });
+                next.Margin = new Thickness(10, 0, 0, 0);
+                buttons.Children.Add(next);
             }
+            // Next only once your outline matches the original.
+            next!.IsEnabled = perfect;
+            next.ToolTip = perfect ? null : "Make your outline match the original first";
         };
         buttons.Children.Add(check);
         _page.Children.Add(buttons);
         _page.Children.Add(result);
-        _page.Children.Add(Text("Green: right place · amber: right heading, out of order · red: wrong. Click a tile after checking to see it in the book.", 12.5, brush: "Muted", top: 6));
+        _page.Children.Add(Text("Teal: right place · amber: right heading, wrong order · red: wrong place. A badge shows where a tile belongs. Click a tile after checking to see it in the book.", 12.5, brush: "Muted", top: 6));
         // After checking, a click on a tile shows where it is in the book (by its words).
         foreach (var t in tiles)
             t.MouseLeftButtonUp += (_, _) =>

@@ -276,8 +276,8 @@ public partial class MainWindow
             int max = Math.Clamp(Course.Config.TimelineCount, 3, 15);
             var today = Course.BooksFor(DateTime.Today).Select(c => c.Id).Distinct().ToList();
             var books = review || today.Count == 0 ? Course.Config.Courses.Select(c => c.Id).ToList() : today;
-            var events = review ? Course.TimelineReview(books, from, to, max) : Course.TimelineLearn(books, max);
-            if (!review && events.Count < 2 && today.Count > 0) events = Course.TimelineLearn(Course.Config.Courses.Select(c => c.Id), max);
+            // Review (the usual round): everything you've learned, rustiest most often. Practice (review: true here): an era or span.
+            var events = review ? Course.TimelineReview(books, from, to, max) : Course.TimelineRustiest(Course.Config.Courses.Select(c => c.Id), max);
             if (events.Count < 2)
             {
                 if (quiet) return;
@@ -317,8 +317,8 @@ public partial class MainWindow
         }
         var learned = Course.LearnedEvents(Course.Config.Courses.Select(c => c.Id));
         var eras = Course.Eras.Where(x => learned.Any(l => l.E.Year >= x.From && l.E.Year <= x.To)).ToList();
-        bar.Children.Add(Mode("Learn", !review, () => Restart(false, 0, 0, "")));
-        bar.Children.Add(Mode("Review", review, () =>
+        bar.Children.Add(Mode("Review", !review, () => Restart(false, 0, 0, "")));
+        bar.Children.Add(Mode("Practice", review, () =>
         {
             var first = eras.Count > 0 ? eras[^1] : ("Everything", -9999, 9999);
             Restart(true, first.Item2, first.Item3, first.Item1);

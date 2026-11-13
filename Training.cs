@@ -562,6 +562,9 @@ public class CourseConfig
     public List<string> TimelineTimes { get; set; } = new() { "16:30" };
     public bool TimelineOn { get; set; } = true;
     public int TimelineCount { get; set; } = 8;
+    /// <summary>Timeline practice: events matched at a time, and extra dates that belong to none of them.</summary>
+    public int TimelineMatchCount { get; set; } = 4;
+    public int TimelineExtraDates { get; set; } = 2;
     /// <summary>Round sizes (Training settings, Practice): questions in a Books practice round, cards in a Book flashcards round.</summary>
     public int BooksPracticeCount { get; set; } = 12;
     public int FlashcardsCount { get; set; } = 20;
@@ -1240,6 +1243,23 @@ public static class Course
         var due = states.Where(x => x.st.Seen > 0 && x.st.Due <= DateTime.Now).OrderBy(x => x.st.Due).Select(x => x.x);
         var fresh = states.Where(x => x.st.Seen == 0 && all.Where(y => y.Book == x.x.Book).Select(y => y.Order).DefaultIfEmpty(0).Max() - x.x.Order < 2).Select(x => x.x);
         return due.Concat(fresh).Distinct().Take(max).Select(x => (x.Lesson, x.E)).ToList();
+    }
+
+    /// <summary>
+    /// The usual timeline round: every event you've learned (in the books given), the rustiest most often: what's due first
+    /// (longest overdue first), then ones you've never matched, then the rest by when they fall due, shuffled a little so
+    /// rounds vary. Learned events (four exact in a row) still come up, just later.
+    /// </summary>
+    public static List<(LessonRef Lesson, PackEvent E)> TimelineRustiest(IEnumerable<string> bookIds, int max)
+    {
+        var rnd = new Random();
+        var now = DateTime.Now;
+        return LearnedEvents(bookIds)
+            .Select(x => (x, st: TimelineStateOf(x.Book, x.E)))
+            .Select(x => (x.x, key: x.st.Seen == 0 ? -1e6 + rnd.NextDouble()
+                                  : x.st.Due <= now && !x.st.Graduated ? -1e7 + (x.st.Due - DateTime.MinValue).TotalDays / 1e6
+                                  : (x.st.Due - now).TotalDays * (0.6 + rnd.NextDouble() * 0.8) + (x.st.Graduated ? 30 : 0)))
+            .OrderBy(x => x.key).Take(max).Select(x => (x.x.Lesson, x.x.E)).ToList();
     }
 
     /// <summary>Eras to review by (only ones holding an event you've learned are offered).</summary>
