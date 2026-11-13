@@ -3,6 +3,11 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.26
+
+- Timeline practice: BCE dates pair again. Picking an event and then a BCE date did nothing (only AD dates worked); now
+  every pair drops onto the timeline as soon as you pick the date.
+
 ## 1.7.25
 
 - Outline: your outline is numbered and lettered (I., A., B.) as you build it. Check shows the original outline beside

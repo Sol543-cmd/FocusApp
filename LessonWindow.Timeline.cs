@@ -310,7 +310,8 @@ public partial class LessonWindow
         var pairs = new Dictionary<int, int>();     // event → year, paired but not checked
         var misses = new Dictionary<int, int>();
         var recorded = new HashSet<int>();
-        int setNo = 0, pickedEvent = -1, pickedDate = -1;
+        int setNo = 0, pickedEvent = -1;
+        int? pickedDate = null; // a year (BCE years are negative, so no -1 for "none")
 
         var head = Text("", 13, brush: "Muted");
         var evPanel = new StackPanel();
@@ -359,10 +360,10 @@ public partial class LessonWindow
 
         void Pair()
         {
-            if (pickedEvent < 0 || pickedDate < 0) return;
-            pairs[pickedEvent] = pickedDate;
+            if (pickedEvent < 0 || pickedDate is not int year) return;
+            pairs[pickedEvent] = year;
             wrongAt.Remove(pickedEvent);
-            pickedEvent = -1; pickedDate = -1;
+            pickedEvent = -1; pickedDate = null;
             Refresh();
         }
         void PickEvent(int i)
@@ -375,7 +376,7 @@ public partial class LessonWindow
         void PickDate(int y)
         {
             if (Room(y) <= 0) return;
-            pickedDate = pickedDate == y ? -1 : y;
+            pickedDate = pickedDate == y ? null : y;
             Pair(); Refresh();
         }
 
