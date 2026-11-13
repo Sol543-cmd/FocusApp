@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.28
+
+- Day review: Tomorrow (Monday on Fridays) and "Pick a day" now really move the task: it's due that day, so it stops
+  looking overdue. Back to the list clears an overdue date.
+- Every way of putting a task on a day works the same: the Today / Tomorrow tags, the bulk buttons, the right-click
+  menu and the day review.
+
+## 1.7.27
+
+- On Fridays, "Tomorrow" for tasks means Monday: the Tomorrow tab, the Tomorrow tag on each task, the due and snooze
+  buttons, the bulk button, the right-click menu, the task window and the day review all say "Monday" and plan for
+  Monday. Every other day it's still Tomorrow.
+
 ## 1.7.26
 
 - Timeline practice: BCE dates pair again. Picking an event and then a BCE date did nothing (only AD dates worked); now

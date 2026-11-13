@@ -160,7 +160,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBox x:Name="TaskDueBox" Width="140" ToolTip="Like 10/14, Friday, or tomorrow. Leave empty for no due date."/>
                         <Button Content="Today" Style="{StaticResource LinkButton}" Click="TaskDueToday_Click" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        <Button Content="Tomorrow" Style="{StaticResource LinkButton}" Click="TaskDueTomorrow_Click" VerticalAlignment="Center"/>
+                        <Button Content="{DynamicResource NextDayName}" Style="{StaticResource LinkButton}" Click="TaskDueTomorrow_Click" VerticalAlignment="Center"/>
                         <Button Content="None" Style="{StaticResource LinkButton}" Click="TaskDueNone_Click" VerticalAlignment="Center"/>
                     </StackPanel>
                     <TextBlock Text="How long will it take? (optional, in focus sessions)" Style="{StaticResource Caption}" Margin="0,12,0,4"/>
@@ -217,7 +217,7 @@
                         <TextBlock Text="Snooze (hide from the bin until a day)" Style="{StaticResource Caption}" Margin="0,12,0,4"/>
                         <StackPanel Orientation="Horizontal">
                             <TextBox x:Name="TaskSnoozeBox" Width="140" ToolTip="Like: monday, next week, 10/20. Empty: not snoozed."/>
-                            <Button Content="Tomorrow" Style="{StaticResource LinkButton}" Click="SnoozeTomorrow_Click" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <Button Content="{DynamicResource NextDayName}" Style="{StaticResource LinkButton}" Click="SnoozeTomorrow_Click" Margin="8,0,0,0" VerticalAlignment="Center"/>
                             <Button Content="Next week" Style="{StaticResource LinkButton}" Click="SnoozeNextWeek_Click" VerticalAlignment="Center"/>
                             <Button Content="None" Style="{StaticResource LinkButton}" Click="SnoozeNone_Click" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -1130,7 +1130,7 @@
                                 <RadioButton x:Name="BinTodayView" Content="Today" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks picked for today, due today, or overdue"/>
                                 <Button x:Name="TodayViewBtn" Content="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Style="{StaticResource IconButton}" Padding="4,6" Margin="-4,0,4,0"
                                         VerticalAlignment="Center" Click="TodayViewBtn_Click" ToolTip="How Today is listed: Default, Ordered or By project"/>
-                                <RadioButton x:Name="BinTomorrowView" Content="Tomorrow" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks picked for tomorrow, due tomorrow, or snoozed until tomorrow"/>
+                                <RadioButton x:Name="BinTomorrowView" Content="Tomorrow" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked" ToolTip="Tasks picked for tomorrow, due tomorrow, or snoozed until tomorrow (on Fridays: Monday)"/>
                                 <RadioButton x:Name="BinUpcomingView" Content="Upcoming" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
                                 <RadioButton x:Name="BinBoardView" Content="Board" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
                                 <RadioButton x:Name="BinDoneView" Content="Resolved" GroupName="binview" Style="{StaticResource NavButton}" Checked="BinView_Checked"/>
@@ -1147,7 +1147,7 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Content="Finish" Click="BulkFinish_Click" Style="{StaticResource LinkButton}"/>
                                     <Button Content="Today" Click="BulkToday_Click" Style="{StaticResource LinkButton}"/>
-                                    <Button Content="Tomorrow" Click="BulkTomorrow_Click" Style="{StaticResource LinkButton}"/>
+                                    <Button Content="{DynamicResource NextDayName}" Click="BulkTomorrow_Click" Style="{StaticResource LinkButton}"/>
                                     <Button Content="Project ▾" Click="BulkProject_Click" Style="{StaticResource LinkButton}"/>
                                     <Button Content="Delete" Click="BulkDelete_Click" Style="{StaticResource LinkButton}"/>
                                     <Button Content="Clear" Click="BulkClear_Click" Style="{StaticResource LinkButton}"/>
@@ -1176,7 +1176,7 @@
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                 <StackPanel x:Name="DayBtns" Orientation="Horizontal" Margin="6,0,4,0">
                                                     <Button x:Name="AddTodayBtn" Content="Today" Style="{StaticResource DayTag}" Click="AddToToday_Click" ToolTip="Add to today"/>
-                                                    <Button x:Name="AddTomorrowBtn" Content="Tomorrow" Style="{StaticResource DayTag}" Click="AddToTomorrow_Click" ToolTip="Add to tomorrow"/>
+                                                    <Button x:Name="AddTomorrowBtn" Content="{DynamicResource NextDayName}" Style="{StaticResource DayTag}" Click="AddToTomorrow_Click" ToolTip="{DynamicResource NextDayTip}"/>
                                                 </StackPanel>
                                             </StackPanel>
                                             <StackPanel Background="Transparent" Cursor="Hand" MouseLeftButtonUp="BinTaskText_Click" ToolTip="Click to edit. Double-click to rename. Right-click for more.">

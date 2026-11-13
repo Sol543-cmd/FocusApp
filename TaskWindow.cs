@@ -241,8 +241,9 @@ public class TaskWindow : Window
     private void ViewMenu(FrameworkElement target)
     {
         var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
-        foreach (var (key, name) in Views)
+        foreach (var (key, label) in Views)
         {
+            string name = key == "tomorrow" ? NextDay.Name : label;
             var item = new MenuItem { Header = name, IsCheckable = true, IsChecked = _settings.TaskWindowView == key };
             item.Click += (_, _) => { _settings.TaskWindowView = key; _save(); _shown = ""; Refresh(); };
             menu.Items.Add(item);
@@ -278,7 +279,7 @@ public class TaskWindow : Window
     {
         string view = _settings.TaskWindowView;
         // Default shows just the list's name; otherwise its view, as set in Tasks ("List · By project").
-        string title = view switch { "session" => "Session", "list" => "List", "undated" => "Undated", "tomorrow" => "Tomorrow", _ => "Today" };
+        string title = view switch { "session" => "Session", "list" => "List", "undated" => "Undated", "tomorrow" => NextDay.Name, _ => "Today" };
         string mode = view == "session" ? "default" : _listMode(view);
         if (mode != "default") title += mode == "ordered" ? " · Ordered" : " · By project";
         _viewText.Text = title;

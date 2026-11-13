@@ -70,6 +70,7 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        NextDay.Refresh(); // "Tomorrow" or, on Fridays, "Monday", for the task tags
         InitializeComponent();
         Application.Current.MainWindow = this;
 
@@ -129,7 +130,7 @@ public partial class MainWindow : Window
         MigrateOldPlan();
         LoadPlanForDate(DateTime.Today);
 
-        _clockTimer.Tick += (_, _) => FollowClock();
+        _clockTimer.Tick += (_, _) => { FollowClock(); if (NextDay.Refresh()) { PaintListTabs(); RefreshTasksTab(); RefreshDashTasks(); } };
         _clockTimer.Start();
 
         FillSettingFields();

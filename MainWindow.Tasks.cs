@@ -307,7 +307,7 @@ public partial class MainWindow
     /// <summary>For the Tomorrow tab: picked for tomorrow, due tomorrow, or snoozed until tomorrow.</summary>
     private static bool IsForTomorrow(BinTask t)
     {
-        var tomorrow = DateTime.Today.AddDays(1);
+        var tomorrow = NextDay.Date; // Monday on a Friday
         return t.PlannedDate == tomorrow || t.Due?.Date == tomorrow || t.SnoozedUntil?.Date == tomorrow;
     }
 
@@ -643,7 +643,7 @@ public partial class MainWindow
         // Added on the Tomorrow tab: it's for tomorrow (unless you gave it a day yourself).
         if ((BinTomorrowView.IsChecked == true || BinTodayView.IsChecked == true) && TaskBin.All.LastOrDefault() is BinTask added && added.PlannedFor.Length == 0 && added.Due == null)
         {
-            added.PlannedFor = DateTime.Today.AddDays(BinTodayView.IsChecked == true ? 0 : 1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            added.PlannedFor = (BinTodayView.IsChecked == true ? DateTime.Today : NextDay.Date).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             TaskBin.Save();
             RefreshTasksTab();
         }
@@ -810,7 +810,7 @@ public partial class MainWindow
     }
 
     private void AddToToday_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today);
-    private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today.AddDays(1));
+    private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, NextDay.Date);
 
     /// <summary>
     /// The Today and Tomorrow buttons on a task row: set the task's date to that day, exactly as picking it in the date
@@ -820,13 +820,25 @@ public partial class MainWindow
     {
         if ((sender as FrameworkElement)?.DataContext is not BinTask task) return;
         PushUndo();
+        SetDay(task, day);
+        TaskBin.Save();
+        RefreshTasksTab();
+        _toast.ShowMessage(day == DateTime.Today ? "Added to today" : $"Added to {DayWord(day)}", task.Text, "Undo", Undo);
+    }
+
+    /// <summary>
+    /// Puts a task on a day, the one way everything does it (the Today / Tomorrow tags, the bulk buttons, the right-click
+    /// menu and the day review): it's due that day, so it's no longer overdue and shows in that day's list.
+    /// </summary>
+    private static void SetDay(BinTask task, DateTime day)
+    {
         task.Due = day.Date;
         task.PlannedFor = "";
         task.SnoozedUntil = null;
-        TaskBin.Save();
-        RefreshTasksTab();
-        _toast.ShowMessage(day == DateTime.Today ? "Added to today" : "Added to tomorrow", task.Text, "Undo", Undo);
     }
+
+    private static string DayWord(DateTime day) =>
+        day.Date == DateTime.Today ? "today" : day.Date == NextDay.Date ? (NextDay.Name == "Monday" ? "Monday" : "tomorrow") : day.ToString("ddd MMM d");
 
     private void ReopenDoneTask_Click(object sender, RoutedEventArgs e)
     {
@@ -915,7 +927,7 @@ public partial class MainWindow
     }
 
     private void TaskDueToday_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = DateTime.Today.ToString("d");
-    private void TaskDueTomorrow_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = DateTime.Today.AddDays(1).ToString("d");
+    private void TaskDueTomorrow_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = NextDay.Date.ToString("d");
     private void TaskDueNone_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = "";
 
     private void TaskPopupSave_Click(object sender, RoutedEventArgs e)
@@ -1080,7 +1092,7 @@ public partial class MainWindow
 
         // "Today" (or the day on screen): picked for it, due on it, already in its sessions, or overdue when it's today.
         bool dayOnly = PlanTasksDay.IsChecked == true, undatedOnly = PlanTasksUndated?.IsChecked == true;
-        PlanTasksDay.Content = _planDate == DateTime.Today ? "Today" : _planDate == DateTime.Today.AddDays(1) ? "Tomorrow" : _planDate.ToString("ddd MMM d");
+        PlanTasksDay.Content = _planDate == DateTime.Today ? "Today" : _planDate == DateTime.Today.AddDays(1) ? "Tomorrow" : _planDate == NextDay.Date ? NextDay.Name : _planDate.ToString("ddd MMM d");
         bool ForThisDay(BinTask t) =>
             t.PlannedDate == _planDate || t.Due == _planDate || counts.ContainsKey(t.Id) ||
             (_planDate == DateTime.Today && t.IsOverdue);

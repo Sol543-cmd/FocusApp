@@ -189,17 +189,17 @@ public partial class MainWindow
     }
 
     private void BulkToday_Click(object sender, RoutedEventArgs e) => BulkPlan(DateTime.Today);
-    private void BulkTomorrow_Click(object sender, RoutedEventArgs e) => BulkPlan(DateTime.Today.AddDays(1));
+    private void BulkTomorrow_Click(object sender, RoutedEventArgs e) => BulkPlan(NextDay.Date);
 
     private void BulkPlan(DateTime day)
     {
         var tasks = SelectedStillInList();
         if (tasks.Count == 0) return;
         PushUndo();
-        foreach (var t in tasks) { t.PlannedFor = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); t.SnoozedUntil = null; }
+        foreach (var t in tasks) SetDay(t, day);
         TaskBin.Save();
         RefreshTasksTab();
-        _toast.ShowMessage($"{tasks.Count} tasks moved to {(day == DateTime.Today ? "today" : "tomorrow")}", "", "Undo", Undo);
+        _toast.ShowMessage($"{tasks.Count} tasks moved to {DayWord(day)}", "", "Undo", Undo);
     }
 
     private void BulkProject_Click(object sender, RoutedEventArgs e)
@@ -403,11 +403,11 @@ public partial class MainWindow
         if (group.Count == 1) Add("Edit...", () => OpenBinTaskDetails((UIElement)sender, task));
         if (group.Count == 1) Add("Rename", () => StartRename(task, FindTitlePanel(sender as DependencyObject)));
         menu.Items.Add(new Separator());
-        Add("Do it today" + several, () => { foreach (var t in group) t.PlannedFor = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); SaveListChange(); });
-        Add("Do it tomorrow" + several, () => { foreach (var t in group) t.PlannedFor = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); SaveListChange(); });
+        Add("Do it today" + several, () => { foreach (var t in group) SetDay(t, DateTime.Today); SaveListChange(); });
+        Add((NextDay.Name == "Monday" ? "Do it Monday" : "Do it tomorrow") + several, () => { foreach (var t in group) SetDay(t, NextDay.Date); SaveListChange(); });
         if (_settings.On("upcoming"))
         {
-            Add("Snooze until tomorrow", () => { foreach (var t in group) t.SnoozedUntil = DateTime.Today.AddDays(1); SaveListChange(); });
+            Add(NextDay.Name == "Monday" ? "Snooze until Monday" : "Snooze until tomorrow", () => { foreach (var t in group) t.SnoozedUntil = NextDay.Date; SaveListChange(); });
             Add("Snooze until next week", () => { foreach (var t in group) t.SnoozedUntil = DateTime.Today.AddDays(7 - ((int)DateTime.Today.DayOfWeek + 6) % 7); SaveListChange(); });
         }
         if (_settings.On("projects") && Projects.All.Count > 0)
@@ -1001,7 +1001,7 @@ public partial class MainWindow
             list.Add(("This session", () => One(cur.Name, cur.Tasks.Where(x => x.Text.Trim().Length > 0)), null));
         list.Add(("Today's plan (day sheet)", TodaysPlanSheet, null));
         list.Add(("Today", () => One("Today", ListTasks().Where(t => t.IsPlannedToday || t.IsDueToday || t.IsOverdue)), null));
-        list.Add(("Tomorrow", () => ByDay(DateTime.Today.AddDays(1), DateTime.Today.AddDays(1)), null));
+        list.Add((NextDay.Name, () => ByDay(NextDay.Date, NextDay.Date), null));
         list.Add(("This week", () => ByDay(DateTime.Today, monday.AddDays(6)), null));
         list.Add(("Upcoming (two weeks)", () => ByDay(DateTime.Today, DateTime.Today.AddDays(13)), null));
         list.Add(("Overdue", () => One("Overdue", ListTasks().Where(t => t.IsOverdue)), null));
@@ -1035,7 +1035,7 @@ public partial class MainWindow
         if (BinUpcomingView.IsChecked == true)
             return ("Upcoming", () => (UpcomingList.ItemsSource as IEnumerable<UpcomingDay> ?? Enumerable.Empty<UpcomingDay>())
                 .Select(g => new ExportGroup { Header = g.Header, Items = g.Items.Select(ItemOf).ToList() }).Where(g => g.Items.Count > 0).ToList());
-        string label = BinUndatedView.IsChecked == true ? "Undated" : BinTodayView.IsChecked == true ? "Today" : BinTomorrowView.IsChecked == true ? "Tomorrow" : _binFilter == "all" ? "All tasks" : "Filtered tasks";
+        string label = BinUndatedView.IsChecked == true ? "Undated" : BinTodayView.IsChecked == true ? "Today" : BinTomorrowView.IsChecked == true ? NextDay.Name : _binFilter == "all" ? "All tasks" : "Filtered tasks";
         return (label, () => new List<ExportGroup> { new() { Header = label, Items = VisibleBinTasks().Select(ItemOf).ToList() } });
     }
 

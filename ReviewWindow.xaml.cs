@@ -52,7 +52,7 @@ public partial class ReviewWindow : Window
             }
             var resolve = Option("Resolve", false);
             resolve.ToolTip = "Done today, just not ticked off: it goes to Resolved";
-            var tomorrow = Option("Tomorrow", true);
+            var tomorrow = Option(NextDay.Name, true);
             var day = Option("Another day", false);
             var dayBox = new TextBox { Width = 110, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = "Like: monday, next week, 10/20" };
             dayBox.GotFocus += (_, _) => day.IsChecked = true;

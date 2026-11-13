@@ -40,7 +40,7 @@ public partial class MainWindow
 
     private RadioButton? TabFor(string list) => list switch { "list" => BinTodoView, "undated" => BinUndatedView, "today" => BinTodayView, "tomorrow" => BinTomorrowView, _ => null };
 
-    private static string ListName(string list) => list switch { "list" => "List", "undated" => "Undated", "today" => "Today", "tomorrow" => "Tomorrow", _ => "" };
+    private static string ListName(string list) => list switch { "list" => "List", "undated" => "Undated", "today" => "Today", "tomorrow" => NextDay.Name, _ => "" };
 
     private void TodayViewBtn_Click(object sender, RoutedEventArgs e)
     {

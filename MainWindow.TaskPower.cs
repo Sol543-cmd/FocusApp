@@ -447,7 +447,7 @@ public partial class MainWindow
         if ((sender as FrameworkElement)?.DataContext is Subtask s) _editSubtasks.Remove(s);
     }
 
-    private void SnoozeTomorrow_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = DateTime.Today.AddDays(1).ToString("d");
+    private void SnoozeTomorrow_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = NextDay.Date.ToString("d");
     private void SnoozeNextWeek_Click(object sender, RoutedEventArgs e) =>
         TaskSnoozeBox.Text = DateTime.Today.AddDays(7 - ((int)DateTime.Today.DayOfWeek + 6) % 7).ToString("d");
     private void SnoozeNone_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = "";
@@ -534,9 +534,10 @@ public partial class MainWindow
 
             switch (choice.Where)
             {
-                case "tomorrow": binTask.PlannedFor = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); break;
-                case "day": binTask.PlannedFor = choice.Day!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); break;
-                case "bin": binTask.PlannedFor = ""; break;
+                // The same dating as everywhere else: due that day, so it stops looking overdue.
+                case "tomorrow": SetDay(binTask, NextDay.Date); break;
+                case "day": SetDay(binTask, choice.Day!.Value); break;
+                case "bin": binTask.PlannedFor = ""; if (binTask.IsOverdue) binTask.Due = null; break; // back on the list, undated
                 case "drop": TaskBin.All.Remove(binTask); RemoveLinkedCopies(binTask.Id); break;
                 case "resolve": FinishListTask(binTask, binTask.From, binTask.Spent); break; // done, just not ticked off
             }

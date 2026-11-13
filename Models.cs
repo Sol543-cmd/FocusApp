@@ -119,7 +119,7 @@ public abstract class TaskBase : INotifyPropertyChanged
     [JsonIgnore] public bool IsSetForToday => IsPlannedToday || IsDueToday;
     /// <summary>Set for tomorrow (picked or due), so the task row offers only Today.</summary>
     [JsonIgnore] public bool IsSetForTomorrow =>
-        PlannedFor == DateTime.Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) || (Due != null && Due.Value.Date == DateTime.Today.AddDays(1));
+        PlannedFor == NextDay.Key || (Due != null && Due.Value.Date == NextDay.Date);
     [JsonIgnore] public bool IsHigh => Priority == TaskPriority.High;
     [JsonIgnore] public bool IsLow => Priority == TaskPriority.Low;
 
