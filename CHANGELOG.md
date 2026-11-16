@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.31
+
+- Sync, faster and steadier:
+  - When OneDrive was busy writing a file, Focus skipped that update and never tried again, so the other computer's
+    changes (like tasks moved to Monday) could stay missing until something else changed. Now it retries every
+    10 seconds until it goes through, for reading and for saving.
+  - Your tasks reload first, and on their own: a problem with a block list or layout can't hold them up.
+  - Focus looks for changes every 20 seconds (was every minute), whenever you switch to it, and after the computer
+    wakes from sleep.
+  - The sync folder is set to "Always keep on this device" in OneDrive, so changes download as soon as they arrive.
+  - OneDrive conflict copies are tidied as soon as changes arrive (not every 5 minutes).
+  - Settings, Sync: shows when changes last arrived, and a Sync now button.
+
 ## 1.7.30
 
 - Meetings show as tasks everywhere: Today, Tomorrow and List in every view (Default, Ordered, By project) on the

@@ -28,6 +28,9 @@ public static class Sync
     private static readonly Dictionary<string, DateTime> Seen = new(StringComparer.OrdinalIgnoreCase);
 
     public static string? Folder { get; private set; }
+
+    /// <summary>When the other computer's changes last arrived here (for the status line in Settings).</summary>
+    public static DateTime? LastRemoteChange { get; private set; }
     public static bool IsOn => Folder != null;
 
     /// <summary>The other computer changed something in the sync folder.</summary>
@@ -86,6 +89,36 @@ public static class Sync
         Folder = folder;
         Storage.SetSharedFolder(folder);
         StartWatcher(folder);
+        KeepOnThisDevice(folder);
+    }
+
+    /// <summary>
+    /// Marks the sync folder "Always keep on this device" in OneDrive, so OneDrive downloads the other computer's
+    /// changes as soon as they arrive (instead of only when Focus asks for the file). Same as right-clicking the
+    /// folder in Explorer and choosing that option.
+    /// </summary>
+    private static void KeepOnThisDevice(string folder)
+    {
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("attrib", $"+P -U /S /D \"{folder}\"")
+                    { CreateNoWindow = true, UseShellExecute = false, WorkingDirectory = folder });
+                p?.WaitForExit(20000);
+                var q = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("attrib", $"+P -U \"{folder}\"")
+                    { CreateNoWindow = true, UseShellExecute = false });
+                q?.WaitForExit(5000);
+            }
+            catch (Exception ex) { Log.Error("Sync.KeepOnThisDevice", ex); }
+        });
+    }
+
+    /// <summary>Looks for the other computer's changes right now (when Focus comes to the front, after sleep, Sync now).</summary>
+    public static void CheckNow(bool force = false)
+    {
+        if (Folder == null) return;
+        if (CheckForChanges(remember: true) || force) Poke();
     }
 
     // ---------- Merging and copying ----------
@@ -195,7 +228,7 @@ public static class Sync
         CheckForChanges(remember: true);
         if (_poll == null)
         {
-            _poll = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+            _poll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) }; // quick: just compares file times
             _poll.Tick += (_, _) => { if (CheckForChanges(remember: true)) Poke(); };
         }
         _poll.Start();
@@ -276,10 +309,11 @@ public static class Sync
 
     private static DispatcherTimer CreateDebounce()
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
+            LastRemoteChange = DateTime.Now;
             try { RemoteChanged?.Invoke(); }
             catch (Exception ex) { Log.Error("Sync.RemoteChanged", ex); }
         };

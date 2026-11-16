@@ -14,6 +14,7 @@ public partial class MainWindow
     private void SetUpSync()
     {
         Sync.RemoteChanged += () => ReloadSharedData(force: false);
+        SetUpSyncTriggers();
         FillSyncSettings();
     }
 
@@ -22,6 +23,8 @@ public partial class MainWindow
         SyncStatusText.Text = Sync.IsOn
             ? $"Syncing through {Sync.Folder}"
             : "Not syncing. Your data is saved on this computer only.";
+        FillSyncStatus();
+        SyncNowBtn.IsEnabled = Sync.IsOn;
         SyncStopBtn.IsEnabled = Sync.IsOn;
         SyncOneDriveBtn.IsEnabled = Sync.SuggestedOneDriveFolder() != null;
     }
@@ -115,43 +118,112 @@ public partial class MainWindow
     /// <summary>Re-reads the shared files (after the other computer changed them, or sync was turned on or off).</summary>
     private void ReloadSharedData(bool force)
     {
+        if (_reloading) return; // a conflict copy being tidied reloads too: once is enough
+        _reloading = true;
         using var onWork = TaskStores.Use(TaskStores.Main); // background work always uses your work tasks (not Personal)
+        // Each part on its own, so one problem (a block list, a layout) can't stop your tasks from updating.
+        void Step(string name, Action a) { try { a(); } catch (Exception ex) { Log.Error("ReloadSharedData: " + name, ex); } }
         try
         {
-            string? editingId = _editingList?.Id;
-            BlockLists.Load();
-            AdoptSharedPlanDefaults();
-            AdoptSharedPracticeTimes();
-            _editingList = editingId != null ? BlockLists.Find(editingId) : null;
-            BlockLists_Changed();
+            // Your tasks first: they're what you most need to be current.
+            Step("conflicts", () => { if (!force) CheckSyncConflicts(); });
+            Step("projects", Projects.Reload);         // merges too: projects added on the other computer arrive
+            Step("finished", ResolvedTasks.Reload);    // merges, so nothing done here is lost
+            Step("tasks", TaskBin.Reload);
+            Step("personal", PersonalTasks.Reload);    // Personal's tasks, finished list and projects (including ones added on the phone)
+            Step("task views", () => { RefreshTasksTab(); UpdateTodayCapacity(); UpdateOverlayTasks(); });
 
-            _layouts.Clear();
-            foreach (var layout in Storage.Load<System.Collections.Generic.List<DayLayout>>("layouts.json").OrderBy(l => l.Name))
-                _layouts.Add(layout);
-
-            Projects.Reload();        // merges too: projects added on the other computer arrive
-            ResolvedTasks.Reload();   // merges, so nothing done here is lost
-            TaskBin.Reload();
-            PersonalTasks.Reload();   // Personal's tasks, finished list and projects (including ones added on the phone)
-            if (!VocabWindow.IsShowing) { Vocab.Save(); Alphabet.Instance.Save(); } // merge in the other computer's progress
-            RefreshTasksTab();
-            UpdateTodayCapacity();
-
-            if (force) _stats = null; // reload this computer's totals from the new place
-            else _stats = _stats != null ? FocusStatsReload(_stats) : null;
-
+            Step("block lists", () =>
+            {
+                string? editingId = _editingList?.Id;
+                BlockLists.Load();
+                _editingList = editingId != null ? BlockLists.Find(editingId) : null;
+                BlockLists_Changed();
+            });
+            Step("plan defaults", AdoptSharedPlanDefaults);
+            Step("practice times", AdoptSharedPracticeTimes);
+            Step("layouts", () =>
+            {
+                _layouts.Clear();
+                foreach (var layout in Storage.Load<System.Collections.Generic.List<DayLayout>>("layouts.json").OrderBy(l => l.Name))
+                    _layouts.Add(layout);
+            });
+            Step("vocab", () => { if (!VocabWindow.IsShowing) { Vocab.Save(); Alphabet.Instance.Save(); } }); // merge in the other computer's progress
+            Step("stats", () =>
+            {
+                if (force) _stats = null; // reload this computer's totals from the new place
+                else _stats = _stats != null ? FocusStatsReload(_stats) : null;
+            });
             // The plan on screen: reload if it changed elsewhere, unless you're editing it or it's running.
-            if (!ViewingRunningDay && !_planDirty && !BlockPopup.IsOpen && (force || PlanFileStamp(_planDate) != _planFileStamp))
-                LoadPlanForDate(_planDate);
-
-            UpdateDayHeader();
-            RefreshCalendarTab();
-            RefreshDashboard(full: true);
+            Step("plan", () =>
+            {
+                if (!ViewingRunningDay && !_planDirty && !BlockPopup.IsOpen && (force || PlanFileStamp(_planDate) != _planFileStamp))
+                    LoadPlanForDate(_planDate);
+            });
+            Step("screens", () => { UpdateDayHeader(); RefreshCalendarTab(); RefreshDashboard(full: true); });
         }
-        catch (Exception ex)
+        finally
         {
-            Log.Error("ReloadSharedData", ex);
+            _reloading = false;
+            // OneDrive was still writing a file: try again shortly rather than waiting for the next change.
+            if (SyncMerge.AnyWaiting) _syncRetry?.Start();
+            FillSyncStatus();
         }
+    }
+
+    private bool _reloading;
+    private System.Windows.Threading.DispatcherTimer? _syncRetry;
+    private DateTime _lastSyncCheck;
+
+    /// <summary>
+    /// Faster, steadier syncing: retries a save or reload that OneDrive was busy with (every 10 seconds until it
+    /// goes through), checks for the other computer's changes whenever Focus comes to the front and after the
+    /// computer wakes, and shows when changes last arrived.
+    /// </summary>
+    private void SetUpSyncTriggers()
+    {
+        _syncRetry = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _syncRetry.Tick += (_, _) =>
+        {
+            _syncRetry.Stop();
+            ReloadSharedData(force: false); // saves what waited, and reads what arrived
+        };
+        SyncMerge.RetryNeeded += () => Dispatcher.BeginInvoke(new Action(() => _syncRetry?.Start()));
+        Activated += (_, _) =>
+        {
+            if ((DateTime.Now - _lastSyncCheck).TotalSeconds < 15) return;
+            _lastSyncCheck = DateTime.Now;
+            Sync.CheckNow();
+        };
+        SystemEvents.PowerModeChanged += (_, e) =>
+        {
+            if (e.Mode != PowerModes.Resume) return;
+            // Just woke up: OneDrive needs a moment to reconnect and download. Look a few times.
+            Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                foreach (var wait in new[] { 10, 30, 90 })
+                {
+                    await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(wait));
+                    Sync.CheckNow(force: wait == 30);
+                }
+            }));
+        };
+    }
+
+    private void FillSyncStatus()
+    {
+        if (SyncStatusText == null || !Sync.IsOn) return;
+        string last = Sync.LastRemoteChange is DateTime t ? $" Last change from your other computer: {Ago(t)}." : "";
+        string waiting = SyncMerge.AnyWaiting ? " Waiting for OneDrive to finish with a file; trying again shortly." : "";
+        SyncStatusText.Text = $"Syncing through {Sync.Folder}.{last}{waiting}";
+    }
+
+    private void SyncNow_Click(object sender, RoutedEventArgs e)
+    {
+        SavePlanNow();
+        Sync.CheckNow(force: true);
+        ReloadSharedData(force: false);
+        _toast.ShowMessage("Synced", "Checked for changes from your other computer.");
     }
 
     /// <summary>Keeps this computer's unsaved minutes and picks up the other computer's totals.</summary>
