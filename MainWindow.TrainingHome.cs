@@ -260,14 +260,15 @@ public partial class MainWindow
             string id = c.Id;
             name.MouseLeftButtonUp += (_, _) => { if (id != Course.Current.Id) Course.Open(id); _trainingView = "book"; RefreshTraining(); };
             g.Children.Add(name);
-            double frac = o.Lessons.Count == 0 ? 0 : (double)o.Done.Count / Math.Max(o.Lessons.Count, 1);
+            double frac = o.BookRead; // how far through the book (as on the book's own page), not the share of imported lessons
             var bar = new Grid { Height = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 16, 0) };
             var track = new Border { CornerRadius = new CornerRadius(3) }; track.SetResourceReference(Border.BackgroundProperty, "Panel2");
             var fill = new Border { CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Background = BookBrush(c) };
             bar.Children.Add(track); bar.Children.Add(fill);
             bar.SizeChanged += (_, e) => fill.Width = e.NewSize.Width * Math.Clamp(frac, 0, 1);
             Grid.SetColumn(bar, 1); g.Children.Add(bar);
-            var prog = TT($"{o.Done.Count} of {o.Lessons.Count} lessons", 12.5, brush: "Muted");
+            var prog = TT($"{frac:P0} of the book", 12.5, brush: "Muted");
+            prog.ToolTip = $"{o.Done.Count} of {o.Lessons.Count} imported lessons done";
             prog.TextAlignment = TextAlignment.Right; prog.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(prog, 2); g.Children.Add(prog);
             var go = TButton("Go", () => StartLesson(required: false, bookId: id));

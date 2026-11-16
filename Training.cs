@@ -702,7 +702,22 @@ public static class Course
     /// <summary>How many of today's planned lessons are done.</summary>
     public static int DoneTodayCount() => DayLessons(DateTime.Today).Count(x => x.Done);
 
-    public record Outline(List<LessonRef> Lessons, HashSet<int> Done, int NextChapter, int? InProgress);
+    public record Outline(List<LessonRef> Lessons, HashSet<int> Done, int NextChapter, int? InProgress, double BookRead = 0);
+
+    /// <summary>
+    /// How far through the book you are (0 to 1): finished chapters plus the share of the current chapter's lessons, over
+    /// the book's chapters. For the open book (Packs are the open book's).
+    /// </summary>
+    public static double BookFraction(CourseInfo book, List<LessonRef> lessons, HashSet<int> done)
+    {
+        double fraction = 0;
+        foreach (var ch in Packs.Keys)
+        {
+            var mine = lessons.Where(l => l.Pack.Chapter == ch).ToList();
+            if (mine.Count > 0) fraction += mine.Count(l => done.Contains(l.Index)) / (double)mine.Count;
+        }
+        return Math.Clamp(fraction / Math.Max(1, book.Chapters), 0, 1);
+    }
     private static readonly Dictionary<string, (DateTime At, int Events, Outline O)> _outlines = new();
 
     /// <summary>A book's lessons, which are done and the chapter to import next (each book opened quietly; kept a minute).</summary>
@@ -718,7 +733,8 @@ public static class Course
             {
                 if (book.Id != Current.Id) { Current = book; LoadCurrent(raise: false); }
                 var next = NextLesson();
-                o = new(Lessons(), DoneLessons(), Packs.Count == 0 ? 1 : Packs.Keys.Max() + 1, InProgress(next) ? (int?)next!.Index : null);
+                var lessons = Lessons(); var done = DoneLessons();
+                o = new(lessons, done, Packs.Count == 0 ? 1 : Packs.Keys.Max() + 1, InProgress(next) ? (int?)next!.Index : null, BookFraction(book, lessons, done));
             }
         }
         catch (Exception ex) { Log.Error("Outline " + id, ex); }

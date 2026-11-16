@@ -321,6 +321,7 @@ public partial class MainWindow
         "age7" => t.AgeDays >= 7,
         "age10" => t.AgeDays >= 10,
         "noproject" => !t.HasProject,
+        "meetings" => t.IsMeetingTask,
         _ when _binFilter.StartsWith("project:") => t.Project == _binFilter[8..],
         _ => _binFilter.StartsWith("#") && t.Tags.Any(tag => string.Equals(tag, _binFilter[1..], StringComparison.CurrentCultureIgnoreCase))
     };
@@ -337,6 +338,7 @@ public partial class MainWindow
         using var pageSet = TaskStores.Use(TasksPageSet); // the set this page shows (Work, or Personal from its own button)
         if (BinCountText == null) return;
         UpdateBinEmptyText();
+        Dispatcher.BeginInvoke(new Action(RefreshMeetingRows)); // after the filters and views settle
         int sinceMonday = ((int)DateTime.Today.DayOfWeek + 6) % 7;
         ResolvedTodayText.Text = ResolvedTasks.CountSince(DateTime.Today).ToString();
         ResolvedWeekText.Text = ResolvedTasks.CountSince(DateTime.Today.AddDays(-sinceMonday)).ToString();
@@ -390,6 +392,9 @@ public partial class MainWindow
                 filters.Add(("project:" + p.Id, $"● {p.Name} ({TaskBin.All.Count(t => t.Project == p.Id)})"));
         // No Project: every task that isn't in a project.
         if (_settings.On("projects")) filters.Add(("noproject", $"● No Project ({TaskBin.All.Count(t => !t.HasProject)})"));
+        // Meetings: your calendar's meetings this week and #meeting tasks (work only).
+        if (_settings.On("projects") && !TaskStores.IsPersonal)
+            filters.Add(("meetings", $"● Meetings ({TaskBin.All.Count(t => t.IsMeetingTask) + MeetingsThisWeek().Count})"));
         foreach (var tag in TaskBin.All.SelectMany(t => t.Tags).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(t => t))
             filters.Add(("#" + tag, $"#{tag} ({TaskBin.All.Count(t => t.Tags.Contains(tag, StringComparer.CurrentCultureIgnoreCase))})"));
         var same = filters.FirstOrDefault(f => string.Equals(f.Key, _binFilter, StringComparison.CurrentCultureIgnoreCase));
@@ -411,6 +416,7 @@ public partial class MainWindow
             int open = label.LastIndexOf(" (", StringComparison.Ordinal);
             if (open > 0 && label.EndsWith(")")) { text = label[..open]; count = label[(open + 2)..^1]; }
             if (key == "noproject") ProjectFilters.Children.Add(FilterRow(key, "No Project", count, "#7A8886", null));
+            else if (key == "meetings") ProjectFilters.Children.Insert(0, FilterRow(key, Meetings.Name, count, Meetings.Color, null));
             else if (key.StartsWith("project:"))
             {
                 var project = Projects.Find(key[8..]);

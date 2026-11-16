@@ -3,6 +3,21 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.29
+
+- Task window: see Work, Personal, or both (in the view menu under the title). Both lists Work, then Personal.
+- Training: each book's bar on the Training page shows how far through the book you are (as on the book's own page),
+  not the share of imported lessons. Hover the percentage for the lesson count.
+- Calendar: each calendar has its own clear color, with darker hour lines and today's column shaded. Online meetings
+  (Teams, Zoom, Google Meet, Webex) get a Join button on the Calendar, the Day plan and the dashboard, and in the
+  Calendar's side panel. Click an event for its details, Join and Copy meeting link.
+- Calendar: your calendars show as chips at the top; click one to hide or show it. "+ Add calendar" adds Outlook or
+  Google (Google's "Secret address in iCal format"). Untick "Plan my day around its events" for a personal calendar.
+- Meetings: a built-in project like No Project. By project views of Today, Tomorrow and List (Tasks page, task window,
+  thermometer) list the day's meetings first under Meetings, with time and length. Over meetings drop off; cancelled
+  ones go when the calendar updates. Type #meeting on a task to put it under Meetings (it's finished an hour after its
+  time). The Meetings row under Projects lists meetings by day: today, this week or next week. Not in Personal.
+
 ## 1.7.28
 
 - Day review: Tomorrow (Monday on Fridays) and "Pick a day" now really move the task: it's due that day, so it stops

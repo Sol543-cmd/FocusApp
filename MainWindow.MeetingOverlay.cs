@@ -36,6 +36,8 @@ public partial class MainWindow
             }
             catch (Exception ex) { Log.Error("Add meeting to day", ex); }
         };
+        // The event's details and Join come first (see CalendarLook).
+        CalendarLook.AddDetails(menu, ev);
         menu.Items.Add(item);
         menu.IsOpen = true;
     }

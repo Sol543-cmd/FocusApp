@@ -787,14 +787,7 @@ public partial class MainWindow
 
         var side = new StackPanel();
         // Book progress: finished chapters plus the share of the current chapter's lessons.
-        int chapters = Math.Max(1, info.Chapters);
-        double fraction = 0;
-        foreach (var ch in Course.Packs.Keys)
-        {
-            var mine = lessonsAll.Where(l => l.Pack.Chapter == ch).ToList();
-            if (mine.Count > 0) fraction += mine.Count(l => doneSet.Contains(l.Index)) / (double)mine.Count;
-        }
-        fraction = Math.Clamp(fraction / chapters, 0, 1);
+        double fraction = Course.BookFraction(info, lessonsAll, doneSet);
         var ringRow = new StackPanel { Orientation = Orientation.Horizontal };
         ringRow.Children.Add(ProgressRing(fraction, 64));
         var ringText = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };

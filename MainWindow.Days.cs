@@ -4,6 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
@@ -252,6 +255,8 @@ public partial class MainWindow
 
     private void Calendar_Updated()
     {
+        _meetingsTicked = DateTime.MinValue; // meetings lists follow the calendar (new, moved, cancelled)
+        MeetingsTick();
         // A running day takes in new, moved or cancelled meetings (for the part that hasn't happened yet).
         // Today's running or hand-made plan: new or cancelled meetings are asked about (or fitted in, or shown on top, per Settings).
         HandleCalendarChangesForPlannedDay();
@@ -602,17 +607,55 @@ public partial class MainWindow
             CalDay.ScrollTo(_calDate == DateTime.Today ? DateTime.Now.TimeOfDay - TimeSpan.FromMinutes(45) : start);
         }
 
-        string info;
+        BuildCalSources();
+        string info = "";
         if (CalendarService.Sources.Count == 0)
-            info = "No calendar connected yet. Add one in Settings, under Calendars.";
+            info = "No calendar connected yet. Add your work calendar (Outlook) and your personal one (Google) with + Add calendar.";
         else
         {
             var allDay = CalendarService.EventsOn(_calDate).Where(e => e.AllDay).Select(e => e.Title).ToList();
-            info = string.Join("  ", CalendarService.Sources.Select(s => $"{s.Name}: {s.Status}."));
-            if (!week && allDay.Count > 0) info = "All day: " + string.Join(", ", allDay) + ".   " + info;
+            if (!week && allDay.Count > 0) info = "All day: " + string.Join(", ", allDay) + ".";
+            var broken = CalendarService.Sources.Where(s => s.LastError.Length > 0).Select(s => $"{s.Name}: {s.Status}.");
+            info = string.Join("   ", new[] { info }.Concat(broken).Where(x => x.Length > 0));
         }
         CalInfoText.Text = info;
+        CalInfoText.Visibility = info.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>Your calendars as chips in their colors (click to show or hide one), and + Add calendar.</summary>
+    private void BuildCalSources()
+    {
+        CalSourcesBar.Children.Clear();
+        foreach (var source in CalendarService.Sources)
+        {
+            var src = source;
+            var dot = new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(2), Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center,
+                                   BorderBrush = new SolidColorBrush(CalendarLook.ColorOf(src.Color)), Background = src.Hidden ? Brushes.Transparent : new SolidColorBrush(CalendarLook.ColorOf(src.Color)) };
+            var name = new TextBlock { Text = src.Name, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+            name.SetResourceReference(TextBlock.ForegroundProperty, src.Hidden ? "Muted" : "Text");
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(dot); row.Children.Add(name);
+            var chip = new Border { Child = row, Padding = new Thickness(10, 4, 12, 4), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 8, 4), Cursor = Cursors.Hand,
+                                    ToolTip = $"{(src.Hidden ? "Hidden. Click to show it." : "Click to hide it.")}\n{src.Status}" + (src.PlanAround ? "" : "\nPlans don't work around it (Settings, Calendar).") };
+            chip.SetResourceReference(Border.BackgroundProperty, "Panel2");
+            chip.SetResourceReference(Border.BorderBrushProperty, "Line");
+            chip.MouseLeftButtonUp += (_, _) => { src.Hidden = !src.Hidden; CalendarService.SaveSources(); RefreshCalendarTab(); };
+            CalSourcesBar.Children.Add(chip);
+        }
+        var add = new Button { Content = "+ Add calendar", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 4), ToolTip = "Add an Outlook or Google calendar (Settings, Calendar)" };
+        add.SetResourceReference(StyleProperty, "LinkButton");
+        add.Click += (_, _) =>
+        {
+            NavSettings.IsChecked = true;
+            if (SettingsNav.Children.OfType<RadioButton>().FirstOrDefault(r => (string)r.Tag == "calendar") is RadioButton cal) cal.IsChecked = true;
+        };
+        CalSourcesBar.Children.Add(add);
+    }
+
+    private void CalPlanAround_Click(object sender, RoutedEventArgs e) { CalendarService.SaveSources(); RefreshCalendarTab(); RefreshMeetingRows(); }
+
+    private string _calJoinUrl = "";
+    private void CalJoin_Click(object sender, RoutedEventArgs e) => CalendarService.Join(_calJoinUrl);
 
     private bool _syncingWeekPlanChecks;
 

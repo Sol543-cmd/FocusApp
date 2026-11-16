@@ -112,6 +112,8 @@ public partial class MainWindow
         HeaderTemplate = (DataTemplate)System.Windows.Markup.XamlReader.Parse(
             "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
             "<DockPanel Margin='4,14,0,6'>" +
+            "<DockPanel.Style><Style TargetType='DockPanel'><Style.Triggers><DataTrigger Binding='{Binding Name}' Value='Meetings'>" +
+            "<Setter Property='Visibility' Value='Collapsed'/></DataTrigger></Style.Triggers></Style></DockPanel.Style>" +
             "<Ellipse Width='9' Height='9' Margin='0,0,8,0' VerticalAlignment='Center' Fill='{Binding Items[0].ProjectColor}'/>" +
             "<TextBlock Text='{Binding Name}' FontSize='12.5' FontWeight='SemiBold' Foreground='{DynamicResource Muted}' VerticalAlignment='Center' Margin='0,0,10,0'/>" +
             "<Rectangle Height='1' Fill='{DynamicResource Line}' VerticalAlignment='Center'/>" +
@@ -137,7 +139,7 @@ public partial class MainWindow
             return _usual?.Compare(x, y) ?? _all.IndexOf(a).CompareTo(_all.IndexOf(b));
         }
         private int Pos(BinTask t) => _pos.TryGetValue(t.Id, out int p) ? p : int.MaxValue;
-        private int Rank(BinTask t) { int i = _projects.IndexOf(t.Project); return i < 0 ? int.MaxValue : i; }
+        private int Rank(BinTask t) { if (t.IsMeetingTask) return -1; int i = _projects.IndexOf(t.Project); return i < 0 ? int.MaxValue : i; } // Meetings first
     }
 
     /// <summary>Ordered: a task dropped on another moves just before it in that list's order.</summary>
@@ -178,7 +180,31 @@ public partial class MainWindow
         Group = groups ? TaskGroups.Heading(t) : "", GroupColor = t.HasProject ? t.ProjectColor : "#7A8886"
     }).ToList();
 
-    private List<OverlayTask> ListRows(string list, IEnumerable<BinTask> tasks) => AsRows(InView(list, tasks), groups: ListMode(list) == "project");
+    private List<OverlayTask> ListRows(string list, IEnumerable<BinTask> tasks)
+    {
+        bool groups = ListMode(list) == "project";
+        var rows = AsRows(InView(list, tasks), groups);
+        if (groups && list is "tomorrow" or "list") rows.InsertRange(0, MeetingRows(list == "tomorrow" ? NextDay.Date : DateTime.Today));
+        return rows;
+    }
+
+    /// <summary>
+    /// The day's calendar meetings (not over yet) as rows under Meetings, for By project views in the task window and the
+    /// thermometer: "9:00 AM · Weekly sync · 30 min". Work only. Ticking one does nothing; it drops off when it's over.
+    /// </summary>
+    private List<OverlayTask> MeetingRows(DateTime day)
+    {
+        if (TaskStores.IsPersonal) return new();
+        try
+        {
+            return Meetings.On(day).Select(e => new OverlayTask
+            {
+                Source = e, Kind = "meeting", Id = $"{e.Title}|{e.Start:o}", Key = $"m:{e.Title}|{e.Start:o}|{e.End:o}", Text = Meetings.Label(e),
+                Group = Meetings.Name, GroupColor = Meetings.Color
+            }).ToList();
+        }
+        catch (Exception ex) { Log.Error("Meeting rows", ex); return new(); }
+    }
 
     // ---------- The task window ----------
 
@@ -201,7 +227,22 @@ public partial class MainWindow
     /// <summary>What the task window lists: this session's tasks, or Today, Tomorrow, List or Undated in the view set in Tasks.</summary>
     private List<OverlayTask> TaskWindowRows(string view)
     {
-        using var onWork = TaskStores.Use(TaskStores.Main);
+        // Work, Personal, or both (chosen in the task window's menu). The session's tasks are always the session's.
+        string set = _settings.TaskWindowSet is "personal" or "both" ? _settings.TaskWindowSet : "work";
+        if (view == "session" || set == "work") return SetRows(view, TaskStores.Main);
+        var personal = SetRows(view, TaskStores.Personal);
+        foreach (var r in personal) { r.Kind = "personal"; r.Key = "p:" + r.Id; }
+        if (set == "personal") return personal;
+        var work = SetRows(view, TaskStores.Main);
+        // Both: Work first, then Personal, each under its own heading (or "Personal · Project" by project).
+        foreach (var r in work) if (r.Group.Length == 0) { r.Group = "Work"; r.GroupColor = "#6FB2AA"; }
+        foreach (var r in personal) { r.Group = r.Group.Length == 0 ? "Personal" : "Personal · " + r.Group; if (r.Group == "Personal") r.GroupColor = "#5CC88A"; }
+        return work.Concat(personal).ToList();
+    }
+
+    private List<OverlayTask> SetRows(string view, TaskStore store)
+    {
+        using var onSet = TaskStores.Use(store);
         try
         {
             bool snoozedHidden = _settings.On("upcoming");
@@ -232,7 +273,7 @@ public partial class MainWindow
         try
         {
             using var onWork = TaskStores.Use(TaskStores.Main);
-            int open = TodayOverlayTasks().Count;
+            int open = TodayOverlayTasks().Count(r => r.Kind != "meeting");
             int done = ResolvedTasks.All.Count(r => r.ResolvedAt.Date == DateTime.Today);
             string left = "";
             if (_runner.IsRunning)

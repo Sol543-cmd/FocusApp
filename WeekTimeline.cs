@@ -136,8 +136,8 @@ public class WeekTimeline : UserControl
         // Hour lines.
         for (var t = _from; t <= _to; t += TimeSpan.FromHours(1))
         {
-            var line = new Line { X1 = LabelWidth - 4, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = 0.8 };
-            line.SetResourceReference(Shape.StrokeProperty, "Line");
+            var line = new Line { X1 = LabelWidth - 4, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = 0.4 };
+            line.SetResourceReference(Shape.StrokeProperty, "Muted"); // clearer than the Line color
             _canvas.Children.Add(line);
             var label = new TextBlock { Text = DateTime.Today.Add(t).ToString("h tt"), FontSize = 11, Width = LabelWidth - 10, TextAlignment = TextAlignment.Right };
             label.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
@@ -146,9 +146,18 @@ public class WeekTimeline : UserControl
         }
         for (int i = 1; i < 7; i++)
         {
-            var sep = new Line { X1 = LabelWidth + i * colWidth, X2 = LabelWidth + i * colWidth, Y1 = 0, Y2 = _canvas.Height, StrokeThickness = 1, Opacity = 0.6 };
-            sep.SetResourceReference(Shape.StrokeProperty, "Line");
+            var sep = new Line { X1 = LabelWidth + i * colWidth, X2 = LabelWidth + i * colWidth, Y1 = 0, Y2 = _canvas.Height, StrokeThickness = 1, Opacity = 0.35 };
+            sep.SetResourceReference(Shape.StrokeProperty, "Muted");
             _canvas.Children.Add(sep);
+        }
+        // Today's column, lightly shaded (as in Outlook).
+        int todayCol = (DateTime.Today - _monday).Days;
+        if (todayCol >= 0 && todayCol < 7)
+        {
+            var shade = new System.Windows.Shapes.Rectangle { Width = colWidth, Height = _canvas.Height, IsHitTestVisible = false, Opacity = 0.35 };
+            shade.SetResourceReference(Shape.FillProperty, "FocusTint");
+            Canvas.SetLeft(shade, LabelWidth + todayCol * colWidth);
+            _canvas.Children.Insert(0, shade);
         }
 
         // Each day's plan, then events that aren't in it.
@@ -170,8 +179,8 @@ public class WeekTimeline : UserControl
                 var s = ev.Start < days[i] ? TimeSpan.Zero : ev.Start - days[i];
                 var e = ev.End > days[i].AddDays(1) ? TimeSpan.FromHours(24) : ev.End - days[i];
                 bool inPlan = ev.Busy && meetings.Any(m => m.S < e && m.E > s);
-                if (!ShowPlan) AddCard(x, colWidth - 6, s, e, ev.Title, BlockKind.Meeting, ev.Busy); // calendar only: full width
-                else if (!inPlan) AddCard(x + (colWidth - 6) * 0.45, (colWidth - 6) * 0.55, s, e, ev.Title, BlockKind.Meeting, ev.Busy);
+                if (!ShowPlan) AddEvent(ev, x, colWidth - 6, s, e); // calendar only: full width
+                else if (!inPlan) AddEvent(ev, x + (colWidth - 6) * 0.45, (colWidth - 6) * 0.55, s, e);
             }
         }
 
@@ -188,6 +197,16 @@ public class WeekTimeline : UserControl
             nowLine.SetResourceReference(Shape.StrokeProperty, "MeetingBrush");
             _canvas.Children.Add(nowLine);
         }
+    }
+
+    /// <summary>A calendar event in its calendar's color, with Join for online meetings (click for details).</summary>
+    private void AddEvent(CalendarEvent ev, double x, double w, TimeSpan start, TimeSpan end)
+    {
+        double top = Y(start), height = Math.Max(3, Y(end) - top - 1);
+        var card = CalendarLook.EventCard(ev, w, height, 11, null);
+        Canvas.SetLeft(card, x);
+        Canvas.SetTop(card, top);
+        _canvas.Children.Add(card);
     }
 
     private void AddCard(double x, double w, TimeSpan start, TimeSpan end, string title, BlockKind kind, bool solid)

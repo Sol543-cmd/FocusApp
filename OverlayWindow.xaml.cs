@@ -286,13 +286,13 @@ public sealed class OverlayTask
     public object Source { get; init; } = null!;
     /// <summary>Which list it's from ("session", "main" or "personal") and its ID: a tick finds the current task by these,
     /// since Focus replaces task objects with fresh copies (when the plan changes, a sync arrives, or a session is restored).</summary>
-    public string Kind { get; init; } = "";
+    public string Kind { get; set; } = "";
     public string Id { get; init; } = "";
-    public string Key { get; init; } = "";
+    public string Key { get; set; } = "";
     public string Text { get; init; } = "";
     public bool IsHigh { get; init; }
     public bool Done { get; set; }
     /// <summary>By project: the project heading it's listed under (empty: no headings).</summary>
-    public string Group { get; init; } = "";
-    public string GroupColor { get; init; } = "";
+    public string Group { get; set; } = "";
+    public string GroupColor { get; set; } = "";
 }

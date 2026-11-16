@@ -203,8 +203,8 @@ public class DayTimeline : UserControl
         for (var t = _from; t <= _to; t += TimeSpan.FromMinutes(30))
         {
             bool hour = t.Minutes == 0;
-            var line = new Line { X1 = LabelWidth - 6, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = hour ? 0.9 : 0.45 };
-            line.SetResourceReference(Shape.StrokeProperty, "Line");
+            var line = new Line { X1 = LabelWidth - 6, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = hour ? 0.45 : 0.18 };
+            line.SetResourceReference(Shape.StrokeProperty, "Muted"); // clearer hour lines (the Line color was too faint)
             _canvas.Children.Add(line);
             if (hour || PixelsPerMinute >= 1.2)
             {
@@ -348,6 +348,17 @@ public class DayTimeline : UserControl
         };
         card.SetResourceReference(Border.BackgroundProperty, tint);
         card.SetResourceReference(Border.BorderBrushProperty, accent);
+        // A meeting from the calendar with an online link: Join, right on the block.
+        if (block.IsMeeting && height >= 16 && CalendarService.EventFor(block.Name, _dayStart.Date + start) is { JoinUrl.Length: > 0 } meeting)
+        {
+            card.Child = null;
+            var layers = new Grid();
+            stack.Margin = new Thickness(0, 0, 48, 0);
+            layers.Children.Add(stack);
+            layers.Children.Add(CalendarLook.JoinPill(meeting.JoinUrl, meeting.JoinName));
+            card.Child = layers;
+            card.ToolTip += $"\nJoin: {meeting.JoinName}";
+        }
 
         if (ReferenceEquals(block, Selected))
         {
@@ -526,35 +537,9 @@ public class DayTimeline : UserControl
         var (s, e) = ClipToDay(ev);
         double top = Y(s), height = Math.Max(4, Y(e) - top - 2);
         double laneWidth = (width - LabelWidth) * 0.48;
-
-        var text = new TextBlock
-        {
-            Text = ev.Busy ? ev.Title : ev.Title + " (free)",
-            FontSize = 11.5,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Visibility = height < 14 ? Visibility.Collapsed : Visibility.Visible
-        };
-        text.SetResourceReference(TextBlock.ForegroundProperty, "Text");
-        var card = new Border
-        {
-            Width = laneWidth,
-            Height = height,
-            CornerRadius = new CornerRadius(6),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(8, height < 22 ? 0 : 3, 6, 0),
-            Child = text,
-            Opacity = 0.95,
-            ClipToBounds = true,
-            ToolTip = $"From your calendar: {ev.Title}\n{ev.Start:t} to {ev.End:t}" + (ev.Busy ? "" : " (free)")
-        };
-        card.SetResourceReference(Border.BackgroundProperty, ev.Busy ? "MeetingTint" : "Panel2");
-        card.SetResourceReference(Border.BorderBrushProperty, ev.Busy ? "MeetingBrush" : "Line");
-        if (EventClicked != null && !ev.AllDay)
-        {
-            card.Cursor = System.Windows.Input.Cursors.Hand;
-            card.ToolTip += "\nClick to add it to your day";
-            card.MouseLeftButtonUp += (_, e) => { EventClicked?.Invoke(ev, card); e.Handled = true; };
-        }
+        // Its calendar's color, the time when there's room, Join for online meetings; click for details and Add to my day.
+        Border? card = null;
+        card = CalendarLook.EventCard(ev, laneWidth, height, 12, EventClicked == null ? null : () => EventClicked?.Invoke(ev, card!));
         Canvas.SetLeft(card, width - laneWidth - 4);
         Canvas.SetTop(card, top);
         return card;

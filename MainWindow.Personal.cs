@@ -27,6 +27,7 @@ public partial class MainWindow
         {
             if (NavPersonal.IsChecked == true) RefreshTasksTab();
             if (PomoPersonalHost.Visibility == Visibility.Visible) RefreshPomoPersonal();
+            if (_settings.TaskWindowSet is "personal" or "both") _taskWindow?.Refresh();
         }));
         BuildAccentChoices();
         ApplyPersonalLook();

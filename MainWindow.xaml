@@ -1165,6 +1165,9 @@
                     </StackPanel>
                     <Grid>
                     <ScrollViewer x:Name="BinTodoScroll" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                        <!-- Meetings from your calendar (By project views, and the Meetings filter) -->
+                        <StackPanel x:Name="MeetingsPanel" Visibility="Collapsed"/>
                         <ItemsControl x:Name="BinList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -1216,6 +1219,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                     <ScrollViewer x:Name="UpcomingScroll" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                         <ItemsControl x:Name="UpcomingList">
@@ -1467,7 +1471,11 @@
                         <Button Content="Plan this day" Click="CalPlanDay_Click" Margin="12,0,0,0" ToolTip="Open this day in the Day plan"/>
                     </StackPanel>
                 </DockPanel>
-                <TextBlock x:Name="CalInfoText" Grid.Row="1" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,10"/>
+                <StackPanel Grid.Row="1" Margin="0,10,0,10">
+                    <!-- Your calendars, each in its color: click one to show or hide it (as in Outlook) -->
+                    <WrapPanel x:Name="CalSourcesBar" Margin="0,0,0,6"/>
+                    <TextBlock x:Name="CalInfoText" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                </StackPanel>
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -1484,6 +1492,7 @@
                                     <Run Text="Starts at"/> <Run Text="{Binding StartLabel, Mode=OneWay}"/>
                                 </TextBlock>
                                 <TextBlock x:Name="CalAnchorNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
+                                <Button x:Name="CalJoinBtn" Content="Join meeting" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,0,0,14" Visibility="Collapsed" Click="CalJoin_Click"/>
                                 <TextBlock Text="Title" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
                                 <TextBox x:Name="CalTitleBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
                                 <TextBlock Text="Length" Style="{StaticResource Caption}" Margin="0,12,0,6"/>
@@ -1843,7 +1852,7 @@
                     </StackPanel><Border Style="{StaticResource SettingRow}"><StackPanel><CheckBox x:Name="NudgeCheck" Content="On workdays when I haven't used Focus yet, nudge me a few times" FontSize="14" FontWeight="SemiBold"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,60,0" Text="Focus always starts when you sign in to Windows and waits in the system tray by the clock, so reminders and blocking keep working. To quit, right-click its tray icon."/></StackPanel></Border></StackPanel><StackPanel Orientation="Horizontal" Margin="0,28,0,0"><Button Content="Reset this page" Tag="tasks" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0" Click="ResetSettingsPage_Click" ToolTip="Put this page's settings back to how they started" VerticalAlignment="Center"/></StackPanel></StackPanel><StackPanel x:Name="SettingsPage_calendar" Tag="calendar" Visibility="Collapsed"><TextBlock Text="Calendar" Style="{StaticResource Heading}" Margin="0,0,0,6"/><StackPanel Tag="section"><TextBlock Text="CALENDARS" Style="{StaticResource SettingsSection}"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10" Text="Focus reads your calendars (it never changes them) through a private .ics link."/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4">
                         <Run FontWeight="SemiBold" Text="Outlook:"/> <Run Text="in Outlook on the web, go to Settings, Calendar, Shared calendars, Publish a calendar. Pick your calendar and 'Can view all details', click Publish, then copy the ICS link."/>
                     </TextBlock><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12">
-                        <Run FontWeight="SemiBold" Text="Google:"/> <Run Text="in Google Calendar settings, choose your calendar, then copy 'Secret address in iCal format'."/>
+                        <Run FontWeight="SemiBold" Text="Google:"/> <Run Text="in Google Calendar settings, choose your calendar, then copy 'Secret address in iCal format'. Add it with a name like Personal, and untick 'Plan my day around its events' if it shouldn't shape your workday."/>
                     </TextBlock><ItemsControl x:Name="CalSourcesList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -1853,6 +1862,7 @@
                                         <StackPanel>
                                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                            <CheckBox Content="Plan my day around its events" IsChecked="{Binding PlanAround}" Margin="0,6,0,0" Click="CalPlanAround_Click" ToolTip="Untick for a personal calendar: its events still show on the Calendar, but plans and the Meetings list leave them out"/>
                                         </StackPanel>
                                     </DockPanel>
                                 </Border>

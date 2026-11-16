@@ -151,6 +151,11 @@ public partial class MainWindow
             CalAnchorNote.Visibility = block.IsAnchored ? Visibility.Visible : Visibility.Collapsed;
             if (block.AnchorStart is TimeSpan fixedAt)
                 CalAnchorNote.Text = $"Fixed time: stays at {DateTime.Today.Add(fixedAt):t}.";
+            // A meeting with an online link: Join it from here.
+            var meeting = block.IsMeeting && block.AnchorStart is TimeSpan ms ? CalendarService.EventFor(block.Name, _calDate.Date + ms) : null;
+            _calJoinUrl = meeting?.JoinUrl ?? "";
+            CalJoinBtn.Visibility = _calJoinUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (meeting != null) CalJoinBtn.Content = $"Join {meeting.JoinName} meeting";
         }
 
         EditorPanel.DataContext = block;

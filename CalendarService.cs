@@ -26,6 +26,13 @@ public class CalendarSource
 
     public bool IsFile => FileName.Length > 0;
 
+    /// <summary>Its color on the calendar (picked automatically; each calendar gets its own).</summary>
+    public string Color { get; set; } = "";
+    /// <summary>Unticked on the Calendar page: its events aren't shown.</summary>
+    public bool Hidden { get; set; }
+    /// <summary>Plans work around its busy events (untick for a personal calendar that shouldn't shape your workday).</summary>
+    public bool PlanAround { get; set; } = true;
+
     public string Status =>
         LastError.Length > 0
             ? $"Couldn't update: {LastError}"
@@ -66,6 +73,41 @@ public static class CalendarService
     {
         Sources = Storage.Load<List<CalendarSource>>(SourcesFile);
         _events = Storage.Load<List<CalendarEvent>>(CacheFile);
+        if (GiveColors()) SaveSources();
+    }
+
+    /// <summary>Calendar colors, strong enough to read in light and dark mode.</summary>
+    public static readonly string[] Palette = { "#3B82D6", "#2E9E6A", "#D9822B", "#8E5CD9", "#D24C86", "#1F9AA6", "#B8860B", "#5B6BD8" };
+
+    private static bool GiveColors()
+    {
+        bool changed = false;
+        foreach (var s in Sources.Where(s => s.Color.Length == 0))
+        {
+            s.Color = Palette.FirstOrDefault(p => Sources.All(o => o.Color != p)) ?? Palette[Sources.IndexOf(s) % Palette.Length];
+            changed = true;
+        }
+        return changed;
+    }
+
+    /// <summary>The calendar an event came from (by ID; events saved before 1.7.29 by name).</summary>
+    public static CalendarSource? SourceOf(CalendarEvent e) =>
+        Sources.FirstOrDefault(s => s.Id == e.SourceId) ?? Sources.FirstOrDefault(s => s.Name == e.Source);
+
+    public static string ColorOf(CalendarEvent e) => SourceOf(e)?.Color is { Length: > 0 } c ? c : Palette[0];
+
+    /// <summary>The online meeting link of the calendar event at this time with this title (for a meeting block in the plan).</summary>
+    public static CalendarEvent? EventFor(string title, DateTime start) =>
+        _events.FirstOrDefault(e => e.JoinUrl.Length > 0 && Math.Abs((e.Start - start).TotalMinutes) < 1 && e.Title == title)
+        ?? _events.FirstOrDefault(e => Math.Abs((e.Start - start).TotalMinutes) < 1 && e.Title == title)
+        ?? _events.FirstOrDefault(e => e.JoinUrl.Length > 0 && Math.Abs((e.Start - start).TotalMinutes) < 1); // renamed in the plan
+
+    /// <summary>Opens a meeting link in Teams, Zoom or the browser.</summary>
+    public static void Join(string url)
+    {
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return; // only web links, never other programs
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Error("Join meeting", ex); }
     }
 
     public static void SaveSources()
@@ -76,12 +118,12 @@ public static class CalendarService
 
     /// <summary>Busy (not "free") timed events on that day, for planning around.</summary>
     public static List<CalendarEvent> BusyEventsOn(DateTime day) =>
-        _events.Where(e => !e.AllDay && e.Busy && e.Start < day.Date.AddDays(1) && e.End > day.Date)
+        _events.Where(e => !e.AllDay && e.Busy && e.Start < day.Date.AddDays(1) && e.End > day.Date && SourceOf(e)?.PlanAround != false)
                .OrderBy(e => e.Start).ToList();
 
     /// <summary>Every event on that day (including all-day and "free" ones), for showing.</summary>
     public static List<CalendarEvent> EventsOn(DateTime day) =>
-        _events.Where(e => e.Start < day.Date.AddDays(1) && e.End > day.Date).OrderBy(e => e.Start).ToList();
+        _events.Where(e => e.Start < day.Date.AddDays(1) && e.End > day.Date && SourceOf(e)?.Hidden != true).OrderBy(e => e.Start).ToList();
 
     /// <summary>
     /// Checks a link before saving it. Accepts https:// and webcal:// (treated as https).
@@ -173,12 +215,18 @@ public static class CalendarService
 
             if (text != null)
             {
-                try { all.AddRange(await Task.Run(() => IcsParser.Parse(text, from, to, source.Name))); }
+                try
+                {
+                    var found = await Task.Run(() => IcsParser.Parse(text, from, to, source.Name));
+                    foreach (var e in found) e.SourceId = source.Id;
+                    all.AddRange(found);
+                }
                 catch (Exception ex) { Log.Error($"Reading calendar '{source.Name}'", ex); }
             }
         }
 
         _events = all.OrderBy(e => e.Start).ToList();
+        GiveColors();
         try { Storage.Save(CacheFile, _events); } catch (Exception ex) { Log.Error("CalendarService.Cache", ex); }
         SaveSources();
         Updated?.Invoke();

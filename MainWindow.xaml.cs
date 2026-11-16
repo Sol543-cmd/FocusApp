@@ -130,7 +130,7 @@ public partial class MainWindow : Window
         MigrateOldPlan();
         LoadPlanForDate(DateTime.Today);
 
-        _clockTimer.Tick += (_, _) => { FollowClock(); if (NextDay.Refresh()) { PaintListTabs(); RefreshTasksTab(); RefreshDashTasks(); } };
+        _clockTimer.Tick += (_, _) => { FollowClock(); if (NextDay.Refresh()) { PaintListTabs(); RefreshTasksTab(); RefreshDashTasks(); } MeetingsTick(); };
         _clockTimer.Start();
 
         FillSettingFields();

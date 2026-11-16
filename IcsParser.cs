@@ -17,6 +17,12 @@ public class CalendarEvent
     /// <summary>False for events marked "free" (they're shown, but plans don't work around them).</summary>
     public bool Busy { get; set; } = true;
     public string Source { get; set; } = "";
+    /// <summary>Which calendar it's from (CalendarSource.Id), for its color.</summary>
+    public string SourceId { get; set; } = "";
+    public string Location { get; set; } = "";
+    /// <summary>The online meeting link (Teams, Zoom, Google Meet, Webex), if the event has one.</summary>
+    public string JoinUrl { get; set; } = "";
+    public string JoinName => JoinUrl.Contains("teams.") ? "Teams" : JoinUrl.Contains("zoom.") ? "Zoom" : JoinUrl.Contains("meet.google") ? "Google Meet" : JoinUrl.Contains("webex") ? "Webex" : "the meeting";
 }
 
 /// <summary>
@@ -38,6 +44,7 @@ public static class IcsParser
         public string Title = "";
         public Prop? Start, End, RecurrenceId;
         public string? Duration, RRule, Status, Transp, BusyStatus;
+        public string Location = "", Description = "", Url = "", MeetingUrl = "";
         public List<Prop> ExDates = new();
     }
 
@@ -127,8 +134,23 @@ public static class IcsParser
             End = end,
             AllDay = allDay,
             Busy = !free,
-            Source = source
+            Source = source,
+            Location = ev.Location,
+            JoinUrl = JoinLink(ev)
         });
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex MeetingLink = new(
+        @"https://(teams\.microsoft\.com/l/meetup-join|teams\.live\.com/meet|[\w.-]*zoom\.us/(j|my|w)/|meet\.google\.com/|[\w.-]*webex\.com/)[^\s<>""')\]]+",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>The event's online meeting link: the one the calendar names, or the first Teams, Zoom, Meet or Webex link in it.</summary>
+    private static string JoinLink(RawEvent ev)
+    {
+        if (ev.MeetingUrl.Length > 0) return ev.MeetingUrl;
+        foreach (var text in new[] { ev.Location, ev.Url, ev.Description })
+            if (text.Length > 0 && MeetingLink.Match(text) is { Success: true } m) return m.Value.TrimEnd('.', ',', ';');
+        return "";
     }
 
     private static TimeSpan Length(RawEvent ev, DateTime startUtc)
@@ -188,6 +210,12 @@ public static class IcsParser
                 case "STATUS": current.Status = prop.Value; break;
                 case "TRANSP": current.Transp = prop.Value; break;
                 case "X-MICROSOFT-CDO-BUSYSTATUS": current.BusyStatus = prop.Value; break;
+                case "LOCATION": current.Location = Unescape(prop.Value); break;
+                case "DESCRIPTION": current.Description = Unescape(prop.Value); break;
+                case "URL": current.Url = prop.Value; break;
+                case "X-MICROSOFT-SKYPETEAMSMEETINGURL": case "X-MICROSOFT-ONLINEMEETINGCONFLINK": case "X-GOOGLE-CONFERENCE": case "X-MICROSOFT-ONLINEMEETINGEXTERNALLINK":
+                    if (current.MeetingUrl.Length == 0 && prop.Value.StartsWith("http", StringComparison.OrdinalIgnoreCase)) current.MeetingUrl = prop.Value;
+                    break;
             }
         }
         return events;

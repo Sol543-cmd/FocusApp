@@ -443,8 +443,10 @@ public partial class MainWindow
             var today = TaskBin.All
                 .Where(t => !t.IsSnoozed && (t.IsPlannedToday || t.IsDueToday || t.IsOverdue || placed.Contains(t.Id)))
                 .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue).ToList();
-        // In today's view, as chosen in Tasks: your own order, or under project headings.
-        return AsRows(TodayInView(today), groups: TodayMode == "project");
+        // In today's view, as chosen in Tasks: your own order, or under project headings (today's meetings first).
+        var rows = AsRows(TodayInView(today), groups: TodayMode == "project");
+        if (TodayMode == "project") rows.InsertRange(0, MeetingRows(DateTime.Today));
+        return rows;
     }
 
     /// <summary>A task ticked on the floating timer: a session task is checked off; one of today's is finished.</summary>
@@ -461,6 +463,7 @@ public partial class MainWindow
                     if (item != null) item.Done = t.Done;
                     else Log.Write("Floating timer: couldn't find the session task " + t.Text);
                     break;
+                case "meeting": break; // calendar meetings tick themselves off when they're over
                 case "personal":
                     if (t.Done && PersonalTasks.All.FirstOrDefault(x => x.Id == t.Id) is BinTask mine) PersonalTasks.Finish(mine);
                     break;

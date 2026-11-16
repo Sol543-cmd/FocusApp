@@ -51,11 +51,13 @@ public abstract class TaskBase : INotifyPropertyChanged
 
     [JsonIgnore] public int AgeDays => CreatedAt is DateTime c ? (int)(DateTime.Today - c.Date).TotalDays : 0;
     [JsonIgnore] public FocusApp.Project? ProjectInfo => Projects.Find(Project);
-    [JsonIgnore] public string ProjectName => ProjectInfo?.Name ?? "";
+    /// <summary>A meeting you typed in with #meeting: listed under Meetings with the calendar's meetings.</summary>
+    [JsonIgnore] public bool IsMeetingTask => Project == Meetings.Id;
+    [JsonIgnore] public string ProjectName => IsMeetingTask ? Meetings.Name : ProjectInfo?.Name ?? "";
     /// <summary>Today, By project: the heading the task is listed under.</summary>
-    [JsonIgnore] public string ProjectHeading => ProjectInfo?.Name ?? "No Project";
-    [JsonIgnore] public string ProjectColor => ProjectInfo?.Color ?? "Transparent";
-    [JsonIgnore] public bool HasProject => ProjectInfo != null;
+    [JsonIgnore] public string ProjectHeading => IsMeetingTask ? Meetings.Name : ProjectInfo?.Name ?? "No Project";
+    [JsonIgnore] public string ProjectColor => IsMeetingTask ? Meetings.Color : ProjectInfo?.Color ?? "Transparent";
+    [JsonIgnore] public bool HasProject => IsMeetingTask || ProjectInfo != null;
     [JsonIgnore] public string SectionName => ProjectInfo?.Sections.FirstOrDefault(x => x.Id == Section)?.Name ?? "";
     [JsonIgnore] public bool IsUndated => Due == null && PlannedFor.Length == 0;
     [JsonIgnore] public string CreatedText => CreatedAt is DateTime c ? $"Added {c:dddd, MMMM d, yyyy}" : "";
@@ -255,6 +257,8 @@ public static class TaskParser
                 if (w.Length > 1 && w[0] == '@') { task.Tags.Add(w[1..].Trim(',', '.')); continue; }
                 if (w.Length > 1 && w[0] == '#')
                 {
+                    // #meeting (work tasks): listed under Meetings, with your calendar's meetings.
+                    if (w[1..].Trim(',', '.').ToLowerInvariant() is "meeting" or "meetings" && !TaskStores.IsPersonal) { task.Project = Meetings.Id; continue; }
                     // Longest existing project name or shortcut first ("#Client A" uses two words).
                     Project? found = null;
                     int used = 1;
@@ -950,6 +954,8 @@ public class AppSettings
     public Dictionary<string, string> ListViews { get; set; } = new();
     public Dictionary<string, List<string>> ListOrders { get; set; } = new();
     /// <summary>The task window's Working Memory: your jotted notes (Markdown), and how tall its pane is.</summary>
+    /// <summary>Whose tasks the task window lists: "work" (or ""), "personal", or "both".</summary>
+    public string TaskWindowSet { get; set; } = "work";
     public double WorkingMemoryHeight { get; set; } = 0.3; // share of the task window
     /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
     public string TaskWindowView { get; set; } = "today";

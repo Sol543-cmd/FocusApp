@@ -30,7 +30,7 @@ public static class TaskGroups
         if (view == "project")
         {
             var projects = Projects.All.Select(p => p.Id).ToList();
-            int Rank(BinTask t) { int i = projects.IndexOf(t.Project); return i < 0 ? int.MaxValue : i; }
+            int Rank(BinTask t) { if (t.IsMeetingTask) return -1; int i = projects.IndexOf(t.Project); return i < 0 ? int.MaxValue : i; } // Meetings first
             return list.Select((t, i) => (t, i)).OrderBy(x => Rank(x.t)).ThenBy(x => x.i).Select(x => x.t).ToList();
         }
         return list;
@@ -248,6 +248,14 @@ public class TaskWindow : Window
             item.Click += (_, _) => { _settings.TaskWindowView = key; _save(); _shown = ""; Refresh(); };
             menu.Items.Add(item);
         }
+        // Whose tasks: Work, Personal, or both.
+        menu.Items.Add(new Separator());
+        foreach (var (key, name) in new[] { ("work", "Work"), ("personal", "Personal"), ("both", "Work and Personal") })
+        {
+            var item = new MenuItem { Header = name, IsCheckable = true, IsChecked = Set == key };
+            item.Click += (_, _) => { _settings.TaskWindowSet = key; _save(); _shown = ""; Refresh(); };
+            menu.Items.Add(item);
+        }
         menu.IsOpen = true;
     }
 
@@ -282,11 +290,12 @@ public class TaskWindow : Window
         string title = view switch { "session" => "Session", "list" => "List", "undated" => "Undated", "tomorrow" => NextDay.Name, _ => "Today" };
         string mode = view == "session" ? "default" : _listMode(view);
         if (mode != "default") title += mode == "ordered" ? " · Ordered" : " · By project";
+        if (view != "session" && Set != "work") title = (Set == "personal" ? "Personal · " : "Work + Personal · ") + title;
         _viewText.Text = title;
         var tasks = _tasks(view);
         // Narrow: no project headings, so the names keep their room.
         if (ActualWidth > 0 && ActualWidth < 280) tasks = tasks.Select(t => new OverlayTask { Source = t.Source, Kind = t.Kind, Id = t.Id, Key = t.Key, Text = t.Text, IsHigh = t.IsHigh, Done = t.Done }).ToList();
-        string now = view + mode + (ActualWidth < 280 ? "n" : "w") + string.Join("|", tasks.Select(t => t.Key + (t.Done ? "1" : "0") + t.Text + t.Group));
+        string now = Set + view + mode + (ActualWidth < 280 ? "n" : "w") + string.Join("|", tasks.Select(t => t.Key + (t.Done ? "1" : "0") + t.Text + t.Group));
         if (now != _shown)
         {
             _shown = now;
@@ -494,5 +503,6 @@ public class TaskWindow : Window
 
     private Point _down;
     private OverlayTask? _pressed;
-    private bool CanReorder => _settings.TaskWindowView != "session" && _listMode(_settings.TaskWindowView) == "ordered";
+    private bool CanReorder => _settings.TaskWindowView != "session" && Set == "work" && _listMode(_settings.TaskWindowView) == "ordered";
+    private string Set => _settings.TaskWindowSet is "personal" or "both" ? _settings.TaskWindowSet : "work";
 }
