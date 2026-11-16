@@ -26,7 +26,21 @@ public static class Meetings
             .OrderBy(e => e.Start).ToList();
     }
 
-    public static List<CalendarEvent> On(DateTime day) => Between(day.Date, day.Date.AddDays(1));
+    public static List<CalendarEvent> On(DateTime day) => Between(day.Date, day.Date.AddDays(1)).Where(e => !Dismissed.Contains(KeyOf(e))).ToList();
+
+    /// <summary>The working week: the rest of this Monday–Friday, or on a weekend the coming one.</summary>
+    public static (DateTime From, DateTime To) WorkWeek(int weeksAhead = 0)
+    {
+        var today = DateTime.Today;
+        int sinceMonday = ((int)today.DayOfWeek + 6) % 7;
+        var monday = today.AddDays(-sinceMonday + (sinceMonday >= 5 ? 7 : 0) + 7 * weeksAhead);
+        var from = weeksAhead == 0 && monday <= today ? today : monday;
+        return (from, monday.AddDays(5));
+    }
+
+    /// <summary>Meetings ticked off by hand (until Focus restarts): they leave the lists like ones that are over.</summary>
+    public static readonly HashSet<string> Dismissed = new();
+    public static string KeyOf(CalendarEvent e) => $"{e.Title}|{e.Start:o}";
 
     /// <summary>"30 min", "1 hr", "1 hr 15 min".</summary>
     public static string Length(CalendarEvent e)

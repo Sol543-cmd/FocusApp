@@ -20,10 +20,11 @@ public partial class MainWindow
     private string _meetingRange = "week";
     private DateTime _meetingsTicked;
 
+    /// <summary>The working week's meetings still to come (on a weekend, the coming week's).</summary>
     private List<CalendarEvent> MeetingsThisWeek()
     {
-        int sinceMonday = ((int)DateTime.Today.DayOfWeek + 6) % 7;
-        return Meetings.Between(DateTime.Today, DateTime.Today.AddDays(7 - sinceMonday));
+        var (from, to) = Meetings.WorkWeek();
+        return Meetings.Between(from, to);
     }
 
     /// <summary>Once a minute: finishes #meeting tasks that are over, and drops meetings that ended from every list.</summary>
@@ -40,6 +41,7 @@ public partial class MainWindow
                 if (over.Count > 0) TaskBin.Save();
             }
             RefreshMeetingRows();
+            RefreshDashTasks();
             UpdateOverlayTasks();
         }
         catch (Exception ex) { Log.Error("Meetings tick", ex); }
@@ -52,16 +54,18 @@ public partial class MainWindow
         MeetingsPanel.Children.Clear();
         bool work = !ReferenceEquals(TasksPageSet, TaskStores.Personal);
         string list = CurrentList;
-        bool byProject = list is "today" or "tomorrow" or "list" && ListMode(list) == "project" && _binFilter is "all" or "meetings" or "today";
+        // Meetings show as tasks in Today, Tomorrow and List, in every view (under a Meetings heading By project).
+        bool shown = list is "today" or "tomorrow" or "list" && _binFilter is "all" or "today";
+        bool byProject = shown && ListMode(list) == "project";
         bool filter = _binFilter == "meetings";
-        if (!work || (!byProject && !filter)) { MeetingsPanel.Visibility = Visibility.Collapsed; return; }
+        if (!work || (!shown && !filter)) { MeetingsPanel.Visibility = Visibility.Collapsed; return; }
 
         if (filter)
         {
             // The Meetings filter: by day, for the range chosen here.
             var head = new DockPanel { Margin = new Thickness(4, 4, 0, 8) };
             var ranges = new StackPanel { Orientation = Orientation.Horizontal };
-            foreach (var (key, name) in new[] { ("today", "Today"), ("week", "This week"), ("next", "Next week") })
+            foreach (var (key, name) in new[] { ("today", "Today"), ("week", DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? "Coming week" : "This week"), ("next", "Week after") })
             {
                 var b = new Button { Content = name, Margin = new Thickness(0, 0, 12, 0), FontWeight = _meetingRange == key ? FontWeights.SemiBold : FontWeights.Normal };
                 b.SetResourceReference(StyleProperty, "LinkButton");
@@ -71,15 +75,13 @@ public partial class MainWindow
             }
             head.Children.Add(ranges);
             MeetingsPanel.Children.Add(head);
-            int sinceMonday = ((int)DateTime.Today.DayOfWeek + 6) % 7;
-            var monday = DateTime.Today.AddDays(-sinceMonday);
             var (from, to) = _meetingRange switch
             {
                 "today" => (DateTime.Today, DateTime.Today.AddDays(1)),
-                "next" => (monday.AddDays(7), monday.AddDays(14)),
-                _ => (DateTime.Today, monday.AddDays(7))
+                "next" => Meetings.WorkWeek(1),
+                _ => Meetings.WorkWeek()
             };
-            var all = Meetings.Between(from, to);
+            var all = Meetings.Between(from, to).Where(e => !Meetings.Dismissed.Contains(Meetings.KeyOf(e))).ToList();
             if (all.Count == 0) MeetingsPanel.Children.Add(MeetingCaption(CalendarService.Sources.Count == 0 ? "No calendar connected. Add your Outlook calendar on the Calendar page." : "No meetings."));
             foreach (var day in all.GroupBy(e => e.Start.Date))
             {
@@ -94,9 +96,9 @@ public partial class MainWindow
         // By project: the day's meetings under Meetings, first.
         var dayOf = list == "tomorrow" ? NextDay.Date : DateTime.Today;
         var meetings = Meetings.On(dayOf);
-        bool typed = _binView?.Cast<BinTask>().Any(t => t.IsMeetingTask) == true;
+        bool typed = byProject && _binView?.Cast<BinTask>().Any(t => t.IsMeetingTask) == true;
         if (meetings.Count == 0 && !typed) { MeetingsPanel.Visibility = Visibility.Collapsed; return; }
-        MeetingsPanel.Children.Add(MeetingHeading(Meetings.Name, Meetings.Color));
+        if (byProject) MeetingsPanel.Children.Add(MeetingHeading(Meetings.Name, Meetings.Color));
         foreach (var e in meetings) MeetingsPanel.Children.Add(MeetingRow(e));
         MeetingsPanel.Visibility = Visibility.Visible;
     }
@@ -126,36 +128,67 @@ public partial class MainWindow
         return dock;
     }
 
-    /// <summary>A meeting row, in the task rows' look: time, title, length, Join. Click for its details.</summary>
-    private FrameworkElement MeetingRow(CalendarEvent e)
+    /// <summary>The small join dot beside a meeting: click to open the meeting (Teams, Zoom, Meet, Webex).</summary>
+    public static FrameworkElement JoinDot(CalendarEvent e)
+    {
+        var dot = new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(CalendarLook.ColorOf(Meetings.Color)) };
+        var hit = new Border { Child = dot, Background = Brushes.Transparent, Padding = new Thickness(6, 4, 4, 4), Cursor = Cursors.Hand,
+                               VerticalAlignment = VerticalAlignment.Center, ToolTip = $"Join {e.JoinName} meeting" };
+        hit.MouseLeftButtonDown += (_, ev) => ev.Handled = true;
+        hit.MouseLeftButtonUp += (_, ev) => { ev.Handled = true; CalendarService.Join(e.JoinUrl); };
+        return hit;
+    }
+
+    /// <summary>
+    /// A meeting as a task row: a check (ticking it takes it off the lists; it also goes when it's over), the time, the
+    /// title with its join dot, and the length. Click it for its details.
+    /// </summary>
+    private FrameworkElement MeetingRow(CalendarEvent e, bool compact = false)
     {
         var dock = new DockPanel();
-        var time = new TextBlock { Text = e.Start.ToString("t"), Width = 72, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold };
-        time.SetResourceReference(TextBlock.ForegroundProperty, "FocusBrush");
-        time.SetResourceReference(TextBlock.FontSizeProperty, "TaskFontSize");
-        DockPanel.SetDock(time, Dock.Left);
-        dock.Children.Add(time);
-        if (e.JoinUrl.Length > 0)
-        {
-            var pill = CalendarLook.JoinPill(e.JoinUrl, e.JoinName, 12);
-            pill.VerticalAlignment = VerticalAlignment.Center;
-            DockPanel.SetDock(pill, Dock.Right);
-            dock.Children.Add(pill);
-        }
-        var length = new TextBlock { Text = Meetings.Length(e), FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) };
+        var check = new CheckBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), ToolTip = "Done (it also goes by itself when it's over)" };
+        check.SetResourceReference(StyleProperty, "TaskCheck");
+        check.Click += (_, _) => { Meetings.Dismissed.Add(Meetings.KeyOf(e)); RefreshMeetingRows(); RefreshDashTasks(); UpdateOverlayTasks(); };
+        DockPanel.SetDock(check, Dock.Left);
+        dock.Children.Add(check);
+        var length = new TextBlock { Text = Meetings.Length(e), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) };
         length.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         DockPanel.SetDock(length, Dock.Right);
         dock.Children.Add(length);
+        var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var time = new TextBlock { Text = e.Start.ToString("t") + "  ", VerticalAlignment = VerticalAlignment.Center };
+        time.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         var title = new TextBlock { Text = e.Title, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         title.SetResourceReference(TextBlock.ForegroundProperty, "Text");
-        title.SetResourceReference(TextBlock.FontSizeProperty, "TaskFontSize");
-        dock.Children.Add(title);
-        var card = new Border { Child = dock, Cursor = Cursors.Hand, ToolTip = CalendarLook.Details(e) };
-        card.SetResourceReference(Border.BackgroundProperty, "TaskRowBg");
-        card.SetResourceReference(Border.CornerRadiusProperty, "TaskRowCorner");
-        card.SetResourceReference(Border.PaddingProperty, "TaskRowPadding");
-        card.SetResourceReference(Border.MarginProperty, "TaskRowMargin");
+        if (compact) { time.FontSize = 13; title.FontSize = 13; }
+        else { time.SetResourceReference(TextBlock.FontSizeProperty, "TaskFontSize"); title.SetResourceReference(TextBlock.FontSizeProperty, "TaskFontSize"); }
+        line.Children.Add(time); line.Children.Add(title);
+        if (e.JoinUrl.Length > 0) line.Children.Add(JoinDot(e));
+        dock.Children.Add(line);
+        var card = new Border { Child = dock, Cursor = Cursors.Hand, ToolTip = CalendarLook.Details(e), Background = Brushes.Transparent };
+        if (!compact)
+        {
+            card.SetResourceReference(Border.BackgroundProperty, "TaskRowBg");
+            card.SetResourceReference(Border.CornerRadiusProperty, "TaskRowCorner");
+            card.SetResourceReference(Border.PaddingProperty, "TaskRowPadding");
+            card.SetResourceReference(Border.MarginProperty, "TaskRowMargin");
+        }
+        else card.Margin = new Thickness(0, 0, 0, 6);
         card.MouseLeftButtonUp += (_, ev) => { ev.Handled = true; CalendarLook.ShowDetails(e, card); };
         return card;
     }
+
+    /// <summary>The dashboard's task list: today's meetings first, as tasks (none for Undated or Personal).</summary>
+    private void FillDashMeetings(DateTime? day)
+    {
+        if (DashMeetings == null) return;
+        DashMeetings.Children.Clear();
+        if (day is DateTime d && !TaskStores.IsPersonal)
+            foreach (var e in Meetings.On(d)) DashMeetings.Children.Add(MeetingRow(e, compact: true));
+        DashMeetings.Visibility = DashMeetings.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Upcoming: each day's meetings as small rows under the day's heading.</summary>
+    private List<FrameworkElement> UpcomingMeetings(DateTime day) =>
+        TaskStores.IsPersonal ? new() : Meetings.On(day).Select(e => MeetingRow(e)).ToList();
 }

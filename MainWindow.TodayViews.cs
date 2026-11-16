@@ -184,7 +184,7 @@ public partial class MainWindow
     {
         bool groups = ListMode(list) == "project";
         var rows = AsRows(InView(list, tasks), groups);
-        if (groups && list is "tomorrow" or "list") rows.InsertRange(0, MeetingRows(list == "tomorrow" ? NextDay.Date : DateTime.Today));
+        if (list is "tomorrow" or "list") rows.InsertRange(0, MeetingRows(list == "tomorrow" ? NextDay.Date : DateTime.Today, groups));
         return rows;
     }
 
@@ -192,15 +192,15 @@ public partial class MainWindow
     /// The day's calendar meetings (not over yet) as rows under Meetings, for By project views in the task window and the
     /// thermometer: "9:00 AM · Weekly sync · 30 min". Work only. Ticking one does nothing; it drops off when it's over.
     /// </summary>
-    private List<OverlayTask> MeetingRows(DateTime day)
+    private List<OverlayTask> MeetingRows(DateTime day, bool groups)
     {
         if (TaskStores.IsPersonal) return new();
         try
         {
             return Meetings.On(day).Select(e => new OverlayTask
             {
-                Source = e, Kind = "meeting", Id = $"{e.Title}|{e.Start:o}", Key = $"m:{e.Title}|{e.Start:o}|{e.End:o}", Text = Meetings.Label(e),
-                Group = Meetings.Name, GroupColor = Meetings.Color
+                Source = e, Kind = "meeting", Id = Meetings.KeyOf(e), Key = $"m:{e.Title}|{e.Start:o}|{e.End:o}", Text = Meetings.Label(e),
+                Group = groups ? Meetings.Name : "", GroupColor = Meetings.Color, JoinUrl = e.JoinUrl, JoinName = e.JoinName
             }).ToList();
         }
         catch (Exception ex) { Log.Error("Meeting rows", ex); return new(); }

@@ -196,6 +196,8 @@ public partial class MainWindow
         public string Header { get; init; } = "";
         public List<BinTask> Items { get; init; } = new();
         public DateTime? Date { get; init; }
+        /// <summary>That day's meetings, as rows above its tasks.</summary>
+        public List<FrameworkElement> DayMeetings { get; init; } = new();
     }
 
     /// <summary>The day a task shows up on in Upcoming: snoozed-until, picked-for, or due date.</summary>
@@ -212,7 +214,7 @@ public partial class MainWindow
         {
             var list = items.ToList();
             // The next two weeks always show, so tasks can be dragged onto any of those days.
-            if (list.Count > 0 || date != null) groups.Add(new UpcomingDay { Header = header, Items = list, Date = date });
+            if (list.Count > 0 || date != null) groups.Add(new UpcomingDay { Header = header, Items = list, Date = date, DayMeetings = date is DateTime d ? UpcomingMeetings(d) : new() });
         }
         Add("Overdue", tasks.Where(x => x.Date < today && !x.Task.IsSnoozed).Select(x => x.Task));
         for (int i = 0; i < 14; i++)

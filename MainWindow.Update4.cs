@@ -445,7 +445,7 @@ public partial class MainWindow
                 .OrderBy(TaskBase.Rank).ThenBy(t => t.Due ?? DateTime.MaxValue).ToList();
         // In today's view, as chosen in Tasks: your own order, or under project headings (today's meetings first).
         var rows = AsRows(TodayInView(today), groups: TodayMode == "project");
-        if (TodayMode == "project") rows.InsertRange(0, MeetingRows(DateTime.Today));
+        rows.InsertRange(0, MeetingRows(DateTime.Today, TodayMode == "project")); // meetings show as tasks in every view
         return rows;
     }
 
@@ -463,7 +463,7 @@ public partial class MainWindow
                     if (item != null) item.Done = t.Done;
                     else Log.Write("Floating timer: couldn't find the session task " + t.Text);
                     break;
-                case "meeting": break; // calendar meetings tick themselves off when they're over
+                case "meeting": if (t.Done) Meetings.Dismissed.Add(t.Id); RefreshMeetingRows(); break; // ticked: off the lists (they also go when over)
                 case "personal":
                     if (t.Done && PersonalTasks.All.FirstOrDefault(x => x.Id == t.Id) is BinTask mine) PersonalTasks.Finish(mine);
                     break;

@@ -3,6 +3,15 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.30
+
+- Meetings show as tasks everywhere: Today, Tomorrow and List in every view (Default, Ordered, By project) on the
+  Tasks page, the task window, the thermometer and the dashboard, and under each day in Upcoming. Each has a small
+  dot beside its name: click it to go straight into the meeting. Tick one to take it off the lists; it also goes by
+  itself when it's over.
+- Meetings sits with No Project in the Projects list, and its count is the working week's meetings (on a weekend, the
+  coming week's). Its list shows Today, This week (or Coming week) and Week after.
+
 ## 1.7.29
 
 - Task window: see Work, Personal, or both (in the view menu under the title). Both lists Work, then Personal.

@@ -83,6 +83,7 @@ public partial class MainWindow
         DashTasksPanel.Visibility = Visibility.Visible;
         DashTasksList.Visibility = session ? Visibility.Visible : Visibility.Collapsed;
         DashListTasks.Visibility = session ? Visibility.Collapsed : Visibility.Visible;
+        if (session) DashMeetings.Visibility = Visibility.Collapsed;
         DashFromBinBtn.Visibility = session && inFocus && _settings.On("dashTaskEditing") ? Visibility.Visible : Visibility.Collapsed;
 
         if (session)
@@ -115,6 +116,7 @@ public partial class MainWindow
             .ToList();
         // Today follows the view chosen in Tasks (Default, Ordered or By project).
         string dashList = todayOnly ? "today" : undatedOnly ? "undated" : "list"; // All follows List's view
+        FillDashMeetings(dashList == "undated" ? null : DateTime.Today);
         tasks = InView(dashList, tasks);
         if (ListMode(dashList) == "project")
         {
@@ -416,7 +418,7 @@ public partial class MainWindow
             int open = label.LastIndexOf(" (", StringComparison.Ordinal);
             if (open > 0 && label.EndsWith(")")) { text = label[..open]; count = label[(open + 2)..^1]; }
             if (key == "noproject") ProjectFilters.Children.Add(FilterRow(key, "No Project", count, "#7A8886", null));
-            else if (key == "meetings") ProjectFilters.Children.Insert(0, FilterRow(key, Meetings.Name, count, Meetings.Color, null));
+            else if (key == "meetings") ProjectFilters.Children.Add(FilterRow(key, Meetings.Name, count, Meetings.Color, null));
             else if (key.StartsWith("project:"))
             {
                 var project = Projects.Find(key[8..]);

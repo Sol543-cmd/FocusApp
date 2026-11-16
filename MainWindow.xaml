@@ -1047,6 +1047,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <StackPanel x:Name="DashMeetings" Visibility="Collapsed"/>
                                 <ItemsControl x:Name="DashListTasks" Visibility="Collapsed">
                                     <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -1227,6 +1228,7 @@
                                 <DataTemplate>
                                     <StackPanel Margin="0,0,0,14">
                                         <TextBlock Text="{Binding Header}" Style="{StaticResource SubHeading}" Margin="0,0,0,6" AllowDrop="True" Drop="UpcomingHeader_Drop" Background="Transparent" ToolTip="Drop a task here to move it to this day"/>
+                                        <ItemsControl ItemsSource="{Binding DayMeetings}"/>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

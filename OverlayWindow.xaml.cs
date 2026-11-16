@@ -214,6 +214,12 @@ public partial class OverlayWindow : Window
         TaskScroll.Height = double.NaN;
     }
 
+    private void JoinDot_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if ((sender as FrameworkElement)?.DataContext is OverlayTask t) CalendarService.Join(t.JoinUrl);
+    }
+
     private void Task_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is OverlayTask t) TaskToggled?.Invoke(t);
@@ -295,4 +301,9 @@ public sealed class OverlayTask
     /// <summary>By project: the project heading it's listed under (empty: no headings).</summary>
     public string Group { get; set; } = "";
     public string GroupColor { get; set; } = "";
+    /// <summary>A meeting's online link (the small dot beside it opens it).</summary>
+    public string JoinUrl { get; set; } = "";
+    public string JoinName { get; set; } = "";
+    public bool HasJoin => JoinUrl.Length > 0;
+    public string JoinTip => $"Join {JoinName} meeting";
 }

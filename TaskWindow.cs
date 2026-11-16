@@ -294,7 +294,7 @@ public class TaskWindow : Window
         _viewText.Text = title;
         var tasks = _tasks(view);
         // Narrow: no project headings, so the names keep their room.
-        if (ActualWidth > 0 && ActualWidth < 280) tasks = tasks.Select(t => new OverlayTask { Source = t.Source, Kind = t.Kind, Id = t.Id, Key = t.Key, Text = t.Text, IsHigh = t.IsHigh, Done = t.Done }).ToList();
+        if (ActualWidth > 0 && ActualWidth < 280) tasks = tasks.Select(t => new OverlayTask { Source = t.Source, Kind = t.Kind, Id = t.Id, Key = t.Key, Text = t.Text, IsHigh = t.IsHigh, Done = t.Done, JoinUrl = t.JoinUrl, JoinName = t.JoinName }).ToList();
         string now = Set + view + mode + (ActualWidth < 280 ? "n" : "w") + string.Join("|", tasks.Select(t => t.Key + (t.Done ? "1" : "0") + t.Text + t.Group));
         if (now != _shown)
         {
@@ -337,6 +337,25 @@ public class TaskWindow : Window
             if ((s as FrameworkElement)?.DataContext is OverlayTask t) { _toggled(t); _shown = ""; Dispatcher.BeginInvoke(new Action(Refresh)); }
         }));
         dock.AppendChild(check);
+        // A meeting's join dot (small, beside it): click to open the meeting.
+        var join = new FrameworkElementFactory(typeof(Border));
+        join.SetValue(DockPanel.DockProperty, Dock.Right);
+        join.SetValue(BackgroundProperty, Brushes.Transparent);
+        join.SetValue(Border.PaddingProperty, new Thickness(6, 5, 2, 4));
+        join.SetValue(CursorProperty, Cursors.Hand);
+        join.SetValue(VerticalAlignmentProperty, VerticalAlignment.Top);
+        join.SetBinding(ToolTipProperty, new Binding(nameof(OverlayTask.JoinTip)));
+        join.SetBinding(VisibilityProperty, new Binding(nameof(OverlayTask.HasJoin)) { Converter = new BooleanToVisibilityConverter() });
+        join.AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler((s, e) =>
+        {
+            e.Handled = true;
+            if ((s as FrameworkElement)?.DataContext is OverlayTask t) CalendarService.Join(t.JoinUrl);
+        }));
+        var dot = new FrameworkElementFactory(typeof(Ellipse));
+        dot.SetValue(WidthProperty, 8.0); dot.SetValue(HeightProperty, 8.0);
+        dot.SetValue(Shape.FillProperty, new SolidColorBrush(Color.FromRgb(0x5B, 0x6B, 0xD8)));
+        join.AppendChild(dot);
+        dock.AppendChild(join);
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(OverlayTask.Text)));
         text.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);

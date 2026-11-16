@@ -100,6 +100,11 @@
                                           Margin="0,0,8,0" VerticalAlignment="Top" Click="Task_Click">
                                     <CheckBox.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8"/></CheckBox.LayoutTransform>
                                 </CheckBox>
+                                <!-- A meeting's join dot: click to open the meeting -->
+                                <Border x:Name="Join" DockPanel.Dock="Right" Background="Transparent" Padding="5,4,2,4" Cursor="Hand" VerticalAlignment="Top" Visibility="Collapsed"
+                                        ToolTip="{Binding JoinTip}" MouseLeftButtonUp="JoinDot_Click">
+                                    <Ellipse Width="8" Height="8" Fill="#5B6BD8"/>
+                                </Border>
                                 <TextBlock x:Name="Text" local:ScriptureLinks.Text="{Binding Text}" FontSize="13" Foreground="{DynamicResource Text}" TextWrapping="Wrap"/>
                             </DockPanel>
                             <DataTemplate.Triggers>
@@ -109,6 +114,9 @@
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsHigh}" Value="True">
                                     <Setter TargetName="Check" Property="BorderBrush" Value="{DynamicResource PriorityHigh}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasJoin}" Value="True">
+                                    <Setter TargetName="Join" Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
