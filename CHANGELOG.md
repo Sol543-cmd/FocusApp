@@ -3,6 +3,14 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.32
+
+- Rebuild the outline is gone: from lessons, from Books practice (no more outline reviews) and from Training settings.
+- New: Main ideas, right after the reading. For each section (its heading from the book, or "Section 2" where it has
+  none) you choose between three paragraph summaries, one right and two close misses, then Check. Every section then
+  has Show in book, so you can check the summary against the text. Missed ones say what was off. It isn't reviewed in
+  Books practice. It needs packs with main ideas; lessons from older packs skip it.
+
 ## 1.7.31
 
 - Sync, faster and steadier:

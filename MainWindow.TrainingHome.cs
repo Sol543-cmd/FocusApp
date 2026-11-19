@@ -93,7 +93,7 @@ public partial class MainWindow
             if (next != null)
             {
                 tp.Children.Add(TT($"{ShortTitle(dueBook)}, Lesson {next.Index + 1}: {next.Lesson.Title}", 22, bold: true, top: 8));
-                tp.Children.Add(TT($"Chapter {next.Pack.Chapter} · about 25 minutes of reading, then the outline and questions" + (o.InProgress == next.Index ? " · you've started it" : ""), 13.5, brush: "Muted", top: 6));
+                tp.Children.Add(TT($"Chapter {next.Pack.Chapter} · about 25 minutes of reading, then main ideas and questions" + (o.InProgress == next.Index ? " · you've started it" : ""), 13.5, brush: "Muted", top: 6));
                 string id = dueBook.Id;
                 var go = TButton(o.InProgress == next.Index ? "Continue lesson" : "Start lesson", () => StartLesson(required: false, bookId: id), primary: true);
                 go.Padding = new Thickness(24, 10, 24, 10); go.Margin = new Thickness(0, 16, 0, 0); go.HorizontalAlignment = HorizontalAlignment.Left;
@@ -206,8 +206,7 @@ public partial class MainWindow
             var c = TBox(row, padding: new Thickness(18, 14, 16, 14)); c.Margin = new Thickness(0, 8, 14, 0);
             practices.Children.Add(c);
         }
-        bool outlineDue = Course.Config.OutlineInBooksPractice && Course.OutlineDue() != null;
-        Practice("Books practice", Join(dueAll > 0 ? $"{dueAll} due" : "Nothing due", outlineDue ? "an outline review" : "", NextAt("Books practice")), () => StartBooksPractice());
+        Practice("Books practice", Join(dueAll > 0 ? $"{dueAll} due" : "Nothing due", NextAt("Books practice")), () => StartBooksPractice());
         Practice("Book flashcards", Join(Course.CardReviewDoneToday() ? "Done today" : "", NextAt("Book flashcards")), () => StartBookFlashcards());
         int tlDue = Course.TimelineDueCount();
         Practice("Timeline", Join(tlDue > 0 ? $"{tlDue} due" : Course.TimelineDoneToday() ? "Done today" : "", NextAt("Timeline")), () => StartTimelinePractice());

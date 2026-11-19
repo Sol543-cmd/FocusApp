@@ -46,6 +46,21 @@ public class PackIdea
     [JsonPropertyName("text")] public string Text { get; set; } = "";
 }
 
+/// <summary>
+/// Main ideas: one section of a lesson, summed up. Heading: the book's own heading for the section (empty where the
+/// book has none: Focus shows "Section 2"). Right: a paragraph that sums the section up correctly; Misses: two
+/// paragraphs that are close but wrong in one way each. Part and Find: where the section is in the book (Show in book).
+/// </summary>
+public class PackMainIdea
+{
+    [JsonPropertyName("heading")] public string Heading { get; set; } = "";
+    [JsonPropertyName("part")] public int Part { get; set; }
+    [JsonPropertyName("find")] public string Find { get; set; } = "";
+    [JsonPropertyName("right")] public string Right { get; set; } = "";
+    [JsonPropertyName("misses")] public List<string> Misses { get; set; } = new();
+    [JsonPropertyName("why")] public string Why { get; set; } = "";
+}
+
 public class PackPart
 {
     [JsonPropertyName("title")] public string Title { get; set; } = "";
@@ -79,6 +94,8 @@ public class PackLesson
     [JsonPropertyName("timeline")] public List<PackEvent> Timeline { get; set; } = new();
     /// <summary>The lesson's key ideas in teaching order (Rebuild the outline). Older packs: each part's "watch" list stands in.</summary>
     [JsonPropertyName("outline")] public List<PackIdea> Outline { get; set; } = new();
+    /// <summary>Main ideas: each section's right summary and two close misses, after the reading (replaces the outline).</summary>
+    [JsonPropertyName("mainIdeas")] public List<PackMainIdea> MainIdeas { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<PackQuestion> AllQuestions => Warmup.Concat(Practice).Concat(Cards).Concat(Quiz);
 }
@@ -1634,9 +1651,6 @@ public static class Course
                 if (card && !Released(q.Id)) { waiting.Add(q.Id); continue; }
                 if (st.Due <= today) load += SecondsFor(card);
             }
-        // Due outline reviews count too (about 2 minutes each), when they come up in Books practice.
-        if (Config.OutlineInBooksPractice)
-            load += 120 * Lessons().Count(l => { if (!done.Contains(l.Index)) return false; var os = OutlineState(l.Index); return os.Tries > 0 && !os.Learned && os.Due <= today; });
         double room = Math.Max(1, Config.ReviewMinutes) * 60 - load;
         foreach (var id in waiting)
         {
