@@ -66,6 +66,7 @@ public partial class MainWindow
     {
         SavePlanNow();
         _planDate = date.Date;
+        PaintPlanTrainingBtn(); // Training on/off shows for the day you're looking at
         _loadingPlan = true;
         try
         {
@@ -543,6 +544,7 @@ public partial class MainWindow
         CalDay.BlockClicked += block =>
         {
             SelectBlock(block);
+            ShowCalPanel(true); // editing happens in the side panel
             FocusTitle(CalTitleBox);
         };
         CalDay.MenuFor = BuildBlockMenu;
@@ -551,6 +553,9 @@ public partial class MainWindow
         CalDay.TaskDropped += AddTaskToSession;
         SyncWeekPlanChecks();
         CalWeek.ShowPlan = _settings.WeekShowsPlan;
+        CalWeek.FitToHeight = true; // the whole day in view, like Google Calendar
+        ShowCalPanel(_settings.CalendarPanelOpen);
+        CalDay.FitToHeight = true;
         CalWeek.RangeStart = Defaults.CalendarStart;
         CalWeek.RangeEnd = Defaults.CalendarEnd;
         CalWeek.DayClicked += day =>
@@ -655,6 +660,16 @@ public partial class MainWindow
     private void CalPlanAround_Click(object sender, RoutedEventArgs e) { CalendarService.SaveSources(); RefreshCalendarTab(); RefreshMeetingRows(); }
 
     private string _calJoinUrl = "";
+
+    /// <summary>The Calendar's side panel (calendars, Show my plan, Plan this day, block editing): open or folded away.</summary>
+    private void ShowCalPanel(bool open)
+    {
+        CalSidePanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        CalPanelToggle.IsChecked = open;
+        if (_settings.CalendarPanelOpen != open) { _settings.CalendarPanelOpen = open; SaveSettingsQuietly(); }
+    }
+
+    private void CalPanelToggle_Click(object sender, RoutedEventArgs e) => ShowCalPanel(CalPanelToggle.IsChecked == true);
     private void CalJoin_Click(object sender, RoutedEventArgs e) => CalendarService.Join(_calJoinUrl);
 
     private bool _syncingWeekPlanChecks;

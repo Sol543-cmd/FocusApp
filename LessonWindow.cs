@@ -911,7 +911,6 @@ public partial class LessonWindow : Window
         bool TurnZone(Point p) => p.Y > Math.Max(60, pages.ActualHeight * 0.12) && p.Y < pages.ActualHeight - 70;
         Point down = default;
         bool pressed = false;
-        pages.ToolTip = "Click or tap the left or right side of the page to turn it (or use the arrow keys)";
         pages.PreviewMouseLeftButtonDown += (_, e) => { down = e.GetPosition(pages); pressed = true; };
         pages.PreviewMouseLeftButtonUp += (_, e) =>
         {

@@ -389,10 +389,10 @@ public partial class MainWindow
 
         double spacing = _settings.CalendarSpacing;
         Timeline.PixelsPerMinute = 1.8 * spacing;
-        CalDay.PixelsPerMinute = 1.8 * spacing;
+        if (!CalDay.FitToHeight) CalDay.PixelsPerMinute = 1.8 * spacing;
         DashDay.PixelsPerMinute = 1.5 * spacing;
         if (HomeDay != null) { HomeDay.PixelsPerMinute = 1.5 * spacing; HomeDay.RequestRender(); }
-        CalWeek.PixelsPerMinute = 1.3 * spacing;
+        if (!CalWeek.FitToHeight) CalWeek.PixelsPerMinute = 1.3 * spacing;
         DashWeek.PixelsPerMinute = 1.3 * spacing;
         Timeline.RequestRender();
         CalDay.RequestRender();

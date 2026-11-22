@@ -339,6 +339,7 @@ public partial class MainWindow
     {
         using var pageSet = TaskStores.Use(TasksPageSet); // the set this page shows (Work, or Personal from its own button)
         if (BinCountText == null) return;
+        NextDay.Refresh(PagePersonal); // Personal says Tomorrow; Work says Monday on Fridays
         UpdateBinEmptyText();
         Dispatcher.BeginInvoke(new Action(RefreshMeetingRows)); // after the filters and views settle
         int sinceMonday = ((int)DateTime.Today.DayOfWeek + 6) % 7;
@@ -651,7 +652,7 @@ public partial class MainWindow
         // Added on the Tomorrow tab: it's for tomorrow (unless you gave it a day yourself).
         if ((BinTomorrowView.IsChecked == true || BinTodayView.IsChecked == true) && TaskBin.All.LastOrDefault() is BinTask added && added.PlannedFor.Length == 0 && added.Due == null)
         {
-            added.PlannedFor = (BinTodayView.IsChecked == true ? DateTime.Today : NextDay.Date).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            added.PlannedFor = (BinTodayView.IsChecked == true ? DateTime.Today : NextDay.DateFor(PagePersonal)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             TaskBin.Save();
             RefreshTasksTab();
         }
@@ -818,7 +819,8 @@ public partial class MainWindow
     }
 
     private void AddToToday_Click(object sender, RoutedEventArgs e) => AddToDay(sender, DateTime.Today);
-    private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, NextDay.Date);
+    private void AddToTomorrow_Click(object sender, RoutedEventArgs e) => AddToDay(sender, NextDay.DateFor(PagePersonal));
+    private bool PagePersonal => ReferenceEquals(TasksPageSet, TaskStores.Personal);
 
     /// <summary>
     /// The Today and Tomorrow buttons on a task row: set the task's date to that day, exactly as picking it in the date
@@ -845,8 +847,8 @@ public partial class MainWindow
         task.SnoozedUntil = null;
     }
 
-    private static string DayWord(DateTime day) =>
-        day.Date == DateTime.Today ? "today" : day.Date == NextDay.Date ? (NextDay.Name == "Monday" ? "Monday" : "tomorrow") : day.ToString("ddd MMM d");
+    private string DayWord(DateTime day) =>
+        day.Date == DateTime.Today ? "today" : day.Date == NextDay.DateFor(PagePersonal) ? (NextDay.NameFor(PagePersonal) == "Monday" ? "Monday" : "tomorrow") : day.ToString("ddd MMM d");
 
     private void ReopenDoneTask_Click(object sender, RoutedEventArgs e)
     {
@@ -935,7 +937,7 @@ public partial class MainWindow
     }
 
     private void TaskDueToday_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = DateTime.Today.ToString("d");
-    private void TaskDueTomorrow_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = NextDay.Date.ToString("d");
+    private void TaskDueTomorrow_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = NextDay.DateFor(PagePersonal).ToString("d");
     private void TaskDueNone_Click(object sender, RoutedEventArgs e) => TaskDueBox.Text = "";
 
     private void TaskPopupSave_Click(object sender, RoutedEventArgs e)

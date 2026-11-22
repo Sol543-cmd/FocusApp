@@ -660,6 +660,7 @@
                         <Button x:Name="AdjustDayBtn" Content="Adjust working day" Click="AdjustDay_Click" Margin="0,0,8,6" ToolTip="Change when this day starts and ends; sessions and breaks fill the new hours"/>
                         <Button x:Name="AutoFillBtn" Content="Auto-fill day" Click="AutoFill_Click" Margin="0,0,8,6" ToolTip="Plan this day around your meetings, the 10:05 break and lunch"/>
                         <Button x:Name="ClearBtn" Content="Clear" Click="Clear_Click" Margin="0,0,8,6"/>
+                        <Button x:Name="PlanTrainingBtn" Content="Training ⌄" Click="PlanTraining_Click" Margin="0,0,8,6" ToolTip="Training on or off for this day"/>
                     </WrapPanel>
 
                     <local:DayTimeline x:Name="Timeline" Grid.Row="2"/>
@@ -1452,14 +1453,19 @@
         </ScrollViewer>
 
         <!-- ===== Calendar ===== -->
-        <Border x:Name="CalendarPanel" Grid.Column="1" Grid.Row="2" Background="{DynamicResource Panel}" CornerRadius="10" Padding="18" Visibility="Collapsed">
+        <Border x:Name="CalendarPanel" Grid.Column="1" Grid.Row="2" Background="{DynamicResource Panel}" CornerRadius="10" Padding="16,12,16,12" Visibility="Collapsed">
+            <!-- The calendar gets the room: one slim header row, the grid filling the rest (the whole day in view), and the
+                 calendars, settings and block editor in a side panel you can fold away. -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <DockPanel>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Content="‹" Click="CalPrev_Click" Padding="12,4" FontSize="16"/>
                         <Button Content="›" Click="CalNext_Click" Padding="12,4" FontSize="16" Margin="6,0,10,0"/>
@@ -1467,49 +1473,51 @@
                         <Button Content="Today" Style="{StaticResource LinkButton}" Margin="10,0,0,0" VerticalAlignment="Center" Click="CalToday_Click"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <RadioButton x:Name="CalDayView" Content="Day" GroupName="calview" IsChecked="True" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
-                        <RadioButton x:Name="CalWeekView" Content="Week" GroupName="calview" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
-                        <CheckBox x:Name="CalShowPlanCheck" Content="Show my plan" VerticalAlignment="Center" Margin="12,0,0,0" Checked="WeekShowPlan_Changed" Unchecked="WeekShowPlan_Changed" Visibility="Collapsed" ToolTip="Untick to see only your calendar events, without focus sessions, breaks, lunch or Devotions"/>
-                        <Button Content="Plan this day" Click="CalPlanDay_Click" Margin="12,0,0,0" ToolTip="Open this day in the Day plan"/>
+                        <RadioButton x:Name="CalDayView" Content="Day" GroupName="calview" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
+                        <RadioButton x:Name="CalWeekView" Content="Week" GroupName="calview" IsChecked="True" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
+                        <ToggleButton x:Name="CalPanelToggle" Content="&#xE8A0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15" Padding="10,6" Margin="10,0,0,0"
+                                      Click="CalPanelToggle_Click" ToolTip="Calendars, settings and editing"/>
                     </StackPanel>
                 </DockPanel>
-                <StackPanel Grid.Row="1" Margin="0,10,0,10">
-                    <!-- Your calendars, each in its color: click one to show or hide it (as in Outlook) -->
-                    <WrapPanel x:Name="CalSourcesBar" Margin="0,0,0,6"/>
-                    <TextBlock x:Name="CalInfoText" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                </StackPanel>
-                <Grid Grid.Row="2">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <local:DayTimeline x:Name="CalDay"/>
+                <local:DayTimeline x:Name="CalDay" Grid.Row="1" Visibility="Collapsed"/>
+                <local:WeekTimeline x:Name="CalWeek" Grid.Row="1"/>
+                <!-- Side panel: fold it away for more room -->
+                <Border x:Name="CalSidePanel" Grid.Row="1" Grid.Column="1" Width="270" Margin="14,0,0,0" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
                     <!-- Quick editing right in the calendar (changes save automatically) -->
-                    <Border x:Name="CalEditor" Grid.Column="1" Width="290" Margin="16,0,0,0" Padding="18" Background="{DynamicResource Panel2}" CornerRadius="10" VerticalAlignment="Top">
-                        <Grid>
-                            <TextBlock x:Name="CalNoSelection" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Click a block to edit it here. Drag sessions and breaks to move them, or press Delete to remove one. Changes save automatically."/>
-                            <StackPanel x:Name="CalEditorFields" Visibility="Collapsed">
-                                <TextBlock x:Name="CalEditorKind" Text="{Binding KindLabel}" FontSize="13" FontWeight="SemiBold"/>
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,12">
-                                    <Run Text="Starts at"/> <Run Text="{Binding StartLabel, Mode=OneWay}"/>
-                                </TextBlock>
-                                <TextBlock x:Name="CalAnchorNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
-                                <Button x:Name="CalJoinBtn" Content="Join meeting" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,0,0,14" Visibility="Collapsed" Click="CalJoin_Click"/>
-                                <TextBlock Text="Title" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
-                                <TextBox x:Name="CalTitleBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
-                                <TextBlock Text="Length" Style="{StaticResource Caption}" Margin="0,12,0,6"/>
-                                <local:NumberBox x:Name="CalEditorMinutes" Value="{Binding Minutes}" Suffix="min" Width="130" HorizontalAlignment="Left" Minimum="1" Maximum="600"/>
-                                <WrapPanel x:Name="CalEditorActions" Margin="0,16,0,0">
-                                    <Button Content="Duplicate" Click="Duplicate_Click" Margin="0,0,8,8"/>
-                                    <Button Content="Delete" Click="Remove_Click" Margin="0,0,8,8"/>
-                                </WrapPanel>
-                                <Button Content="Tasks and blocked apps..." Style="{StaticResource LinkButton}" Click="CalOpenInPlan_Click" Margin="0,4,0,0"/>
-                                <TextBlock Style="{StaticResource Caption}" FontSize="11" Margin="0,12,0,0" Text="Changes save automatically."/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </Grid>
-                <local:WeekTimeline x:Name="CalWeek" Grid.Row="2" Visibility="Collapsed"/>
+                            <Border x:Name="CalEditor" Padding="16" Background="{DynamicResource Panel2}" CornerRadius="10" Margin="0,0,0,16">
+                                <Grid>
+                                    <TextBlock x:Name="CalNoSelection" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Click a block to edit it here. Drag sessions and breaks to move them, or press Delete to remove one. Changes save automatically."/>
+                                    <StackPanel x:Name="CalEditorFields" Visibility="Collapsed">
+                                        <TextBlock x:Name="CalEditorKind" Text="{Binding KindLabel}" FontSize="13" FontWeight="SemiBold"/>
+                                        <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,12">
+                                            <Run Text="Starts at"/> <Run Text="{Binding StartLabel, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <TextBlock x:Name="CalAnchorNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
+                                        <Button x:Name="CalJoinBtn" Content="Join meeting" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,0,0,14" Visibility="Collapsed" Click="CalJoin_Click"/>
+                                        <TextBlock Text="Title" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                                        <TextBox x:Name="CalTitleBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Text="Length" Style="{StaticResource Caption}" Margin="0,12,0,6"/>
+                                        <local:NumberBox x:Name="CalEditorMinutes" Value="{Binding Minutes}" Suffix="min" Width="130" HorizontalAlignment="Left" Minimum="1" Maximum="600"/>
+                                        <WrapPanel x:Name="CalEditorActions" Margin="0,16,0,0">
+                                            <Button Content="Duplicate" Click="Duplicate_Click" Margin="0,0,8,8"/>
+                                            <Button Content="Delete" Click="Remove_Click" Margin="0,0,8,8"/>
+                                        </WrapPanel>
+                                        <Button Content="Tasks and blocked apps..." Style="{StaticResource LinkButton}" Click="CalOpenInPlan_Click" Margin="0,4,0,0"/>
+                                        <TextBlock Style="{StaticResource Caption}" FontSize="11" Margin="0,12,0,0" Text="Changes save automatically."/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="CALENDARS" Style="{StaticResource SettingsSection}"/>
+                            <!-- Your calendars, each in its color: click one to show or hide it (as in Outlook) -->
+                            <WrapPanel x:Name="CalSourcesBar" Margin="0,4,0,6"/>
+                            <CheckBox x:Name="CalShowPlanCheck" Content="Show my plan" Margin="0,6,0,0" Checked="WeekShowPlan_Changed" Unchecked="WeekShowPlan_Changed" Visibility="Collapsed" ToolTip="Untick to see only your calendar events, without focus sessions, breaks, lunch or Devotions"/>
+                            <Button Content="Plan this day" Click="CalPlanDay_Click" HorizontalAlignment="Left" Margin="0,12,0,0" ToolTip="Open this day in the Day plan"/>
+                            <TextBlock x:Name="CalInfoText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
             </Grid>
         </Border>
 

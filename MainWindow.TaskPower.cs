@@ -449,7 +449,7 @@ public partial class MainWindow
         if ((sender as FrameworkElement)?.DataContext is Subtask s) _editSubtasks.Remove(s);
     }
 
-    private void SnoozeTomorrow_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = NextDay.Date.ToString("d");
+    private void SnoozeTomorrow_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = NextDay.DateFor(PagePersonal).ToString("d");
     private void SnoozeNextWeek_Click(object sender, RoutedEventArgs e) =>
         TaskSnoozeBox.Text = DateTime.Today.AddDays(7 - ((int)DateTime.Today.DayOfWeek + 6) % 7).ToString("d");
     private void SnoozeNone_Click(object sender, RoutedEventArgs e) => TaskSnoozeBox.Text = "";

@@ -523,6 +523,11 @@ public class CourseConfig
     public string ActiveId { get; set; } = "";
     /// <summary>A missed lesson: "offer" it as an optional catch-up the next weekday, or "carry" on without one.</summary>
     public string MissedPolicy { get; set; } = "offer";
+    /// <summary>
+    /// Days with training off (yyyy-MM-dd → "off": no lessons or practice; "books": no lesson, practice as usual).
+    /// Synced with the rest of the course settings, so it's off on every computer.
+    /// </summary>
+    public Dictionary<string, string> DaysOff { get; set; } = new();
     /// <summary>Catch-ups you let go ("courseId|yyyy-MM-dd").</summary>
     public List<string> SkippedCatchUps { get; set; } = new();
     // From before the library (one book only); moved into Courses when first loaded.
@@ -621,7 +626,7 @@ public static class Course
     /// <summary>The open book (the one whose lessons come up each day).</summary>
     public static CourseInfo Current { get; private set; } = new() { Id = "desilva-nt", Title = "deSilva, An Introduction to the New Testament" };
 
-    private static string CourseOf(TrainingEvent e) => e.CourseId.Length == 0 ? "desilva-nt" : e.CourseId;
+    public static string CourseOf(TrainingEvent e) => e.CourseId.Length == 0 ? "desilva-nt" : e.CourseId;
     /// <summary>The open book's events only, so lessons, review and notes never mix books.</summary>
     private static IEnumerable<TrainingEvent> CE => Events.Where(e => CourseOf(e) == Current.Id);
     public static string MediaDir => Path.Combine(CourseDir, "media");
@@ -663,9 +668,23 @@ public static class Course
     /// <summary>The book planned for a day: none at weekends; with no days planned yet, your active book takes every weekday.</summary>
     public static CourseInfo? BookFor(DateTime day) => BooksFor(day).FirstOrDefault();
 
+    /// <summary>"" (training as usual), "off" (no lessons or practice) or "books" (no lesson; practice as usual).</summary>
+    public static string DayOff(DateTime day) => Config.DaysOff.TryGetValue(Ymd(day), out var v) ? v : "";
+
+    /// <summary>Sets training for a day: "" on, "off" or "books". Old entries tidy themselves away.</summary>
+    public static void SetDayOff(DateTime day, string mode)
+    {
+        string key = Ymd(day);
+        if (mode.Length == 0) Config.DaysOff.Remove(key); else Config.DaysOff[key] = mode;
+        string cutoff = Ymd(DateTime.Today.AddDays(-30));
+        foreach (var old in Config.DaysOff.Keys.Where(k => string.CompareOrdinal(k, cutoff) < 0).ToList()) Config.DaysOff.Remove(old);
+        SaveConfig();
+    }
+
     /// <summary>A day's lessons in order (a book twice means two of its lessons), from the week you changed or the weekly plan.</summary>
     public static List<CourseInfo> BooksFor(DateTime day)
     {
+        if (DayOff(day) != "") return new(); // training (or just books) off that day: no lesson, nothing missed
         if (Config.WeekPlan.TryGetValue(Ymd(day), out var plan) && !plan.Default)
             return plan.Books.Select(id => Config.Courses.FirstOrDefault(c => c.Id == id)).Where(c => c != null).Select(c => c!).ToList();
         return PlanBook(day) is CourseInfo c1 ? new List<CourseInfo> { c1 } : new List<CourseInfo>();

@@ -956,6 +956,8 @@ public class AppSettings
     /// <summary>The task window's Working Memory: your jotted notes (Markdown), and how tall its pane is.</summary>
     /// <summary>Whose tasks the task window lists: "work" (or ""), "personal", or "both".</summary>
     public string TaskWindowSet { get; set; } = "work";
+    /// <summary>The Calendar page's side panel (calendars, settings, editing) is open.</summary>
+    public bool CalendarPanelOpen { get; set; }
     public double WorkingMemoryHeight { get; set; } = 0.3; // share of the task window
     /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
     public string TaskWindowView { get; set; } = "today";

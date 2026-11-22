@@ -288,7 +288,8 @@ public partial class MainWindow
 
     /// <summary>True on Saturdays and Sundays when "Pause all practice on weekends" is on (you can still start anything yourself).</summary>
     private bool PracticePausedToday() =>
-        _settings.PauseWeekends && DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        (_settings.PauseWeekends && DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        || Course.DayOff(DateTime.Today) == "off"; // training off today (Day plan or Training page)
 
     /// <summary>True during a meeting, a break or lunch: practice and lesson reminders wait until it's over.</summary>
     private bool PracticeMustWait()

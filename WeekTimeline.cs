@@ -29,6 +29,8 @@ public class WeekTimeline : UserControl
 
     /// <summary>False shows only calendar events (no focus sessions, breaks, lunch or Devotions).</summary>
     public bool ShowPlan { get; set; } = true;
+    /// <summary>The Calendar page: hours shrink or grow so the whole day fits the space, like Google Calendar.</summary>
+    public bool FitToHeight { get; set; }
 
     /// <summary>Clicking a day's name opens that day.</summary>
     public event Action<DateTime>? DayClicked;
@@ -46,7 +48,10 @@ public class WeekTimeline : UserControl
         dock.Children.Add(_header);
         dock.Children.Add(_scroll);
         Content = dock;
-        SizeChanged += (_, e) => { if (Math.Abs(e.PreviousSize.Width - e.NewSize.Width) > 0.5) RequestRender(); };
+        SizeChanged += (_, e) =>
+        {
+            if (Math.Abs(e.PreviousSize.Width - e.NewSize.Width) > 0.5 || (FitToHeight && Math.Abs(e.PreviousSize.Height - e.NewSize.Height) > 0.5)) RequestRender();
+        };
     }
 
     /// <summary>Shows the week containing <paramref name="anyDay"/>.</summary>
@@ -106,6 +111,12 @@ public class WeekTimeline : UserControl
         }
         _from = TimeSpan.FromMinutes(Math.Floor(_from.TotalMinutes / 60) * 60);
         _to = TimeSpan.FromMinutes(Math.Min(1440, Math.Ceiling(_to.TotalMinutes / 60) * 60));
+        if (FitToHeight && ActualHeight > 200)
+        {
+            // The whole day in view: spread the hours over the space under the day names (never cramped).
+            double header = _header.ActualHeight > 0 ? _header.ActualHeight : 44;
+            PixelsPerMinute = Math.Max(0.75, (ActualHeight - header - 24) / Math.Max(60, (_to - _from).TotalMinutes));
+        }
         _canvas.Height = Y(_to) + 12;
         _canvas.Width = width;
         _header.Width = width;

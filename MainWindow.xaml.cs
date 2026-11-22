@@ -130,7 +130,7 @@ public partial class MainWindow : Window
         MigrateOldPlan();
         LoadPlanForDate(DateTime.Today);
 
-        _clockTimer.Tick += (_, _) => { FollowClock(); if (NextDay.Refresh()) { PaintListTabs(); RefreshTasksTab(); RefreshDashTasks(); } MeetingsTick(); };
+        _clockTimer.Tick += (_, _) => { FollowClock(); if (NextDay.Refresh(PagePersonal)) { PaintListTabs(); RefreshTasksTab(); RefreshDashTasks(); } MeetingsTick(); };
         _clockTimer.Start();
 
         FillSettingFields();
@@ -450,7 +450,7 @@ public partial class MainWindow : Window
         if (NavPlan.IsChecked != true && BlockPopup.IsOpen) CloseBlockEditor();
         StatsPanel.Visibility = NavStats.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         if (NavStats.IsChecked == true) RefreshStats();
-        if (_runner.IsRunning) RunPanel.Visibility = NavDashboard.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        if (_runner.IsRunning) RunPanel.Visibility = NavDashboard.IsChecked == true || NavCalendar.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
         // Tasks and Personal each have their own button; both open the Tasks page, on their own set.
         TasksPanel.Visibility = NavTasks.IsChecked == true || NavPersonal.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         if (NavTasks.IsChecked == true || NavPersonal.IsChecked == true) ShowTasksPageForSet();
@@ -939,7 +939,7 @@ public partial class MainWindow : Window
         }
 
         // The dashboard shows all of this itself, so the strip is hidden there.
-        RunPanel.Visibility = NavDashboard.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        RunPanel.Visibility = NavDashboard.IsChecked == true || NavCalendar.IsChecked == true ? Visibility.Collapsed : Visibility.Visible; // the Calendar keeps its room
         var accent = (Brush)FindResource(AccentKey(cur));
         RunStripe.Background = accent;
         RunKind.Foreground = accent;

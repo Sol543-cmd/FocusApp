@@ -45,6 +45,7 @@ public partial class MainWindow
         _trainingView = "library";
         Course.UseToday(); // the page opens on today's next lesson's book
         TrainingHost.Children.Add(TrainingHeader("Training", DateTime.Today.ToString("dddd, MMMM d"), back: false, gear: true));
+        TrainingHost.Children.Add(DayOffBar());
         if (Course.Config.Courses.Count == 0)
         {
             var empty = new StackPanel();
@@ -69,7 +70,7 @@ public partial class MainWindow
         if (day.Count == 0)
         {
             tp.Children.Add(TLabel("TODAY"));
-            tp.Children.Add(TT(PracticePausedToday() || DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? "Weekend: no lessons" : "No lesson today", 22, bold: true, top: 8));
+            tp.Children.Add(TT(Course.DayOff(DateTime.Today) != "" ? "Day off: no lessons" : PracticePausedToday() || DateTime.Today.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? "Weekend: no lessons" : "No lesson today", 22, bold: true, top: 8));
             tp.Children.Add(TT("Use Go beside a book below for an extra lesson, or add one to today in Lessons this week.", 13, brush: "Muted", top: 6));
         }
         else if (dueBook == null)
@@ -139,7 +140,10 @@ public partial class MainWindow
             grid.Children.Add(sp);
         }
         Stat(Course.PagesReadThisWeek().ToString(), "pages read");
-        Stat($"{done} of {planned}", "lessons done");
+        // Every lesson finished this week, extra and catch-up ones too (not just the ones in a lesson time).
+        int finished = Course.Events.Where(e => e.Kind == "lessonDone" && e.Lesson >= 0 && string.CompareOrdinal(e.Day, ymdMon) >= 0)
+                                    .Select(e => (Course.CourseOf(e), e.Lesson)).Distinct().Count();
+        Stat(finished.ToString(), planned > 0 ? $"lessons done · {planned} planned" : "lessons done");
         Stat(rounds.ToString(), "practice rounds");
         Stat(WeeksInARow().ToString(), "weeks in a row");
         stats.Children.Add(grid);

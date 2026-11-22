@@ -27,6 +27,8 @@ public class DayTimeline : UserControl
     private bool _renderQueued;
 
     public double PixelsPerMinute { get; set; } = 1.8;
+    /// <summary>The Calendar page: hours fit the space so the whole day shows (never smaller than readable).</summary>
+    public bool FitToHeight { get; set; }
     public TimeSpan RangeStart { get; set; } = new(6, 30, 0);
     public TimeSpan RangeEnd { get; set; } = new(17, 0, 0);
     public bool ShowNowLine { get; set; }
@@ -145,7 +147,10 @@ public class DayTimeline : UserControl
         _nowLine.SetResourceReference(Shape.StrokeProperty, "MeetingBrush");
         _nowDot.SetResourceReference(Shape.FillProperty, "MeetingBrush");
         _dropLine.SetResourceReference(Shape.StrokeProperty, "Text");
-        SizeChanged += (_, e) => { if (Math.Abs(e.PreviousSize.Width - e.NewSize.Width) > 0.5) RequestRender(); };
+        SizeChanged += (_, e) =>
+        {
+            if (Math.Abs(e.PreviousSize.Width - e.NewSize.Width) > 0.5 || (FitToHeight && Math.Abs(e.PreviousSize.Height - e.NewSize.Height) > 0.5)) RequestRender();
+        };
     }
 
     /// <summary>Shows these blocks, the first one starting at <paramref name="dayStart"/>.</summary>
@@ -196,6 +201,8 @@ public class DayTimeline : UserControl
             if (e > _to) _to = Ceil30(e);
         }
         if (_to > TimeSpan.FromHours(24)) _to = TimeSpan.FromHours(24);
+        if (FitToHeight && ActualHeight > 200)
+            PixelsPerMinute = Math.Max(0.9, (ActualHeight - 30) / Math.Max(60, (_to - _from).TotalMinutes));
         _canvas.Height = Y(_to) + 16;
         _canvas.Width = width;
 

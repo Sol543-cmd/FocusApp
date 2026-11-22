@@ -3,6 +3,19 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.33
+
+- Reading: the hover tip over the page is gone (it covered the text).
+- Personal tasks say Tomorrow and plan for tomorrow, even on Fridays (Monday is only for work tasks).
+- Training, This week: lessons done counts every lesson you finish, extra and catch-up ones too, with how many were
+  planned beside it.
+- Calendar: opens on Week, and the hours fit the space so the whole day shows. Calendars, Show my plan, Plan this day
+  and block editing are in a side panel you can fold away (the button at the top right). The running-session bar
+  isn't shown on the Calendar.
+- Training off for a day: the Training button in the Day plan (any day, set ahead if you like) or "Take today off" on
+  the Training page. Off: no lessons or practice pop-ups and nothing counts as missed. Books off: no lesson, practice
+  as usual. Or off for a few days in a row. Syncs to your other computer.
+
 ## 1.7.32
 
 - Rebuild the outline is gone: from lessons, from Books practice (no more outline reviews) and from Training settings.
