@@ -737,7 +737,8 @@ public partial class MainWindow
     /// <summary>The Calendar size slider: the calendar follows as you slide; saved when you let go (and a moment after).</summary>
     private void CalSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_fillingCalSize || CalWeek == null || CalDay == null) return;
+        // The slider fires once while the window is still being built (before settings load): ignore that.
+        if (_fillingCalSize || _settings == null || !IsLoaded || CalWeek == null || CalDay == null) return;
         _settings.CalendarSize = Math.Round(e.NewValue, 2);
         CalWeek.SizeScale = CalDay.SizeScale = _settings.CalendarSize;
         CalWeek.RequestRender();

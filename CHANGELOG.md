@@ -3,6 +3,10 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.37
+
+- Fix: Focus wouldn't open after 1.7.36 (the new Calendar size slider ran before your settings had loaded).
+
 ## 1.7.36
 
 - Calendar: the day lines in the all-day strip line up exactly with the lines in the grid.
