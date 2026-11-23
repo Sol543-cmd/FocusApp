@@ -3,6 +3,29 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.35
+
+- Calendar: time outside your working day is grayed out a little, so you can see where the day starts and stops.
+  It follows your usual hours and any day you change with Adjust working day; weekends are grayed unless planned.
+  On by default (Settings, Calendar, Look).
+- Calendar: each day's tasks show as a chip in the all-day strip ("8 pending tasks"), right under that day's
+  all-day events when it has some. Click it for a small window of the day's tasks by project, where you can tick
+  them off (meetings aren't listed; they're on the calendar). Click anywhere else to close it.
+- Calendar: hour lines are a touch lighter than the day lines, and half-hour lines lighter still, so the grid stays
+  in the background.
+- Calendar: an "All day" strip at the top (about half an hour tall) shows all-day events from every calendar, in
+  their colors; events over several days span those days in the week view.
+- Calendar: meetings that overlap sit side by side, as in Outlook (week and day views). Meetings show as the
+  calendar's own events, in their calendar's color with Join.
+- Calendar: a "Go to date" box beside Today. Type a date in any form (12/25, Dec 25 2027, 2027-01-04, next Friday,
+  in 3 weeks, Easter) and press Enter to jump there; the day is marked in the week view.
+- Calendar: the side panel button is just the outline of its symbol.
+- Calendars: Google repeating events that use a Sunday week start (every 2 weeks) land on the right weeks, and
+  Google invitations you declined no longer show. Proton Calendar, iCloud, Fastmail and other shared .ics or
+  webcal links work too (Settings, Calendar has how to get each link).
+- Training: every multiple choice works the same way. Click an answer (or press 1 to 9), Enter shows whether
+  it's right, Enter again moves on. No more I'm sure / Guessing.
+
 ## 1.7.33
 
 - Reading: the hover tip over the page is gone (it covered the text).

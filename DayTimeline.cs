@@ -32,6 +32,17 @@ public class DayTimeline : UserControl
     public TimeSpan RangeStart { get; set; } = new(6, 30, 0);
     public TimeSpan RangeEnd { get; set; } = new(17, 0, 0);
     public bool ShowNowLine { get; set; }
+    /// <summary>The Calendar page: a strip at the top for all-day events, from every calendar.</summary>
+    public bool ShowAllDay { get; set; }
+    private readonly Canvas _allDayBar = new() { Visibility = Visibility.Collapsed, ClipToBounds = true };
+    /// <summary>Lightly gray out the time outside the day's working hours.</summary>
+    public bool ShadeOffHours { get; set; }
+    /// <summary>A day's working hours (null: not a working day, all grayed).</summary>
+    public Func<DateTime, (TimeSpan Start, TimeSpan End)?>? WorkHoursFor { get; set; }
+    /// <summary>How many tasks a day has (a chip in the all-day strip); null: none shown.</summary>
+    public Func<DateTime, int>? TaskCountFor { get; set; }
+    /// <summary>The day's tasks chip was clicked.</summary>
+    public event Action<DateTime, FrameworkElement>? TasksClicked;
     public PlanBlock? Selected { get; set; }
 
     /// <summary>Calendar events to show too. Ones already in the plan as meetings aren't repeated.</summary>
@@ -143,7 +154,11 @@ public class DayTimeline : UserControl
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = _canvas
         };
-        Content = _scroll;
+        var dock = new DockPanel();
+        DockPanel.SetDock(_allDayBar, Dock.Top);
+        dock.Children.Add(_allDayBar);
+        dock.Children.Add(_scroll);
+        Content = dock;
         _nowLine.SetResourceReference(Shape.StrokeProperty, "MeetingBrush");
         _nowDot.SetResourceReference(Shape.FillProperty, "MeetingBrush");
         _dropLine.SetResourceReference(Shape.StrokeProperty, "Text");
@@ -201,17 +216,37 @@ public class DayTimeline : UserControl
             if (e > _to) _to = Ceil30(e);
         }
         if (_to > TimeSpan.FromHours(24)) _to = TimeSpan.FromHours(24);
+        double band = BuildAllDayBar(width);
         if (FitToHeight && ActualHeight > 200)
-            PixelsPerMinute = Math.Max(0.9, (ActualHeight - 30) / Math.Max(60, (_to - _from).TotalMinutes));
+            PixelsPerMinute = Math.Max(0.9, (ActualHeight - 30 - band) / Math.Max(60, (_to - _from).TotalMinutes));
         _canvas.Height = Y(_to) + 16;
         _canvas.Width = width;
+
+        // Outside the working day: a light gray wash behind everything.
+        if (ShadeOffHours && WorkHoursFor != null)
+        {
+            var hours = WorkHoursFor(_dayStart.Date);
+            var spans = hours is (TimeSpan ws, TimeSpan we)
+                ? new[] { (_from, ws < _from ? _from : ws), (we > _to ? _to : we, _to) }
+                : new[] { (_from, _to) };
+            foreach (var (a, b) in spans)
+            {
+                if (b <= a) continue;
+                var off = new Rectangle { Width = Math.Max(0, width - LabelWidth + 6), Height = Y(b) - Y(a), IsHitTestVisible = false, Opacity = 0.07 };
+                off.SetResourceReference(Shape.FillProperty, "Muted");
+                Canvas.SetLeft(off, LabelWidth - 6);
+                Canvas.SetTop(off, Y(a));
+                _canvas.Children.Add(off);
+            }
+        }
 
         // Half-hour grid with times.
         for (var t = _from; t <= _to; t += TimeSpan.FromMinutes(30))
         {
             bool hour = t.Minutes == 0;
-            var line = new Line { X1 = LabelWidth - 6, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = hour ? 0.45 : 0.18 };
-            line.SetResourceReference(Shape.StrokeProperty, "Muted"); // clearer hour lines (the Line color was too faint)
+            // Hour lines light, half-hour lines lighter still, so the grid stays in the background.
+            var line = new Line { X1 = hour ? LabelWidth - 6 : LabelWidth, X2 = width, Y1 = Y(t), Y2 = Y(t), StrokeThickness = 1, Opacity = hour ? 0.28 : 0.12 };
+            line.SetResourceReference(Shape.StrokeProperty, "Muted");
             _canvas.Children.Add(line);
             if (hour || PixelsPerMinute >= 1.2)
             {
@@ -242,8 +277,10 @@ public class DayTimeline : UserControl
         }
         _canvas.Children.Add(_dropLine);
 
-        // Calendar events that aren't already in the plan (for example after 4:30, or marked "free").
-        foreach (var ev in ExtraEvents()) _canvas.Children.Add(MakeEvent(ev, width));
+        // Calendar events that aren't already in the plan (for example after 4:30, or marked "free"); ones that overlap sit side by side.
+        var extra = ExtraEvents();
+        foreach (var (ev, col, cols, _) in CalendarLook.SideBySide(extra, x => ClipToDay(x).Start.TotalMinutes, x => ClipToDay(x).End.TotalMinutes))
+            _canvas.Children.Add(MakeEvent(ev, width, col, cols));
         // Practice rounds: a small tag at the right edge at each round's time.
         foreach (var (at, name) in PracticeMarks ?? Array.Empty<(TimeSpan, string)>())
         {
@@ -525,12 +562,15 @@ public class DayTimeline : UserControl
             if (b.IsMeeting) meetings.Add((t, end));
             t = end;
         }
-        foreach (var ev in Events)
+        var timed = Events.Where(ev => !ev.AllDay && ev.End > _dayStart.Date && ev.Start < _dayStart.Date.AddDays(1)).ToList();
+        foreach (var ev in timed)
         {
-            if (ev.AllDay || ev.End <= _dayStart.Date || ev.Start >= _dayStart.Date.AddDays(1)) continue;
             var (s, e) = ClipToDay(ev);
+            // In the plan as a meeting, unless that meeting block stands for several overlapping meetings:
+            // then they all show, side by side, so none is hidden behind the others.
             bool covered = ev.Busy && meetings.Any(m => m.Item1 < e && m.Item2 > s &&
-                (Min(m.Item2, e) - Max(m.Item1, s)).TotalMinutes >= (e - s).TotalMinutes / 2);
+                (Min(m.Item2, e) - Max(m.Item1, s)).TotalMinutes >= (e - s).TotalMinutes / 2 &&
+                timed.Count(o => o.Busy && ClipToDay(o).Start < m.Item2 && ClipToDay(o).End > m.Item1) < 2);
             if (!covered) result.Add(ev);
         }
         return result;
@@ -539,15 +579,15 @@ public class DayTimeline : UserControl
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
-    private FrameworkElement MakeEvent(CalendarEvent ev, double width)
+    private FrameworkElement MakeEvent(CalendarEvent ev, double width, int col = 0, int cols = 1)
     {
         var (s, e) = ClipToDay(ev);
         double top = Y(s), height = Math.Max(4, Y(e) - top - 2);
-        double laneWidth = (width - LabelWidth) * 0.48;
+        double lane = (width - LabelWidth) * 0.48, laneWidth = lane / Math.Max(1, cols);
         // Its calendar's color, the time when there's room, Join for online meetings; click for details and Add to my day.
         Border? card = null;
-        card = CalendarLook.EventCard(ev, laneWidth, height, 12, EventClicked == null ? null : () => EventClicked?.Invoke(ev, card!));
-        Canvas.SetLeft(card, width - laneWidth - 4);
+        card = CalendarLook.EventCard(ev, cols > 1 ? laneWidth - 2 : laneWidth, height, 12, EventClicked == null ? null : () => EventClicked?.Invoke(ev, card!));
+        Canvas.SetLeft(card, width - lane - 4 + col * laneWidth);
         Canvas.SetTop(card, top);
         return card;
     }
@@ -584,6 +624,48 @@ public class DayTimeline : UserControl
     {
         Dispatcher.BeginInvoke(new Action(() =>
             _scroll.ScrollToVerticalOffset(Math.Max(0, Y(time) - 80))), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Fills the all-day strip (about half an hour tall) and returns its height (0 when it's off).</summary>
+    private double BuildAllDayBar(double width)
+    {
+        _allDayBar.Children.Clear();
+        if (!ShowAllDay) { _allDayBar.Visibility = Visibility.Collapsed; return 0; }
+        _allDayBar.Visibility = Visibility.Visible;
+        var day = _dayStart.Date;
+        var list = (Events ?? Array.Empty<CalendarEvent>()).Where(e => e.AllDay && e.End > day && e.Start < day.AddDays(1)).ToList();
+        int taskCount = TaskCountFor?.Invoke(day) ?? 0;
+        const double row = 22;
+        // Side by side across the width, two or three to a row, more rows if needed; the day's tasks on the row under them.
+        int perRow = list.Count <= 1 ? 1 : list.Count == 2 ? 2 : 3;
+        int eventRows = (int)Math.Ceiling(list.Count / (double)perRow);
+        int rows = Math.Max(1, eventRows + (taskCount > 0 ? 1 : 0));
+        double height = Math.Max(30, rows * row + 8);
+        _allDayBar.Height = height;
+        _allDayBar.Width = width;
+        var label = new TextBlock { Text = "All day", FontSize = 11, Width = LabelWidth - 12, TextAlignment = TextAlignment.Right };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        Canvas.SetTop(label, 7);
+        _allDayBar.Children.Add(label);
+        double lane = (width - LabelWidth - 4) / perRow;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var chip = CalendarLook.AllDayChip(list[i], lane - 4, row - 3);
+            Canvas.SetLeft(chip, LabelWidth + (i % perRow) * lane);
+            Canvas.SetTop(chip, 4 + (i / perRow) * row);
+            _allDayBar.Children.Add(chip);
+        }
+        if (taskCount > 0)
+        {
+            var chip = CalendarLook.TasksChip(taskCount, Math.Min(220, width - LabelWidth - 8), row - 3, target => TasksClicked?.Invoke(day, target));
+            Canvas.SetLeft(chip, LabelWidth);
+            Canvas.SetTop(chip, 4 + eventRows * row);
+            _allDayBar.Children.Add(chip);
+        }
+        var line = new Line { X1 = LabelWidth - 6, X2 = width, Y1 = height - 0.5, Y2 = height - 0.5, StrokeThickness = 1, Opacity = 0.35 };
+        line.SetResourceReference(Shape.StrokeProperty, "Muted");
+        _allDayBar.Children.Add(line);
+        return height;
     }
 
     private static TimeSpan Floor30(TimeSpan t) => TimeSpan.FromMinutes(Math.Floor(t.TotalMinutes / 30) * 30);

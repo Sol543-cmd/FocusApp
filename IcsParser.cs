@@ -46,12 +46,14 @@ public static class IcsParser
         public string? Duration, RRule, Status, Transp, BusyStatus;
         public string Location = "", Description = "", Url = "", MeetingUrl = "";
         public List<Prop> ExDates = new();
+        public bool Declined;
     }
 
     /// <summary>All event occurrences that overlap [from, to), in local time.</summary>
-    public static List<CalendarEvent> Parse(string ics, DateTime from, DateTime to, string sourceName = "")
+    /// <param name="ownerEmail">The calendar owner's address, when known (Google's link contains it): invitations they declined are left out.</param>
+    public static List<CalendarEvent> Parse(string ics, DateTime from, DateTime to, string sourceName = "", string ownerEmail = "")
     {
-        var events = ReadEvents(ics);
+        var events = ReadEvents(ics, ownerEmail);
         var result = new List<CalendarEvent>();
 
         // Moved or changed single occurrences of a repeating event ("exceptions").
@@ -106,7 +108,7 @@ public static class IcsParser
     private static void Add(List<CalendarEvent> result, RawEvent ev, DateTime startUtc, DateTime endUtc,
         bool allDay, DateTime from, DateTime to, string source)
     {
-        if (string.Equals(ev.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase)) return;
+        if (string.Equals(ev.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase) || ev.Declined) return;
         if (ev.Title.StartsWith("Canceled:", StringComparison.OrdinalIgnoreCase) ||
             ev.Title.StartsWith("Cancelled:", StringComparison.OrdinalIgnoreCase)) return;
 
@@ -166,7 +168,7 @@ public static class IcsParser
 
     // ---------- Reading the file ----------
 
-    private static List<RawEvent> ReadEvents(string ics)
+    private static List<RawEvent> ReadEvents(string ics, string ownerEmail = "")
     {
         var events = new List<RawEvent>();
         RawEvent? current = null;
@@ -213,6 +215,12 @@ public static class IcsParser
                 case "LOCATION": current.Location = Unescape(prop.Value); break;
                 case "DESCRIPTION": current.Description = Unescape(prop.Value); break;
                 case "URL": current.Url = prop.Value; break;
+                case "ATTENDEE":
+                    // Google's feed keeps invitations you declined; leave those out.
+                    if (ownerEmail.Length > 0 && prop.Params.TryGetValue("PARTSTAT", out var part) && part.Equals("DECLINED", StringComparison.OrdinalIgnoreCase) &&
+                        prop.Value.Replace("mailto:", "", StringComparison.OrdinalIgnoreCase).Trim().Equals(ownerEmail, StringComparison.OrdinalIgnoreCase))
+                        current.Declined = true;
+                    break;
                 case "X-MICROSOFT-SKYPETEAMSMEETINGURL": case "X-MICROSOFT-ONLINEMEETINGCONFLINK": case "X-GOOGLE-CONFERENCE": case "X-MICROSOFT-ONLINEMEETINGEXTERNALLINK":
                     if (current.MeetingUrl.Length == 0 && prop.Value.StartsWith("http", StringComparison.OrdinalIgnoreCase)) current.MeetingUrl = prop.Value;
                     break;
@@ -412,6 +420,9 @@ public static class IcsParser
             var byMonthDay = ParseInts(r.GetValueOrDefault("BYMONTHDAY"));
             var byMonth = ParseInts(r.GetValueOrDefault("BYMONTH"));
             var bySetPos = ParseInts(r.GetValueOrDefault("BYSETPOS"));
+            // The day weeks start on (Google often writes WKST=SU): it decides which week a day falls in for "every 2 weeks".
+            int wkstIndex = Array.IndexOf(DayCodes, r.GetValueOrDefault("WKST", "MO").ToUpperInvariant());
+            var wkst = wkstIndex < 0 ? DayOfWeek.Monday : (DayOfWeek)wkstIndex;
 
             bool allDay = IsDateOnly(dtStart);
             var zone = allDay ? TimeZoneInfo.Utc : FindZone(dtStart.Params.GetValueOrDefault("TZID"));
@@ -429,7 +440,7 @@ public static class IcsParser
                 List<DateTime> days = freq switch
                 {
                     "DAILY" => Daily(first, period * interval, byDay, byMonth),
-                    "WEEKLY" => Weekly(first, period * interval, byDay),
+                    "WEEKLY" => Weekly(first, period * interval, byDay, wkst),
                     "MONTHLY" => Monthly(first, period * interval, byDay, byMonthDay, bySetPos),
                     "YEARLY" => Yearly(first, period * interval, byDay, byMonthDay, byMonth),
                     _ => period == 0 ? new List<DateTime> { first.Date } : new List<DateTime>()
@@ -491,13 +502,13 @@ public static class IcsParser
             return new() { day };
         }
 
-        private static List<DateTime> Weekly(DateTime first, int offset, List<(int Ordinal, DayOfWeek Day)> byDay)
+        private static List<DateTime> Weekly(DateTime first, int offset, List<(int Ordinal, DayOfWeek Day)> byDay, DayOfWeek wkst)
         {
-            // Weeks start on Monday (the standard default).
-            int sinceMonday = ((int)first.DayOfWeek + 6) % 7;
-            var weekStart = first.Date.AddDays(-sinceMonday).AddDays(7 * offset);
+            // Weeks start on the rule's WKST day (Monday unless it says otherwise).
+            int sinceStart = ((int)first.DayOfWeek - (int)wkst + 7) % 7;
+            var weekStart = first.Date.AddDays(-sinceStart).AddDays(7 * offset);
             var days = byDay.Count == 0 ? new List<DayOfWeek> { first.DayOfWeek } : byDay.Select(b => b.Day).ToList();
-            return days.Select(d => weekStart.AddDays(((int)d + 6) % 7)).ToList();
+            return days.Select(d => weekStart.AddDays(((int)d - (int)wkst + 7) % 7)).ToList();
         }
 
         private static List<DateTime> Monthly(DateTime first, int offset, List<(int Ordinal, DayOfWeek Day)> byDay,

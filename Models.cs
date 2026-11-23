@@ -958,6 +958,8 @@ public class AppSettings
     public string TaskWindowSet { get; set; } = "work";
     /// <summary>The Calendar page's side panel (calendars, settings, editing) is open.</summary>
     public bool CalendarPanelOpen { get; set; }
+    /// <summary>The Calendar grays out the time outside your working day, lightly (on unless you turn it off).</summary>
+    public bool ShadeOffHours { get; set; } = true;
     public double WorkingMemoryHeight { get; set; } = 0.3; // share of the task window
     /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
     public string TaskWindowView { get; set; } = "today";

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -88,9 +90,79 @@ public static class CalendarLook
         return card;
     }
 
+    /// <summary>An all-day event as a slim bar in its calendar's color (click for details).</summary>
+    public static Border AllDayChip(CalendarEvent ev, double width, double height)
+    {
+        string hex = CalendarService.ColorOf(ev);
+        var text = new TextBlock { Text = ev.Title, FontSize = 11.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Text");
+        var chip = new Border
+        {
+            Width = Math.Max(8, width), Height = height, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(3, 0, 0, 0),
+            Padding = new Thickness(6, 0, 4, 0), Child = text, ClipToBounds = true, Cursor = Cursors.Hand,
+            Background = Tint(hex, 0.30), BorderBrush = new SolidColorBrush(ColorOf(hex)), ToolTip = Details(ev)
+        };
+        chip.MouseLeftButtonUp += (_, e) => { e.Handled = true; ShowDetails(ev, chip); };
+        return chip;
+    }
+
+    /// <summary>The day's tasks as one soft chip ("8 pending tasks"), like Google Calendar's; click to see them.</summary>
+    public static Border TasksChip(int count, double width, double height, Action<FrameworkElement> open)
+    {
+        var icon = new Grid { Width = 16, Height = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        var circle = new System.Windows.Shapes.Ellipse { Width = 16, Height = 16 };
+        circle.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "FocusBrush");
+        var tick = new System.Windows.Shapes.Path { Data = Geometry.Parse("M4.5,8.3 L7,10.6 L11.6,5.6"), Stroke = Brushes.White, StrokeThickness = 1.7,
+                                                    StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round };
+        icon.Children.Add(circle); icon.Children.Add(tick);
+        var text = new TextBlock { Text = count == 1 ? "1 pending task" : $"{count} pending tasks", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Text");
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(icon); row.Children.Add(text);
+        var chip = new Border { Width = Math.Max(30, width), Height = height, CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 0, 6, 0), Child = row,
+                                Cursor = Cursors.Hand, ClipToBounds = true, ToolTip = "This day's tasks (click to see them)" };
+        chip.SetResourceReference(Border.BackgroundProperty, "Panel2");
+        chip.MouseEnter += (_, _) => chip.Opacity = 0.85;
+        chip.MouseLeave += (_, _) => chip.Opacity = 1;
+        chip.MouseLeftButtonUp += (_, e) => { e.Handled = true; open(chip); };
+        return chip;
+    }
+
+    /// <summary>
+    /// Lays overlapping events side by side, the way Outlook does: events that overlap (directly or through others) form a
+    /// group; each takes the first free column in its group, and the group's columns share the width.
+    /// </summary>
+    public static List<(T Item, int Col, int Cols, int Group)> SideBySide<T>(IEnumerable<T> items, Func<T, double> start, Func<T, double> end)
+    {
+        var sorted = items.OrderBy(start).ThenByDescending(i => end(i) - start(i)).ToList();
+        var result = new List<(T Item, int Col, int Cols, int Group)>();
+        var group = new List<(T Item, int Col)>();
+        var colEnds = new List<double>();
+        double groupEnd = double.MinValue;
+        int groupId = 0;
+        void Close()
+        {
+            foreach (var (item, col) in group) result.Add((item, col, Math.Max(1, colEnds.Count), groupId));
+            group.Clear(); colEnds.Clear(); groupId++;
+        }
+        foreach (var item in sorted)
+        {
+            double s = start(item), e = Math.Max(end(item), s + 1);
+            if (group.Count > 0 && s >= groupEnd) Close();
+            int col = colEnds.FindIndex(c => c <= s);
+            if (col < 0) { col = colEnds.Count; colEnds.Add(e); } else colEnds[col] = e;
+            group.Add((item, col));
+            groupEnd = group.Count == 1 ? e : Math.Max(groupEnd, e);
+        }
+        if (group.Count > 0) Close();
+        return result;
+    }
+
     public static string Details(CalendarEvent ev)
     {
-        string when = ev.AllDay ? $"{ev.Start:dddd, MMMM d} (all day)" : $"{ev.Start:dddd, MMMM d}, {ev.Start:t} – {ev.End:t}";
+        string when = !ev.AllDay ? $"{ev.Start:dddd, MMMM d}, {ev.Start:t} – {ev.End:t}"
+            : (ev.End.Date - ev.Start.Date).Days > 1 ? $"{ev.Start:dddd, MMMM d} – {ev.End.Date.AddDays(-1):dddd, MMMM d} (all day)"
+            : $"{ev.Start:dddd, MMMM d} (all day)";
         string cal = CalendarService.SourceOf(ev)?.Name ?? ev.Source;
         return $"{ev.Title}\n{when}" + (ev.Location.Length > 0 ? $"\n{ev.Location}" : "") + (cal.Length > 0 ? $"\nCalendar: {cal}" : "") +
                (ev.Busy ? "" : "\nShown as free");

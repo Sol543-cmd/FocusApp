@@ -16,7 +16,7 @@ namespace FocusApp;
 
 /// <summary>
 /// A book-course lesson, full screen: Warm-up (unscored guesses), the Reading (whole, no timer, its own scroll bar,
-/// your font and background), Review (due questions from earlier lessons), Practice (multiple choice, Sure or Guessing),
+/// your font and background), Review (due questions from earlier lessons), Practice (multiple choice: click, Enter to check, Enter to go on),
 /// Memory cards (click to flip, then ✕ again / ✓✓ know it well / ✓ know it), the Chapter quiz (last lesson of a chapter), then Done.
 /// Every answer has "Show where this is in the text" (the passage flashes), Hide and Flag.
 ///
@@ -1442,14 +1442,15 @@ public partial class LessonWindow : Window
                 if (k == i) { marks[k].SetResourceReference(Border.BackgroundProperty, "FocusBrush"); marks[k].SetResourceReference(Border.BorderBrushProperty, "FocusBrush"); }
                 else { marks[k].Background = Brushes.Transparent; marks[k].SetResourceReference(Border.BorderBrushProperty, "Muted"); }
             }
-            sureRow.Visibility = scored ? Visibility.Visible : Visibility.Collapsed;
-            if (!scored) Answer(false);
+            sureRow.Visibility = Visibility.Visible; // Check (or Enter)
         }
 
-        void Answer(bool sure)
+        // Every multiple choice works the same way: click an answer (or press 1–9), Enter shows whether it's right, Enter again moves on.
+        void Answer()
         {
             if (answered || chosen < 0) return;
             answered = true;
+            const bool sure = true;
             sureRow.Visibility = Visibility.Collapsed;
             bool right = chosen == q.Answer;
             for (int k = 0; k < options.Count; k++)
@@ -1463,8 +1464,7 @@ public partial class LessonWindow : Window
             {
                 _asked++; if (right && sure) _right++;
                 Course.Add(new TrainingEvent { Kind = "answer", Question = q.Id, Concept = q.Concept, Correct = right, Sure = sure });
-                string verdict = right ? (sure ? "Right, and you were sure" : "Right, but you were guessing")
-                                       : (sure ? "Not quite, and you were sure" : "Not quite");
+                string verdict = right ? "Right" : "Not quite";
                 var line = new WrapPanel();
                 line.Children.Add(Text(verdict, 16, bold: true, brush: right ? "FocusBrush" : "PriorityHigh"));
                 var when = Text("  ·  " + BackIn(q.Id), 13.5, brush: "Muted"); when.VerticalAlignment = VerticalAlignment.Center;
@@ -1506,22 +1506,26 @@ public partial class LessonWindow : Window
             b.SetResourceReference(Border.BackgroundProperty, "Panel");
             b.SetResourceReference(Border.BorderBrushProperty, "Line");
             b.MouseLeftButtonUp += (_, _) => Mark(idx);
-            b.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2 && scored) { Mark(idx); Answer(true); } }; // double-click: I'm sure
             options.Add(b);
             choices.Children.Add(b);
         }
-        var sure = new Button { Content = "I'm sure", Padding = new Thickness(22, 8, 22, 8), Margin = new Thickness(0, 0, 10, 0), ToolTip = "Double-clicking an answer does the same" };
-        sure.SetResourceReference(StyleProperty, "PrimaryButton");
-        sure.Click += (_, _) => Answer(true);
-        var guess = new Button { Content = "Guessing", Padding = new Thickness(22, 8, 22, 8) };
-        guess.Click += (_, _) => Answer(false);
-        sureRow.Children.Add(sure);
-        sureRow.Children.Add(guess);
+        var check = new Button { Content = "Check", Padding = new Thickness(26, 8, 26, 8), Margin = new Thickness(0, 0, 12, 0) };
+        check.SetResourceReference(StyleProperty, "PrimaryButton");
+        check.Click += (_, _) => Answer();
+        sureRow.Children.Add(check);
+        var orEnter = Text("or press Enter", 13, brush: "Muted"); orEnter.VerticalAlignment = VerticalAlignment.Center;
+        sureRow.Children.Add(orEnter);
+        _keys = k =>
+        {
+            if (answered) return;
+            if (k == Key.Enter) { Answer(); return; }
+            int n = k >= Key.D1 && k <= Key.D9 ? k - Key.D1 : k >= Key.NumPad1 && k <= Key.NumPad9 ? k - Key.NumPad1 : -1;
+            if (n >= 0 && n < options.Count) Mark(n);
+        };
 
         _page.Children.Add(choices);
         _page.Children.Add(sureRow);
         _page.Children.Add(feedback);
-        if (scored) _page.Children.Add(Text("Double-click an answer if you're sure.", 13, brush: "Muted", top: 12));
     }
 
     // ---------- Memory cards ----------
@@ -1755,7 +1759,7 @@ public partial class LessonWindow : Window
             }
             else Course.Add(new TrainingEvent { Kind = "allBooksDone" });
             _page.Children.Add(Text(_examKey == null ? "Round finished" : passed ? "Passed" : "Not passed yet", 28, bold: true));
-            _page.Children.Add(Text($"{_right} of {_asked} right and sure.", 18, top: 10));
+            _page.Children.Add(Text($"{_right} of {_asked} right.", 18, top: 10));
             if (_examKey != null)
                 _page.Children.Add(Text(passed ? (_examKey == "final" ? "You've finished the book. Its questions now join All-books practice." : "On to the next part of the book.")
                                                : "The questions you missed come back in review. The exam comes back as tomorrow's lesson.", 16, top: 10));
@@ -1764,7 +1768,7 @@ public partial class LessonWindow : Window
         }
         Course.Add(new TrainingEvent { Kind = "lessonDone", Lesson = _lesson.Index });
         _page.Children.Add(Text("Lesson finished", 28, bold: true));
-        _page.Children.Add(Text(_asked == 0 ? "Nicely done." : $"{_right} of {_asked} right and sure (this sitting).", 18, top: 10));
+        _page.Children.Add(Text(_asked == 0 ? "Nicely done." : $"{_right} of {_asked} right (this sitting).", 18, top: 10));
         var next = Course.NextLesson();
         _page.Children.Add(Text("Questions you missed or guessed come back tomorrow; ones you knew come back after a longer gap. " +
                                 (Course.Config.CardReviewOn ? "Your hardest cards come back for a few minutes this evening." : ""), 16, top: 14));

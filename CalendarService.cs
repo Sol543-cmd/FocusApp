@@ -185,6 +185,7 @@ public static class CalendarService
         foreach (var source in Sources.ToList())
         {
             string? text = null;
+            string owner = "";
             try
             {
                 if (source.IsFile)
@@ -194,6 +195,7 @@ public static class CalendarService
                 else
                 {
                     string url = Unprotect(source.ProtectedUrl);
+                    owner = GoogleOwner(url);
                     string? problem = CheckLink(url, out var uri);
                     if (problem != null || uri == null) throw new InvalidOperationException(problem ?? "the saved link can't be used");
                     text = await Http.GetStringAsync(uri);
@@ -217,7 +219,7 @@ public static class CalendarService
             {
                 try
                 {
-                    var found = await Task.Run(() => IcsParser.Parse(text, from, to, source.Name));
+                    var found = await Task.Run(() => IcsParser.Parse(text, from, to, source.Name, owner));
                     foreach (var e in found) e.SourceId = source.Id;
                     all.AddRange(found);
                 }
@@ -230,6 +232,19 @@ public static class CalendarService
         try { Storage.Save(CacheFile, _events); } catch (Exception ex) { Log.Error("CalendarService.Cache", ex); }
         SaveSources();
         Updated?.Invoke();
+    }
+
+    /// <summary>The account in a Google calendar link (…/calendar/ical/you%40gmail.com/private-…/basic.ics), so declined invitations can be left out.</summary>
+    internal static string GoogleOwner(string url)
+    {
+        try
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(url, @"calendar\.google\.com/calendar/ical/([^/]+)/", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!m.Success) return "";
+            string who = Uri.UnescapeDataString(m.Groups[1].Value);
+            return who.Contains('@') && !who.EndsWith("calendar.google.com", StringComparison.OrdinalIgnoreCase) ? who : "";
+        }
+        catch { return ""; }
     }
 
     /// <summary>Removes downloaded copies for calendars that no longer exist.</summary>

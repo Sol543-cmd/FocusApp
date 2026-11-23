@@ -1471,12 +1471,34 @@
                         <Button Content="›" Click="CalNext_Click" Padding="12,4" FontSize="16" Margin="6,0,10,0"/>
                         <TextBlock x:Name="CalDateText" Style="{StaticResource Heading}" VerticalAlignment="Center"/>
                         <Button Content="Today" Style="{StaticResource LinkButton}" Margin="10,0,0,0" VerticalAlignment="Center" Click="CalToday_Click"/>
+                        <!-- Go to any date: type it in any form (12/25, Dec 25, next Friday, in 3 weeks) and press Enter -->
+                        <Border CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource Line}" Background="{DynamicResource Panel2}" Margin="14,0,0,0" Padding="9,0,6,0" VerticalAlignment="Center" Height="28">
+                            <Grid>
+                                <TextBlock x:Name="CalGoHint" Text="Go to date…" Foreground="{DynamicResource Muted}" FontSize="13" VerticalAlignment="Center" IsHitTestVisible="False" Margin="2,0,0,0"/>
+                                <TextBox x:Name="CalGoBox" Width="150" FontSize="13" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" Padding="0"
+                                         KeyDown="CalGoBox_KeyDown" TextChanged="CalGoBox_TextChanged" LostKeyboardFocus="CalGoBox_LostFocus"
+                                         ToolTip="Type a date in any form, like 12/25, Dec 25, 2027-01-04, next Friday or in 3 weeks, then press Enter"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <RadioButton x:Name="CalDayView" Content="Day" GroupName="calview" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
                         <RadioButton x:Name="CalWeekView" Content="Week" GroupName="calview" IsChecked="True" Style="{StaticResource NavButton}" Checked="CalView_Checked"/>
-                        <ToggleButton x:Name="CalPanelToggle" Content="&#xE8A0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15" Padding="10,6" Margin="10,0,0,0"
-                                      Click="CalPanelToggle_Click" ToolTip="Calendars, settings and editing"/>
+                        <ToggleButton x:Name="CalPanelToggle" Content="&#xE8A0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Margin="12,0,0,0"
+                                      Click="CalPanelToggle_Click" ToolTip="Calendars, settings and editing" Cursor="Hand">
+                            <!-- Just the outline of the symbol: no box behind it -->
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent" Padding="6,4">
+                                        <TextBlock x:Name="Glyph" Text="{TemplateBinding Content}" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" Foreground="{DynamicResource Muted}"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource Text}"/></Trigger>
+                                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource FocusBrush}"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                     </StackPanel>
                 </DockPanel>
                 <local:DayTimeline x:Name="CalDay" Grid.Row="1" Visibility="Collapsed"/>
@@ -1859,10 +1881,14 @@
 <TextBlock x:Name="QuickAddInfo" Style="{StaticResource Caption}" TextWrapping="Wrap"/></StackPanel><StackPanel Tag="section"><TextBlock Text="REMINDERS" Style="{StaticResource SettingsSection}"/><StackPanel Orientation="Horizontal">
                         <CheckBox x:Name="ReminderCheck" Content="Remind me to plan my day at" VerticalAlignment="Center"/>
                         <TextBox x:Name="ReminderTimeBox" Width="96" Margin="10,0,0,0"/>
-                    </StackPanel><Border Style="{StaticResource SettingRow}"><StackPanel><CheckBox x:Name="NudgeCheck" Content="On workdays when I haven't used Focus yet, nudge me a few times" FontSize="14" FontWeight="SemiBold"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,60,0" Text="Focus always starts when you sign in to Windows and waits in the system tray by the clock, so reminders and blocking keep working. To quit, right-click its tray icon."/></StackPanel></Border></StackPanel><StackPanel Orientation="Horizontal" Margin="0,28,0,0"><Button Content="Reset this page" Tag="tasks" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0" Click="ResetSettingsPage_Click" ToolTip="Put this page's settings back to how they started" VerticalAlignment="Center"/></StackPanel></StackPanel><StackPanel x:Name="SettingsPage_calendar" Tag="calendar" Visibility="Collapsed"><TextBlock Text="Calendar" Style="{StaticResource Heading}" Margin="0,0,0,6"/><StackPanel Tag="section"><TextBlock Text="CALENDARS" Style="{StaticResource SettingsSection}"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10" Text="Focus reads your calendars (it never changes them) through a private .ics link."/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4">
+                    </StackPanel><Border Style="{StaticResource SettingRow}"><StackPanel><CheckBox x:Name="NudgeCheck" Content="On workdays when I haven't used Focus yet, nudge me a few times" FontSize="14" FontWeight="SemiBold"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,60,0" Text="Focus always starts when you sign in to Windows and waits in the system tray by the clock, so reminders and blocking keep working. To quit, right-click its tray icon."/></StackPanel></Border></StackPanel><StackPanel Orientation="Horizontal" Margin="0,28,0,0"><Button Content="Reset this page" Tag="tasks" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0" Click="ResetSettingsPage_Click" ToolTip="Put this page's settings back to how they started" VerticalAlignment="Center"/></StackPanel></StackPanel><StackPanel x:Name="SettingsPage_calendar" Tag="calendar" Visibility="Collapsed"><TextBlock Text="Calendar" Style="{StaticResource Heading}" Margin="0,0,0,6"/><StackPanel Tag="section"><TextBlock Text="LOOK" Style="{StaticResource SettingsSection}"/><Border Style="{StaticResource SettingRow}"><StackPanel><CheckBox x:Name="ShadeOffHoursCheck" Content="Lightly gray out time outside my working day" FontSize="14" FontWeight="SemiBold" Click="ShadeOffHours_Click"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,60,0" Text="Just a touch, so you can see where your working day starts and stops. It follows your usual hours (General, Working day), and a day you change with Adjust working day. Weekends are grayed out unless you've planned them."/></StackPanel></Border></StackPanel><StackPanel Tag="section"><TextBlock Text="CALENDARS" Style="{StaticResource SettingsSection}"/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10" Text="Focus reads your calendars (it never changes them) through a private .ics link."/><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4">
                         <Run FontWeight="SemiBold" Text="Outlook:"/> <Run Text="in Outlook on the web, go to Settings, Calendar, Shared calendars, Publish a calendar. Pick your calendar and 'Can view all details', click Publish, then copy the ICS link."/>
                     </TextBlock><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12">
-                        <Run FontWeight="SemiBold" Text="Google:"/> <Run Text="in Google Calendar settings, choose your calendar, then copy 'Secret address in iCal format'. Add it with a name like Personal, and untick 'Plan my day around its events' if it shouldn't shape your workday."/>
+                        <Run FontWeight="SemiBold" Text="Google:"/> <Run Text="in Google Calendar settings, choose your calendar, then copy 'Secret address in iCal format'. Add it with a name like Personal, and untick 'Plan my day around its events' if it shouldn't shape your workday. Google updates this address every few hours, so a new event can take a while to appear."/>
+                    </TextBlock><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8">
+                        <Run FontWeight="SemiBold" Text="Proton Calendar:"/> <Run Text="in Proton Calendar settings, Calendars, choose the calendar, then Share, Create link, 'Full view' (titles and times). Copy the link."/>
+                    </TextBlock><TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12">
+                        <Run FontWeight="SemiBold" Text="Others:"/> <Run Text="Apple iCloud (Share Calendar, Public Calendar), Fastmail, Zoho, Nextcloud and most others offer an .ics or webcal:// link to share. Paste it here; webcal:// links work too."/>
                     </TextBlock><ItemsControl x:Name="CalSourcesList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -1878,7 +1904,7 @@
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
-                    </ItemsControl><TextBlock Text="Name" Style="{StaticResource Caption}" Margin="0,6,0,4"/><TextBox x:Name="CalNameBox" Width="220" HorizontalAlignment="Left" Text="Work calendar"/><TextBlock Text="Private .ics link" Style="{StaticResource Caption}" Margin="0,10,0,4"/><TextBox x:Name="CalUrlBox"/><StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    </ItemsControl><TextBlock Text="Name" Style="{StaticResource Caption}" Margin="0,6,0,4"/><TextBox x:Name="CalNameBox" Width="220" HorizontalAlignment="Left" Text="Work calendar"/><TextBlock Text="Private .ics or webcal link (Outlook, Google, Proton, iCloud, Fastmail or any calendar that shares one)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,4"/><TextBox x:Name="CalUrlBox"/><StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                         <Button Content="Add calendar" Click="AddCalendar_Click" Margin="0,0,8,0"/>
                         <Button Content="Import .ics file" Click="ImportCalendar_Click" Margin="0,0,8,0"/>
                         <Button Content="Refresh now" Click="RefreshCalendars_Click"/>

@@ -540,6 +540,11 @@ public partial class MainWindow
         CalDay.RangeStart = Defaults.CalendarStart;
         CalDay.RangeEnd = Defaults.CalendarEnd;
         CalDay.ShowNowLine = true;
+        CalDay.ShowAllDay = true;   // the all-day strip at the top (Calendar page only)
+        CalWeek.ShowAllDay = true;
+        CalWeek.ShadeOffHours = CalDay.ShadeOffHours = _settings.ShadeOffHours;   // the working day stands out a little
+        CalWeek.WorkHoursFor = CalDay.WorkHoursFor = WorkHoursFor;
+        SetUpDayTasksChips();       // each day's tasks as a chip in that strip
         // The calendar's day view edits the same plan as the Day plan tab.
         CalDay.BlockClicked += block =>
         {
@@ -600,6 +605,7 @@ public partial class MainWindow
             int sinceMonday = ((int)_calDate.DayOfWeek + 6) % 7;
             var monday = _calDate.AddDays(-sinceMonday);
             CalDateText.Text = $"Week of {monday:MMMM d}";
+            CalWeek.Highlight = _calGoneTo;
             CalWeek.Show(_calDate, PlanFor);
         }
         else
@@ -618,8 +624,6 @@ public partial class MainWindow
             info = "No calendar connected yet. Add your work calendar (Outlook) and your personal one (Google) with + Add calendar.";
         else
         {
-            var allDay = CalendarService.EventsOn(_calDate).Where(e => e.AllDay).Select(e => e.Title).ToList();
-            if (!week && allDay.Count > 0) info = "All day: " + string.Join(", ", allDay) + ".";
             var broken = CalendarService.Sources.Where(s => s.LastError.Length > 0).Select(s => $"{s.Name}: {s.Status}.");
             info = string.Join("   ", new[] { info }.Concat(broken).Where(x => x.Length > 0));
         }
@@ -696,7 +700,7 @@ public partial class MainWindow
 
     private void CalPrev_Click(object sender, RoutedEventArgs e) { _calDate = _calDate.AddDays(CalWeekView.IsChecked == true ? -7 : -1); RefreshCalendarTab(); }
     private void CalNext_Click(object sender, RoutedEventArgs e) { _calDate = _calDate.AddDays(CalWeekView.IsChecked == true ? 7 : 1); RefreshCalendarTab(); }
-    private void CalToday_Click(object sender, RoutedEventArgs e) { _calDate = DateTime.Today; RefreshCalendarTab(); }
+    private void CalToday_Click(object sender, RoutedEventArgs e) { _calDate = DateTime.Today; _calGoneTo = null; RefreshCalendarTab(); }
     private void CalView_Checked(object sender, RoutedEventArgs e) => RefreshCalendarTab();
 
     private void CalOpenInPlan_Click(object sender, RoutedEventArgs e)
@@ -721,6 +725,31 @@ public partial class MainWindow
         DefaultAppsBtn.Content = AppsLabel(_settings.DefaultPlanApps);
         DefaultListsBtn.Content = ListsLabel(_settings.DefaultPlanLists);
         AutoStartWorkdaysCheck.IsChecked = _settings.AutoStartWorkdays;
+        ShadeOffHoursCheck.IsChecked = _settings.ShadeOffHours;
+    }
+
+    private void ShadeOffHours_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ShadeOffHours = ShadeOffHoursCheck.IsChecked == true;
+        SaveSettingsQuietly();
+        CalWeek.ShadeOffHours = CalDay.ShadeOffHours = _settings.ShadeOffHours;
+        RefreshCalendarTab();
+    }
+
+    /// <summary>A day's working hours: the day's own (Adjust working day) or your usual ones; null for a weekend you haven't planned.</summary>
+    private (TimeSpan Start, TimeSpan End)? WorkHoursFor(DateTime date)
+    {
+        date = date.Date;
+        if (date == _planDate)
+            return (_planWorkStart ?? _settings.WorkdayStartTime, _planEnd ?? _settings.WorkdayEndTime);
+        if (TryLoadPlanFile(date, out var file) && (file.Blocks.Count > 0 || file.WorkStart.Length > 0 || file.DayEnd.Length > 0))
+        {
+            var start = TryParseTime(file.WorkStart, out var ws) ? ws : _settings.WorkdayStartTime;
+            var end = TryParseTime(file.DayEnd, out var de) ? de : _settings.WorkdayEndTime;
+            return (start, end);
+        }
+        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) return null;
+        return (_settings.WorkdayStartTime, _settings.WorkdayEndTime);
     }
 
     private async void AddCalendar_Click(object sender, RoutedEventArgs e)
