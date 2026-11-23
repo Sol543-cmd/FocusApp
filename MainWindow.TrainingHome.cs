@@ -152,6 +152,10 @@ public partial class MainWindow
         top.Children.Add(statCard);
         TrainingHost.Children.Add(top);
 
+        // ----- Practice next: right under today's lesson, before the practices -----
+        if (Course.DayOff(DateTime.Today) != "off")
+            try { TrainingHost.Children.Add(PracticeNextCard()); } catch (Exception ex) { Log.Error("Practice next", ex); }
+
         // ----- The card sort, offered once -----
         // (Not needed once the book's packs are the new kind, where every card already says core or chapter.)
         if (!Course.Config.CardSortDone && Course.Events.Any(e => e.Kind == "answer") && Course.Lessons().SelectMany(l => l.Lesson.Cards).Any(c => c.Tier.Length == 0))
@@ -289,6 +293,86 @@ public partial class MainWindow
     }
 
     /// <summary>A book's cover photo, or (with none) a tile in the book's color with its first letter.</summary>
+    /// <summary>
+    /// "Practice next": whichever of Books practice, Book flashcards and Timeline needs you most right now (from what you've
+    /// been getting wrong and what's due), with why, and what comes after. Finish a round and the page shows the next one.
+    /// </summary>
+    private FrameworkElement PracticeNextCard()
+    {
+        var needs = Course.PracticeNeeds();
+        var top = needs.FirstOrDefault();
+        void Start(string area)
+        {
+            if (area == "books") StartBooksPractice();
+            else if (area == "cards") StartBookFlashcards();
+            else StartTimelinePractice();
+        }
+        var row = new DockPanel();
+        var badge = new Border { Width = 46, Height = 46, CornerRadius = new CornerRadius(12), Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
+        badge.SetResourceReference(Border.BackgroundProperty, "FocusBrush");
+        var glyph = new TextBlock { FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 20, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        badge.Child = glyph;
+        DockPanel.SetDock(badge, Dock.Left);
+        row.Children.Add(badge);
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+        if (top == null || top.Score <= 0)
+        {
+            glyph.Text = "\uE73E"; // check
+            var extra = TButton("Extra round", () => StartBookFlashcards(review: true, lesson: -1));
+            extra.VerticalAlignment = VerticalAlignment.Center; extra.Margin = new Thickness(12, 0, 0, 0);
+            DockPanel.SetDock(extra, Dock.Right);
+            row.Children.Add(extra);
+            text.Children.Add(TT("You're caught up", 18, bold: true));
+            text.Children.Add(TT("Nothing due and nothing you've been missing is waiting. Want more? An extra round of flashcards from your lessons.", 13, brush: "Muted", top: 3));
+            row.Children.Add(text);
+            var done = TBox(row, padding: new Thickness(20, 14, 18, 14)); done.Margin = new Thickness(0, 16, 0, 0);
+            return done;
+        }
+
+        glyph.Text = top.Area == "timeline" ? "\uE823" : top.Area == "cards" ? "\uE8F1" : "\uE897"; // clock, cards, help
+        var go = TButton("Start", () => Start(top.Area), primary: true);
+        go.Padding = new Thickness(26, 9, 26, 9); go.VerticalAlignment = VerticalAlignment.Center; go.Margin = new Thickness(12, 0, 0, 0);
+        DockPanel.SetDock(go, Dock.Right);
+        row.Children.Add(go);
+        text.Children.Add(TLabel($"PRACTICE NEXT · ABOUT {top.Minutes} MINUTE{(top.Minutes == 1 ? "" : "S")}", "FocusBrush"));
+        text.Children.Add(TT($"{top.Title}: {top.Headline}", 18, bold: true, top: 4));
+        text.Children.Add(TT(top.Why, 13, brush: "Muted", top: 3));
+        row.Children.Add(text);
+
+        var all = new StackPanel();
+        all.Children.Add(row);
+        var then = needs.Skip(1).Where(n => n.Score > 0).ToList();
+        if (then.Count > 0)
+        {
+            var line = new Border { Height = 1, Margin = new Thickness(0, 12, 0, 10) };
+            line.SetResourceReference(Border.BackgroundProperty, "Line");
+            all.Children.Add(line);
+            var chips = new WrapPanel();
+            var after = TT("After that:", 13, brush: "Muted"); after.VerticalAlignment = VerticalAlignment.Center; after.Margin = new Thickness(0, 0, 8, 0);
+            chips.Children.Add(after);
+            foreach (var n in then)
+            {
+                var chipText = new TextBlock { FontSize = 13 };
+                chipText.Inlines.Add(new System.Windows.Documents.Run(n.Title));
+                var small = new System.Windows.Documents.Run(" · " + n.Headline);
+                small.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Muted");
+                chipText.Inlines.Add(small);
+                chipText.SetResourceReference(TextBlock.ForegroundProperty, "Text");
+                var chip = new Border { Child = chipText, CornerRadius = new CornerRadius(13), Padding = new Thickness(11, 4, 11, 4), Margin = new Thickness(0, 2, 8, 2), BorderThickness = new Thickness(1), Cursor = Cursors.Hand, ToolTip = n.Why };
+                chip.SetResourceReference(Border.BorderBrushProperty, "Line");
+                chip.SetResourceReference(Border.BackgroundProperty, "Panel2");
+                string area = n.Area;
+                chip.MouseLeftButtonUp += (_, _) => Start(area);
+                chips.Children.Add(chip);
+            }
+            all.Children.Add(chips);
+        }
+        var card = TBox(all, accent: true, padding: new Thickness(20, 14, 18, 14));
+        card.Margin = new Thickness(0, 16, 0, 0);
+        return card;
+    }
+
     private static FrameworkElement CoverImage(CourseInfo c, double w, double h)
     {
         var frame = new Border { Width = w, Height = h, CornerRadius = new CornerRadius(Math.Max(3, w / 16)), ClipToBounds = true, BorderThickness = new Thickness(1) };

@@ -204,6 +204,8 @@ public partial class MainWindow
             if (_trainingPageStale) { _trainingPageStale = false; Dispatcher.BeginInvoke(new Action(() => _refreshCoursePage?.Invoke())); }
             Course.Pinned = null;
             _lessonWindow = null;
+            // Back on the Training page: Practice next has already moved on to the next thing.
+            if (NavTraining.IsChecked == true && _trainingView == "library") Dispatcher.BeginInvoke(new Action(RefreshTraining));
             if (window.LeftPartWay && !window.ClosedByEndOfDay)
             {
                 var times = TrainingTimes();

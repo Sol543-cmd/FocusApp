@@ -3,6 +3,14 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.38
+
+- Training: "Practice next" on the Training page, under today's lesson. It points you to whichever of Books practice,
+  Book flashcards and Timeline needs you most right now (what you've been missing, and what's due), says why, and
+  what comes after. Finish a round and it moves on to the next one. "You're caught up" offers an extra round.
+- Flashcards: a card you mark ✕ comes back at the very end of the session (before Finish), until you know it, up
+  to 3 times. It's still due again tomorrow too.
+
 ## 1.7.37
 
 - Fix: Focus wouldn't open after 1.7.36 (the new Calendar size slider ran before your settings had loaded).

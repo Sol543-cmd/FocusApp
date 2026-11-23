@@ -1330,6 +1330,58 @@ public static class Course
 
     private static (DateTime At, int Count)? _tlDue;
     /// <summary>Timeline events due in every book (counted at most once a minute).</summary>
+    // ---------- Practice next ----------
+
+    /// <summary>One practice and how much it needs you right now (higher Score: do this first).</summary>
+    public sealed record PracticeNeed(string Area, string Title, int Due, int Repeated, int Fresh, double Score, string Why, int Minutes)
+    {
+        /// <summary>The short headline: what you keep missing, or what's due.</summary>
+        public string Headline => Repeated > 0 ? $"{Repeated} you keep missing" : Fresh > 0 ? $"{Fresh} missed recently" : $"{Due} due";
+    }
+
+    /// <summary>
+    /// Which of Books practice, Book flashcards and Timeline needs you most (Greek isn't part of it): your right-rate over the
+    /// last few answers (last 14 days), things missed more than once, things missed since yesterday, and how much is due.
+    /// A practice you finished a round of in the last hour drops down so the next one comes up. Today's book for Books practice
+    /// and flashcards (as those rounds use it); every book for the timeline. The web app uses the same rules.
+    /// </summary>
+    public static List<PracticeNeed> PracticeNeeds()
+    {
+        string since = DateTime.Today.AddDays(-14).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        string yesterday = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var due = DueReview(999);
+        static bool Right(TrainingEvent e) => e.Grade >= 1 || (e.Grade < 0 && e.Correct);
+        var answers = CE.Where(e => e.Kind == "answer" && string.CompareOrdinal(e.Day, since) >= 0).ToList();
+        var mc = answers.Where(e => !IsCard(e.Question)).Select(e => (e.Question, Right(e), e.Day)).ToList();
+        var cards = answers.Where(e => IsCard(e.Question)).Select(e => (e.Question, Right(e), e.Day)).ToList();
+        var tl = Events.Where(e => e.Kind == "timeline" && string.CompareOrdinal(e.Day, since) >= 0).Select(e => (e.Question, e.Correct, e.Day)).ToList();
+
+        PracticeNeed Need(string area, string title, string noun, List<(string Key, bool Ok, string Day)> list, int dueCount, string doneKind, double secondsEach, int roundSize)
+        {
+            var last = list.Skip(Math.Max(0, list.Count - 20)).ToList();
+            double rate = last.Count >= 3 ? last.Count(x => x.Ok) / (double)last.Count : 0.8;
+            int misses = last.Count(x => !x.Ok);
+            var byKey = list.GroupBy(x => x.Key).ToList();
+            int repeated = byKey.Count(g => g.Count(x => !x.Ok) >= 2);
+            int fresh = byKey.Count(g => { var l = g.Last(); return !l.Ok && string.CompareOrdinal(l.Day, yesterday) >= 0; });
+            double score = dueCount > 0 || fresh > 0 || repeated > 0 ? (1 - rate) * 60 + Math.Min(dueCount, 20) * 1.2 + repeated * 4 + fresh * 3 : 0;
+            if (Events.Any(e => e.Kind == doneKind && DateTime.UtcNow - e.At.ToUniversalTime() < TimeSpan.FromHours(1))) score *= 0.4;
+            string why = misses > 0 && last.Count >= 3 ? $"You missed {misses} of your last {last.Count} {noun}" : "";
+            if (fresh > 0) why += (why.Length > 0 ? "; " : "") + $"{fresh} missed since yesterday";
+            if (dueCount > 0) why += (why.Length > 0 ? ", and " : "") + $"{dueCount} {(dueCount == 1 ? "is" : "are")} due";
+            why = why.Length == 0 ? "Nothing due." : char.ToUpper(why[0]) + why[1..] + ".";
+            int items = Math.Max(1, Math.Min(dueCount > 0 ? dueCount : roundSize, roundSize));
+            return new PracticeNeed(area, title, dueCount, repeated, fresh, score, why, Math.Max(1, (int)Math.Round(items * secondsEach / 60)));
+        }
+
+        return new List<PracticeNeed>
+        {
+            Need("books", "Books practice", "questions", mc, due.Count(x => x.Q.Kind == "mc"), "allBooksDone", 25, Math.Clamp(Config.BooksPracticeCount, 3, 40)),
+            Need("cards", "Book flashcards", "cards", cards, due.Count(x => x.Q.Kind == "card"), "cardReviewDone", 12, Math.Clamp(Config.FlashcardsCount, 3, 60)),
+            Need("timeline", "Timeline", "dates", tl, TimelineDueCount(), "timelineDone", 30, Math.Clamp(Config.TimelineCount, 3, 15)),
+        }.OrderByDescending(n => n.Score).ToList();
+    }
+
     public static int TimelineDueCount()
     {
         if (_tlDue is { } c && DateTime.Now - c.At < TimeSpan.FromMinutes(5)) return c.Count;

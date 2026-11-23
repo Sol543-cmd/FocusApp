@@ -35,6 +35,8 @@ public partial class LessonWindow : Window
     private int _step = -1;
     private bool _done;
     private int _right, _asked;
+    /// <summary>How often each card has come back this session after ✕ (at most 3 times, so one card can't trap you).</summary>
+    private readonly Dictionary<string, int> _againCount = new();
 
     private readonly Grid _root = new();
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -275,7 +277,13 @@ public partial class LessonWindow : Window
     {
         _step++;
         // The evening card review ends when its time is up (after the card on screen).
-        if (_cardsOnly != null && DateTime.Now >= _deadline && _step < _steps.Count - 1) _step = _steps.Count - 1;
+        // Time's up: skip to the cards you marked ✕ (they still come back once more), then Finish.
+        if (_cardsOnly != null && DateTime.Now >= _deadline && _step < _steps.Count - 1)
+        {
+            int firstAgain = -1;
+            for (int i = _step; i < _steps.Count - 1; i++) if (_againCount.Count > 0 && i > 0 && _steps[i].Key.StartsWith("card:", StringComparison.Ordinal) && IsRepeat(i)) { firstAgain = i; break; }
+            _step = firstAgain >= 0 ? firstAgain : _steps.Count - 1;
+        }
         if (_step >= _steps.Count) return;
         _keys = null;
         RestorePage();
@@ -1603,12 +1611,16 @@ public partial class LessonWindow : Window
             answered = true;
             _asked++; if (g > 0) _right++;
             Course.Add(new TrainingEvent { Kind = "answer", Question = q.Id, Concept = q.Concept, Correct = g > 0, Sure = g > 0, Grade = g });
-            if (g == 0)
-                _steps.Insert(RequeueIndex(), new Step(stepKey, () => ShowCard(q, lesson, _cardsOnly != null ? "Card (again)" : "Memory card (again)", stepKey)));
+            // ✕: the card comes back at the very end of this session (before Finish), until you know it (up to 3 times).
+            if (g == 0 && _againCount.GetValueOrDefault(q.Id) < 3)
+            {
+                _againCount[q.Id] = _againCount.GetValueOrDefault(q.Id) + 1;
+                _steps.Insert(FinishIndex(), new Step(stepKey, () => ShowCard(q, lesson, "Again · until you know it", stepKey)));
+            }
             else MarkDone(stepKey);
             Next();
         }
-        grades.Children.Add(GradeButton(Red, CrossGeometry, "Again", "Don't know it yet: it comes back later in this lesson (key 1)", () => Grade(0)));
+        grades.Children.Add(GradeButton(Red, CrossGeometry, "Again", "Don't know it yet: it comes back at the end of this session (key 1)", () => Grade(0)));
         grades.Children.Add(GradeButton(Green, DoubleCheckGeometry, "Know it well", "Know it really well: it won't come back for a long time (key 2)", () => Grade(2)));
         grades.Children.Add(GradeButton(Green, CheckGeometry, "Know it", "Know it fairly well: it comes back after a while (key 3)", () => Grade(1)));
         _keys = k =>
@@ -1623,7 +1635,21 @@ public partial class LessonWindow : Window
         _page.Children.Add(links);
     }
 
-    /// <summary>Where a card marked ✕ goes: after the other cards, before the chapter quiz, the review and the end.</summary>
+    /// <summary>Whether a step is a ✕ repeat (the same key appears earlier in the session).</summary>
+    private bool IsRepeat(int index)
+    {
+        for (int i = 0; i < index; i++) if (_steps[i].Key == _steps[index].Key) return true;
+        return false;
+    }
+
+    /// <summary>The end of the session: just before Finish.</summary>
+    private int FinishIndex()
+    {
+        for (int i = _step + 1; i < _steps.Count; i++) if (_steps[i].Key == "finish") return i;
+        return _steps.Count;
+    }
+
+    /// <summary>Where a card marked ✕ used to go: after the other cards, before the chapter quiz, the review and the end.</summary>
     private int RequeueIndex()
     {
         bool inReview = _step >= 0 && _step < _steps.Count && _steps[_step].Key.StartsWith("review:", StringComparison.Ordinal);
@@ -1745,7 +1771,7 @@ public partial class LessonWindow : Window
             Course.Add(new TrainingEvent { Kind = "cardReviewDone", Lesson = -1 });
             _page.Children.Add(Text("Flashcards finished", 28, bold: true));
             _page.Children.Add(Text(_asked == 0 ? "Nothing graded this time." : $"{_right} of {_asked} known.", 18, top: 10));
-            _page.Children.Add(Text("Cards you marked ✕ come back tomorrow; ✓ after a while; ✓✓ after a long while.", 16, top: 12));
+            _page.Children.Add(Text("Cards you marked ✕ came back at the end until you knew them, and come back tomorrow too; ✓ after a while; ✓✓ after a long while.", 16, top: 12));
             _page.Children.Add(Primary("Close", Close));
             return;
         }
