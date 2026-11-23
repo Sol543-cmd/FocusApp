@@ -3,6 +3,13 @@
 Each version gets a "## x.y.z" heading. The GitHub build uses the section that matches
 <Version> in FocusApp.csproj as the release notes, and Focus shows them when it offers the update.
 
+## 1.7.36
+
+- Calendar: the day lines in the all-day strip line up exactly with the lines in the grid.
+- Calendar: a size slider (Settings, Calendar, Calendar size). Left fits the whole day; further right makes the
+  hours taller so your working day fills the screen, and the view opens at the start of the working day (scroll
+  for early and late hours). It starts a bit bigger than before.
+
 ## 1.7.35
 
 - Calendar: time outside your working day is grayed out a little, so you can see where the day starts and stops.

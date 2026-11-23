@@ -15,8 +15,11 @@ public class WeekTimeline : UserControl
 {
     private const double LabelWidth = 58;
     private const double HeaderHeight = 40;
-    private readonly Canvas _header = new() { Height = HeaderHeight };
-    private readonly Canvas _canvas = new();
+    // Both pinned to the left edge, so the day lines in the header and in the grid line up exactly
+    // (centred, they drifted apart by half the scroll bar's width).
+    private readonly Canvas _header = new() { Height = HeaderHeight, HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly Canvas _canvas = new() { HorizontalAlignment = HorizontalAlignment.Left };
+    private string _scrolledFor = "";
     private readonly ScrollViewer _scroll;
     private DateTime _monday = DateTime.Today;
     private Func<DateTime, (IReadOnlyList<PlanBlock> Blocks, TimeSpan Start)>? _planFor;
@@ -39,6 +42,9 @@ public class WeekTimeline : UserControl
     public Func<DateTime, int>? TaskCountFor { get; set; }
     /// <summary>A day's tasks chip was clicked.</summary>
     public event Action<DateTime, FrameworkElement>? TasksClicked;
+
+    /// <summary>How big the hours are: 1 fits the whole day on screen; more makes them taller (scroll for the rest), starting at the working day.</summary>
+    public double SizeScale { get; set; } = 1;
 
     /// <summary>Lightly gray out the time outside each day's working hours.</summary>
     public bool ShadeOffHours { get; set; }
@@ -164,7 +170,7 @@ public class WeekTimeline : UserControl
         {
             // The whole day in view: spread the hours over the space under the day names (never cramped).
             double header = HeaderHeight + band + 4;
-            PixelsPerMinute = Math.Max(0.75, (ActualHeight - header - 24) / Math.Max(60, (_to - _from).TotalMinutes));
+            PixelsPerMinute = Math.Max(0.75, (ActualHeight - header - 24) / Math.Max(60, (_to - _from).TotalMinutes)) * Math.Clamp(SizeScale, 1, 3);
         }
         _canvas.Height = Y(_to) + 12;
         _canvas.Width = width;
@@ -322,6 +328,17 @@ public class WeekTimeline : UserControl
                 double w = laneW / cols;
                 AddEvent(item.Ev, laneX + col * w, cols > 1 ? w - 2 : w, item.S, item.E);
             }
+        }
+
+        // Bigger than the screen: start the view at the working day (once per week and size, so your own scrolling stays put).
+        string key = $"{_monday:yyyyMMdd}|{SizeScale:0.00}|{(int)ActualHeight}";
+        if (FitToHeight && key != _scrolledFor)
+        {
+            _scrolledFor = key;
+            var starts = days.Take(5).Select(d => WorkHoursFor?.Invoke(d)?.Start).Where(t => t != null).Select(t => t!.Value).ToList();
+            var at = (starts.Count > 0 ? starts.Min() : RangeStart) - TimeSpan.FromMinutes(20);
+            if (at < _from) at = _from;
+            Dispatcher.BeginInvoke(new Action(() => _scroll.ScrollToVerticalOffset(SizeScale > 1.01 ? Math.Max(0, Y(at)) : 0)), DispatcherPriority.Loaded);
         }
 
         // Now line on today.

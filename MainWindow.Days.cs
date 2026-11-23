@@ -544,6 +544,7 @@ public partial class MainWindow
         CalWeek.ShowAllDay = true;
         CalWeek.ShadeOffHours = CalDay.ShadeOffHours = _settings.ShadeOffHours;   // the working day stands out a little
         CalWeek.WorkHoursFor = CalDay.WorkHoursFor = WorkHoursFor;
+        CalWeek.SizeScale = CalDay.SizeScale = Math.Clamp(_settings.CalendarSize, 1, 2.5);   // Settings, Calendar, Calendar size
         SetUpDayTasksChips();       // each day's tasks as a chip in that strip
         // The calendar's day view edits the same plan as the Day plan tab.
         CalDay.BlockClicked += block =>
@@ -726,7 +727,31 @@ public partial class MainWindow
         DefaultListsBtn.Content = ListsLabel(_settings.DefaultPlanLists);
         AutoStartWorkdaysCheck.IsChecked = _settings.AutoStartWorkdays;
         ShadeOffHoursCheck.IsChecked = _settings.ShadeOffHours;
+        _fillingCalSize = true;
+        CalSizeSlider.Value = Math.Clamp(_settings.CalendarSize, 1, 2.5);
+        _fillingCalSize = false;
     }
+
+    private bool _fillingCalSize;
+
+    /// <summary>The Calendar size slider: the calendar follows as you slide; saved when you let go (and a moment after).</summary>
+    private void CalSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_fillingCalSize || CalWeek == null || CalDay == null) return;
+        _settings.CalendarSize = Math.Round(e.NewValue, 2);
+        CalWeek.SizeScale = CalDay.SizeScale = _settings.CalendarSize;
+        CalWeek.RequestRender();
+        CalDay.RequestRender();
+        // Save once the slider rests, not on every step.
+        _calSizeSave ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _calSizeSave.Tick -= CalSizeSave_Tick;
+        _calSizeSave.Tick += CalSizeSave_Tick;
+        _calSizeSave.Stop();
+        _calSizeSave.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _calSizeSave;
+    private void CalSizeSave_Tick(object? sender, EventArgs e) { _calSizeSave?.Stop(); SaveSettingsQuietly(); }
 
     private void ShadeOffHours_Click(object sender, RoutedEventArgs e)
     {

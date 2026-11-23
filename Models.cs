@@ -960,6 +960,8 @@ public class AppSettings
     public bool CalendarPanelOpen { get; set; }
     /// <summary>The Calendar grays out the time outside your working day, lightly (on unless you turn it off).</summary>
     public bool ShadeOffHours { get; set; } = true;
+    /// <summary>The Calendar's size: 1 fits the whole day on screen; bigger makes the hours taller, starting at the working day.</summary>
+    public double CalendarSize { get; set; } = 1.3;
     public double WorkingMemoryHeight { get; set; } = 0.3; // share of the task window
     /// <summary>The task window: what it lists ("session", "today", "all", "undated"), its place and size, and keep-on-top.</summary>
     public string TaskWindowView { get; set; } = "today";

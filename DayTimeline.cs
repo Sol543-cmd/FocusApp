@@ -17,7 +17,7 @@ namespace FocusApp;
 public class DayTimeline : UserControl
 {
     private const double LabelWidth = 64;
-    private readonly Canvas _canvas = new();
+    private readonly Canvas _canvas = new() { HorizontalAlignment = HorizontalAlignment.Left };
     private readonly ScrollViewer _scroll;
     private readonly Line _nowLine = new() { StrokeThickness = 2 };
     private readonly Ellipse _nowDot = new() { Width = 10, Height = 10 };
@@ -34,7 +34,9 @@ public class DayTimeline : UserControl
     public bool ShowNowLine { get; set; }
     /// <summary>The Calendar page: a strip at the top for all-day events, from every calendar.</summary>
     public bool ShowAllDay { get; set; }
-    private readonly Canvas _allDayBar = new() { Visibility = Visibility.Collapsed, ClipToBounds = true };
+    private readonly Canvas _allDayBar = new() { Visibility = Visibility.Collapsed, ClipToBounds = true, HorizontalAlignment = HorizontalAlignment.Left };
+    /// <summary>How big the hours are: 1 fits the whole day; more makes them taller (scroll for the rest).</summary>
+    public double SizeScale { get; set; } = 1;
     /// <summary>Lightly gray out the time outside the day's working hours.</summary>
     public bool ShadeOffHours { get; set; }
     /// <summary>A day's working hours (null: not a working day, all grayed).</summary>
@@ -218,7 +220,7 @@ public class DayTimeline : UserControl
         if (_to > TimeSpan.FromHours(24)) _to = TimeSpan.FromHours(24);
         double band = BuildAllDayBar(width);
         if (FitToHeight && ActualHeight > 200)
-            PixelsPerMinute = Math.Max(0.9, (ActualHeight - 30 - band) / Math.Max(60, (_to - _from).TotalMinutes));
+            PixelsPerMinute = Math.Max(0.9, (ActualHeight - 30 - band) / Math.Max(60, (_to - _from).TotalMinutes)) * Math.Clamp(SizeScale, 1, 3);
         _canvas.Height = Y(_to) + 16;
         _canvas.Width = width;
 
